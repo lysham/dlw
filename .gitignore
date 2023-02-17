@@ -1,0 +1,7 @@
+# Ignore macOS cache files
+.DS_Store
+
+# pycharm files
+.idea/
+pycache/
+*.pyc
