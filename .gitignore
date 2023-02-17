@@ -5,3 +5,6 @@
 .idea/
 pycache/
 *.pyc
+
+# Longman 2018 data files
+data/Longman_2018_figshare/
