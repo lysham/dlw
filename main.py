@@ -15,7 +15,7 @@ LW_STATION_IDS = [
 ]  # HE288 not included in Tmin and Tmax
 
 
-SIGMA = 5.6697e-8  # W/m^2
+SIGMA = 5.6697e-8  # W/m^2 K^4
 
 
 def import_data_from_txt(filename, suffix="", filter_id=True):
@@ -65,7 +65,7 @@ def save_lw_station_data():
 
 
 def giambelluca_w(p):
-    # precipitable water vapor [cm^-1] defined by eq(4) in ET report (2014)
+    # precipitable water defined by eq(4) in ET report (2014)
     c0 = -1.342063
     c1 = 7.661469e-5
     c2 = -1.652886e-9
@@ -95,6 +95,7 @@ def giambelluca_lwc(t, z):
     w = giambelluca_w(p)
     # atmospheric emissivity, eqn(14) in ET report
     e_sky = 0.762 + (0.055 * np.log(w)) + (0.0031 * np.log(np.power(w, 2)))
+    # print(f"Elev: {z:.0f}m, e_sky: {e_sky:.3f}")
     lwc = e_sky * SIGMA * np.power(t, 4)
     return lwc
 
@@ -123,14 +124,13 @@ if __name__ == "__main__":
     df = df.dropna()
 
     # remove station name from column headers
-    col_names = df.columns
     rename_columns = {}
     for col in df.columns:
         rename_columns[col] = col.split("_")[-1]
     df = df.rename(columns=rename_columns)
 
     # add column for Tavg = (Tmin + Tmax) / 2
-    df = df.assign(tavg=(df.tmin+df.tmax)/2)
+    df = df.assign(tavg=((df.tmin+df.tmax)/2) + 273)  # tavg in [K]
 
     # add lw values
     z = stat_info.loc[stat_info.id == station, "elev"].values[0]  # elevation
@@ -138,11 +138,11 @@ if __name__ == "__main__":
     # Unclear what the LW observed value represents:
     # best guess is a daily average of the hourly value (probably not though)
 
-    # add LW=f(CF) correlation values, multiply by 3600 to get an hourly value
+    # add LW=f(CF) correlation values
     df = df.assign(
-        lw_cf000_gb=giambelluca_lw(cf=0.0, t=df.tavg, z=z) * -3600,
-        lw_cf050_gb=giambelluca_lw(cf=0.5, t=df.tavg, z=z) * -3600,
-        lw_cf100_gb=giambelluca_lw(cf=1.0, t=df.tavg, z=z) * -3600
+        lw_cf000_gb=-1 * giambelluca_lw(cf=0.0, t=df.tavg, z=z),
+        lw_cf050_gb=-1 * giambelluca_lw(cf=0.5, t=df.tavg, z=z),
+        lw_cf100_gb=-1 * giambelluca_lw(cf=1.0, t=df.tavg, z=z)
     )
 
     fig, ax = plt.subplots(figsize=(12, 5))
@@ -152,6 +152,9 @@ if __name__ == "__main__":
     ax.plot(df.index, df.lw_cf100_gb, c="0.3", label="CF100")
     ax.legend()
     plt.show()
+
+    # df["factor"] = df.lw_cf100_gb / df.lw
+    # df.loc[(df.factor > df.factor.quantile(0.1)) & (df.factor < df.factor.quantile(.9)), "factor"].hist(bins=30)
 
     # TODO notes
     # make new plot of LW only with LW observed
