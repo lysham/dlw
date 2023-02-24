@@ -3,6 +3,7 @@
 import os
 import numpy as np
 import pandas as pd
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 # location of data txt files stored locally
@@ -106,18 +107,75 @@ def giambelluca_lw(cf, t, z):
     return lw
 
 
-if __name__ == "__main__":
-    print()
-    # LOAD LW STATION INFO
-    filename = os.path.join("data", "lw_station_info.csv")
-    stat_info = pd.read_csv(filename)
+def li_lwc(t, rh):
+    exp_term = 17.625 * (t - 273.15) / (t - 30.11)
+    p_w = 610.94 * (rh / 100) * np.exp(exp_term)  # Pa
+    p_w /= 1000  # kPa
+    e_sky = 0.618 + (0.056 * np.sqrt(p_w))
+    lwc = e_sky * SIGMA * np.power(t, 4)
+    return lwc
 
-    # LOAD LW STATION DATA
-    filename = os.path.join("data", "lw_station_data.csv")
-    df = pd.read_csv(filename, index_col=0)
 
-    # reduce to one station only (STATION SPECIFIC ONWARD)
-    station = "HE283"
+def li_lw(cf, t, rh):
+    lwc = li_lwc(t, rh)
+    c1 = 0.78
+    c2 = 1
+    c3 = 0.38
+    c4 = 0.95
+    c5 = 0.17
+    # rh = rh / 100  # convert to decimal
+    term1 = lwc * (1 - (c1 * np.power(cf, c2)))
+    term2 = c3 * SIGMA * np.power(t, 4) * np.power(cf, c4) * np.power(rh, c5)
+    lw = term1 + term2
+    print(term1, "\n")
+    print(term2)
+    return lw
+
+
+def make_full_lw_plot(station_info, df):
+    # make a plot of all LW data
+    stations = station_info.set_index("id").to_dict()["station"]
+    df = df.filter(like="lw")
+    fig, ax = plt.subplots(figsize=(12, 5), layout="constrained")
+    ax.grid(axis="y", c="0.93")
+    lines = ["-", "--", ":", "-."]
+    markers = [".", "o", "v", "^", "*", "s", "<", ">"]
+    i = 0
+    for sid in stations.keys():
+        ax.plot(
+            df.index, df[[f"{sid}_lw"]], label=stations[sid], alpha=0.5,
+            ls=lines[i // len(markers)], marker=markers[i % len(markers)]
+        )
+        i += 1
+    ax.xaxis.set_major_locator(mpl.dates.YearLocator())
+    ax.xaxis.set_major_formatter(mpl.dates.DateFormatter("%Y"))
+    ax.legend(bbox_to_anchor=(1.0, 1.0), loc="upper left")
+    ax.set_ylabel("LW [W m$^{-2}$]")
+    plt.show()
+    filename = os.path.join("figures", "lw_data.png")
+    fig.savefig(filename, dpi=300)
+    return None
+
+
+def plot_26b():
+    # print("make figure for 26b")
+    cf = np.linspace(0, 1, 11)
+    conditions = [(0.3, 290), (0.3, 295), (0.4, 290)]
+    fig, ax = plt.subplots(figsize=(8, 4), layout="constrained")
+    for rh, t in conditions:
+        lw = li_lw(cf, t, rh)
+        ax.plot(cf, lw, ".-", alpha=0.95, label=f"RH={rh}, T={t} K")
+    ax.set_xlim(0, 1)
+    ax.set_ylabel("LW [W m${-2}$]")
+    ax.set_xlabel("CF")
+    ax.legend()
+    plt.show()
+    return None
+
+
+def plot_data_w_models(station, station_info, df):
+    """Plot LW station data with T and RH for CF={0, 0.5, 1.0} using
+    ET report 2014 and Li et al correlations."""
     df = df.filter(like=station)
 
     # drop na
@@ -130,34 +188,64 @@ if __name__ == "__main__":
     df = df.rename(columns=rename_columns)
 
     # add column for Tavg = (Tmin + Tmax) / 2
-    df = df.assign(tavg=((df.tmin+df.tmax)/2) + 273)  # tavg in [K]
+    df = df.assign(tavg=((df.tmin+df.tmax)/2) + 273.15)  # tavg in [K]
 
-    # add lw values
-    z = stat_info.loc[stat_info.id == station, "elev"].values[0]  # elevation
+    # add lw values, get elevation
+    z = station_info.loc[station_info.id == station, "elev"].values[0]
 
     # Unclear what the LW observed value represents:
     # best guess is a daily average of the hourly value (probably not though)
 
     # add LW=f(CF) correlation values
     df = df.assign(
-        lw_cf000_gb=-1 * giambelluca_lw(cf=0.0, t=df.tavg, z=z),
-        lw_cf050_gb=-1 * giambelluca_lw(cf=0.5, t=df.tavg, z=z),
-        lw_cf100_gb=-1 * giambelluca_lw(cf=1.0, t=df.tavg, z=z)
+        lw_cf000_gb=giambelluca_lw(cf=0.0, t=df.tavg, z=z),
+        lw_cf050_gb=giambelluca_lw(cf=0.5, t=df.tavg, z=z),
+        lw_cf100_gb=giambelluca_lw(cf=1.0, t=df.tavg, z=z),
+        lw_cf000_li=li_lw(cf=0, t=df.tavg, rh=df.rh),
+        lw_cf050_li=li_lw(cf=0.5, t=df.tavg, rh=df.rh),
+        lw_cf100_li=li_lw(cf=1.0, t=df.tavg, rh=df.rh),
     )
 
+    # plot observations with correlations
     fig, ax = plt.subplots(figsize=(12, 5))
-    ax.plot(df.index, df.lw, c="#0b29e6", label="Observed")
-    ax.plot(df.index, df.lw_cf000_gb, c="0.8", label="CF00")
-    ax.plot(df.index, df.lw_cf050_gb, c="0.5", label="CF50")
-    ax.plot(df.index, df.lw_cf100_gb, c="0.3", label="CF100")
-    ax.legend()
+    ax.grid(axis="y", c="0.95")
+    ax.plot(df.index, df.lw, lw=2.0, c="#0b29e6", label="Observed")
+    ax.plot(df.index, df.lw_cf000_gb, ls=":", c="0.8", label="CF=0.0")
+    ax.plot(df.index, df.lw_cf050_gb, ls=":", c="0.5", label="CF=0.5")
+    ax.plot(df.index, df.lw_cf100_gb, ls=":", c="0.3", label="CF=1.0")
+    ax.plot(df.index, df.lw_cf000_li, c="#9f85c7", label="Li CF=0.0")
+    ax.plot(df.index, df.lw_cf050_li, c="#804ecc", label="Li CF=0.5")
+    ax.plot(df.index, df.lw_cf100_li, c="#5808cf", label="Li CF=1.0")
+    ax.legend(bbox_to_anchor=(1.0, 1.0), loc="upper left")
+    years = mpl.dates.YearLocator()
+    ax.xaxis.set_major_locator(years)
+    ax.xaxis.set_major_formatter(mpl.dates.DateFormatter("%Y"))
+    ax.set_title(station)
+    ax.set_xlim(df.index[0], df.index[-1])
     plt.show()
+    return None
 
-    # df["factor"] = df.lw_cf100_gb / df.lw
-    # df.loc[(df.factor > df.factor.quantile(0.1)) & (df.factor < df.factor.quantile(.9)), "factor"].hist(bins=30)
 
-    # TODO notes
-    # make new plot of LW only with LW observed
-    # LW at various CF for ET model correlation
-    # LW at various CF for Li(26b) correlation
+if __name__ == "__main__":
+    print()
+    # LOAD LW STATION INFO
+    filename = os.path.join("data", "lw_station_info.csv")
+    station_info = pd.read_csv(filename)
+
+    # LOAD LW STATION DATA
+    filename = os.path.join("data", "lw_station_data.csv")
+    df = pd.read_csv(filename, index_col=0, parse_dates=True)
+
+    plot_data_w_models("HN164", station_info, df)
+
+    # make_full_lw_plot(station_info, df)
+
+
+
+    # # Code below from python notebooks looking at 26b correlation
+    # filename = os.path.join("data", "jyj_2017_data", "JYJ_traindataforcollapse")
+    # train = pd.read_pickle(filename)
+    # Ta = train['temp'].values + 273.15
+    # rhvals = train['rh'].values
+    # LWmeas = train['LWmeas'].values
 
