@@ -110,13 +110,28 @@ def giambelluca_lw(cf, t, z):
 def li_lwc(t, rh):
     exp_term = 17.625 * (t - 273.15) / (t - 30.11)
     p_w = 610.94 * (rh / 100) * np.exp(exp_term)  # Pa
-    p_w /= 1000  # kPa
-    e_sky = 0.618 + (0.056 * np.sqrt(p_w))
+    p_w /= 100  # hPa (mb)
+    e_sky = 0.618 + (0.056 * np.sqrt(p_w))  # calibrated Brunt
     lwc = e_sky * SIGMA * np.power(t, 4)
     return lwc
 
 
 def li_lw(cf, t, rh):
+    """
+
+    Parameters
+    ----------
+    cf : float
+        Given as % value same as RH
+    t : float
+        Units K
+    rh : float
+        Given as % value e.g. RH=30 is 30% humidity
+
+    Returns
+    -------
+
+    """
     lwc = li_lwc(t, rh)
     c1 = 0.78
     c2 = 1
@@ -127,8 +142,8 @@ def li_lw(cf, t, rh):
     term1 = lwc * (1 - (c1 * np.power(cf, c2)))
     term2 = c3 * SIGMA * np.power(t, 4) * np.power(cf, c4) * np.power(rh, c5)
     lw = term1 + term2
-    print(term1, "\n")
-    print(term2)
+    # print(term1, "\n")
+    # print(term2)
     return lw
 
 
@@ -160,7 +175,7 @@ def make_full_lw_plot(station_info, df):
 def plot_26b():
     # print("make figure for 26b")
     cf = np.linspace(0, 1, 11)
-    conditions = [(0.3, 290), (0.3, 295), (0.4, 290)]
+    conditions = [(30, 290), (30, 295), (40, 290)]
     fig, ax = plt.subplots(figsize=(8, 4), layout="constrained")
     for rh, t in conditions:
         lw = li_lw(cf, t, rh)
@@ -169,7 +184,8 @@ def plot_26b():
     ax.set_ylabel("LW [W m${-2}$]")
     ax.set_xlabel("CF")
     ax.legend()
-    plt.show()
+    filename = os.path.join("figures", "corr26b.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 
 
@@ -239,6 +255,7 @@ if __name__ == "__main__":
     plot_data_w_models("HN164", station_info, df)
 
     # make_full_lw_plot(station_info, df)
+    plot_26b()
 
 
 
