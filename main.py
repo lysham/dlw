@@ -107,11 +107,33 @@ def giambelluca_lw(cf, t, z):
     return lw
 
 
-def li_lwc(t, rh):
+def get_pw(t, rh):
+    """Get water vapor partial pressure.
+
+    Parameters
+    ----------
+    t : float [K]
+    rh : float [%]
+
+    Returns
+    -------
+    p_w : float [Pa]
+    """
     exp_term = 17.625 * (t - 273.15) / (t - 30.11)
-    p_w = 610.94 * (rh / 100) * np.exp(exp_term)  # Pa
-    p_w /= 100  # hPa (mb)
-    e_sky = 0.618 + (0.056 * np.sqrt(p_w))  # calibrated Brunt
+    pw = 610.94 * (rh / 100) * np.exp(exp_term)  # Pa
+    return pw
+
+
+def get_esky_c(pw):
+    # All day model
+    e_sky = 0.618 + (0.056 * np.sqrt(pw))  # calibrated Brunt
+    return e_sky
+
+
+def li_lwc(t, rh):
+    pw = get_pw(t, rh)
+    pw /= 100  # hPa (mb)
+    e_sky = get_esky_c(pw)
     lwc = e_sky * SIGMA * np.power(t, 4)
     return lwc
 
@@ -121,16 +143,16 @@ def li_lw(cf, t, rh):
 
     Parameters
     ----------
-    cf : float
+    cf : float  or array-like
         Given as % value same as RH
-    t : float
+    t : float  or array-like
         Units K
-    rh : float
+    rh : float  or array-like
         Given as % value e.g. RH=30 is 30% humidity
 
     Returns
     -------
-
+    lw : float or array-like
     """
     lwc = li_lwc(t, rh)
     c1 = 0.78
@@ -191,7 +213,7 @@ def plot_26b():
 
 def plot_data_w_models(station, station_info, df):
     """Plot LW station data with T and RH for CF={0, 0.5, 1.0} using
-    ET report 2014 and Li et al correlations."""
+    ET report 2014 and Li et al. correlations."""
     df = df.filter(like=station)
 
     # drop na
@@ -259,10 +281,4 @@ if __name__ == "__main__":
 
 
 
-    # # Code below from python notebooks looking at 26b correlation
-    # filename = os.path.join("data", "jyj_2017_data", "JYJ_traindataforcollapse")
-    # train = pd.read_pickle(filename)
-    # Ta = train['temp'].values + 273.15
-    # rhvals = train['rh'].values
-    # LWmeas = train['LWmeas'].values
 
