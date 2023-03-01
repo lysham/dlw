@@ -18,6 +18,11 @@ LW_STATION_IDS = [
 
 SIGMA = 5.6697e-8  # W/m^2 K^4
 
+# list calibrated constants (Table 8 in Li et al. 2017)
+CORR26A = [1.29, 0.8, 0.7, 0.78, 0.13]
+CORR26B_DAY = [0.96, 1.2, 0.49, 1.09, 0.15]
+CORR26B_ALL = [0.78, 1, 0.38, 0.95, 0.17]
+
 
 def import_data_from_txt(filename, suffix="", filter_id=True):
     save_lw_station_info = False
@@ -138,34 +143,32 @@ def li_lwc(t, rh):
     return lwc
 
 
-def li_lw(cf, t, rh):
+def li_lw(cf, t, rh, c=CORR26B_ALL, lwc=None):
     """
 
     Parameters
     ----------
     cf : float  or array-like
-        Given as % value same as RH
+        CF or CMF given as [0, 1] value.
     t : float  or array-like
         Units K
     rh : float  or array-like
         Given as % value e.g. RH=30 is 30% humidity
+    c : list
+        Constants to be used in correlation
+    lwc : float or array_like, optional
+        Clear-sky longwave value [W/m^2]. If None, li_lwc is called.
 
     Returns
     -------
     lw : float or array-like
     """
-    lwc = li_lwc(t, rh)
-    c1 = 0.78
-    c2 = 1
-    c3 = 0.38
-    c4 = 0.95
-    c5 = 0.17
+    if lwc is None:
+        lwc = li_lwc(t, rh)
     # rh = rh / 100  # convert to decimal
-    term1 = lwc * (1 - (c1 * np.power(cf, c2)))
-    term2 = c3 * SIGMA * np.power(t, 4) * np.power(cf, c4) * np.power(rh, c5)
+    term1 = lwc * (1 - (c[0] * np.power(cf, c[1])))
+    term2 = c[2] * SIGMA * np.power(t, 4) * np.power(cf, c[3]) * np.power(rh, c[4])
     lw = term1 + term2
-    # print(term1, "\n")
-    # print(term2)
     return lw
 
 

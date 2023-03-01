@@ -13,7 +13,7 @@ import datetime as dt
 import matplotlib.pyplot as plt
 from scipy import integrate
 
-from main import SIGMA, get_pw, get_esky_c
+from main import SIGMA, get_pw, get_esky_c, li_lw, CORR26A
 
 
 SITES = [
@@ -73,6 +73,40 @@ def get_pw_esky(rh, t):
     # (22a) -- daytime clear-sky model Pw in hPa
     esky = 0.598 + 0.057 * np.sqrt(pw / 100)
     return esky, pw
+
+
+def look_at_jyj():
+    # Code below from python notebooks looking at 26b correlation
+    filename = os.path.join("data", "jyj_2017_data", "JYJ_traindataforcollapse")
+    train = pd.read_pickle(filename)
+    t_a = train['temp'].values + 273.15
+    rh_vals = train['rh'].values
+    lw_meas = train['LWmeas'].values
+
+    # fig, ax = plt.subplots()
+    # ax.plot(train.dw_ir, train.LWmeas, ".", alpha=0.3)
+    # ax.axline((1, 1), slope=1, c="0.0")
+    # plt.show()
+
+    # import test values
+    filename = os.path.join("data", "jyj_2017_data", "JYJ_testdataforcollapse")
+    test = pd.read_pickle(filename)
+    t_a_ = test['temp'].values + 273.15
+    rh_ = test['rh'].values
+    pa_ = test['pressure'].values * 100
+    lw_meas_ = test['LWmeas'].values
+
+    t = 292.85
+    rh = 25.1
+    ir_mea = 291.8
+    ir, t_sky = get_tsky(t, ir_mea)
+    # ir = SIGMA * t_sky ** 4
+    pw = get_pw(t, rh)
+    esky = get_esky_c(pw)
+    t_sky2 = esky ** (1 / 4) * t
+    print(t_sky, t_sky2, t_sky - t_sky2)
+    print(ir)
+    return None
 
 
 def process_site_yr(yr="2012"):
@@ -150,70 +184,61 @@ def process_site_yr(yr="2012"):
         data = pd.concat([data, df])  # add year of site data to `data`
         print(f"{SITES[i]} {time.time() - start_time:.3f}s")
 
-    # # After all sites have been collected
-    # df = data.copy()
-    # # Sample data (to reduce analysis size); Add columns for P_w and e_sky by calibrated Brunt
-    # data = data.sample(frac=1 / 100, random_state=96)
-    # df['Pw'] = 610.94 * (df.rh / 100) * (
-    #     np.exp(17.625 * (df.temp - 273.15) / (df.temp - 30.11)))  # (5)
-    # df['esky'] = 0.598 + 0.057 * np.sqrt(
-    #     df.Pw / 100)  # (22a) -- daytime clear-sky model
+    # After all sites have been collected
+    df = data.copy()
 
-    # # Detemine T_sky values, and correct for 3-50 micron range
-    # temp = df.temp.values
-    # dwir = df.dw_ir.values
-    # Tsky = []
-    # DLW = []
-    # for i in range(df.shape[0]):
-    #     T = temp[i]
-    #     ir_mea = dwir[i]
-    #     ir, Tout = get_tsky(T, ir_mea)  # correct for 3-50 micron PIR range, determine actual sky temp
-    #     ir_act = SIGMA * Tout ** 4  # determine actual DLW using sky temp
-    #     Tsky.append(Tout)
-    #     DLW.append(ir_act)
-    # df['Tsky'] = Tsky
-    # df['DLW'] = DLW
+    # Determine T_sky values, and correct for 3-50 micron range
+    temp = df.temp.values
+    dwir = df.dw_ir.values
+    Tsky = []
+    DLW = []
+    for i in range(df.shape[0]):
+        ir, t = get_tsky(temp[i], dwir[i])
+        ir_act = SIGMA * t ** 4  # determine actual DLW using sky temp
+        Tsky.append(t)
+        DLW.append(ir_act)
+    df['Tsky'] = Tsky
+    df['DLW'] = DLW
     # df['kT'] = df.GHI_m / df.GHI_c
     # kTc = df.GHI_m / df.GHI_c
     # kTc[kTc > 1] = 1
     # df['kTc'] = kTc
 
     filename = os.path.join("data", "SURFRAD", f"sites_{yr}.csv")
-    data.to_csv(filename)
+    df.to_csv(filename)
     return None
 
 
 if __name__ == "__main__":
     print()
-    # # Code below from python notebooks looking at 26b correlation
-    # filename = os.path.join("data", "jyj_2017_data", "JYJ_traindataforcollapse")
-    # train = pd.read_pickle(filename)
-    # t_a = train['temp'].values + 273.15
-    # rh_vals = train['rh'].values
-    # lw_meas = train['LWmeas'].values
-    #
-    # # fig, ax = plt.subplots()
-    # # ax.plot(train.dw_ir, train.LWmeas, ".", alpha=0.3)
-    # # ax.axline((1, 1), slope=1, c="0.0")
-    # # plt.show()
-    #
-    # # import test values
-    # filename = os.path.join("data", "jyj_2017_data", "JYJ_testdataforcollapse")
-    # test = pd.read_pickle(filename)
-    # t_a_ = test['temp'].values + 273.15
-    # rh_ = test['rh'].values
-    # pa_ = test['pressure'].values * 100
-    # lw_meas_ = test['LWmeas'].values
-    #
-    # t = 292.85
-    # rh = 25.1
-    # ir_mea = 291.8
-    # ir, t_sky = get_tsky(t, ir_mea)
-    # # ir = SIGMA * t_sky ** 4
-    # pw = get_pw(t, rh)
-    # esky = get_esky_c(pw)
-    # t_sky2 = esky ** (1 / 4) * t
-    # print(t_sky, t_sky2, t_sky - t_sky2)
-    # print(ir)
-    process_site_yr(yr='2012')
-    process_site_yr(yr='2013')
+
+    # process_site_yr(yr='2012')
+    # process_site_yr(yr='2013')
+
+    filename = os.path.join("data", "SURFRAD", "sites_2012.csv")
+    df = pd.read_csv(filename, index_col=0, parse_dates=True)
+
+    # TODO add LW_s correction
+    # TODO write solver for MLR
+    # TODO make a clear sky filter based on 10 tests
+    # TODO import ASOS data for CF values
+    # TODO apply clear sky identification process
+    df = df.rename(columns={"temp": "t_a"})
+    df["pw"] = get_pw(df.t_a, df.rh) / 100  # hPa
+    df["esky_c"] = get_esky_c(df.pw)
+    df["lw_c"] = df.esky_c * SIGMA * np.power(df.t_a, 4)
+
+    df = df.loc[df.zen < 85]  # remove night values
+    df["cmf"] = 1 - (df.GHI_m / df.GHI_c)
+    # apply 26a correlation
+    df["li_lw"] = li_lw(df.cmf, df.t_a, df.rh, c=CORR26A, lwc=df.lw_c)
+
+    fig, ax = plt.subplots()
+    ax.axline((300, 300), slope=1, ls=":", color="0.0")
+    ax.scatter(df.dw_ir, df.li_lw, c=df.zen, alpha=0.2, fc=None)
+    ax.set_xlabel("Measured (uncorrected) [W/m$^{2}$]")
+    ax.set_ylabel("Modeled [W/m$^{2}$]")
+    ax.set_title("Daytime (26a)")
+    cbar = plt.colorbar(ax=ax)
+    cbar.set_label("zenith angle")
+    plt.show()
