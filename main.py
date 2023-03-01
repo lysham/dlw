@@ -169,8 +169,11 @@ def li_lw(cf, t, rh):
     return lw
 
 
-def make_full_lw_plot(station_info, df):
-    # make a plot of all LW data
+def make_full_lw_plot():
+    # make a plot of all LW data (18 stations on one timeseries)
+    station_info = get_station_info()
+    df = get_lw_station_data()
+
     stations = station_info.set_index("id").to_dict()["station"]
     df = df.filter(like="lw")
     fig, ax = plt.subplots(figsize=(12, 5), layout="constrained")
@@ -189,8 +192,8 @@ def make_full_lw_plot(station_info, df):
     ax.legend(bbox_to_anchor=(1.0, 1.0), loc="upper left")
     ax.set_ylabel("LW [W m$^{-2}$]")
     plt.show()
-    filename = os.path.join("figures", "lw_data.png")
-    fig.savefig(filename, dpi=300)
+    # filename = os.path.join("figures", "lw_data.png")
+    # fig.savefig(filename, dpi=300)
     return None
 
 
@@ -264,19 +267,30 @@ def plot_data_w_models(station, station_info, df):
     return None
 
 
-if __name__ == "__main__":
-    print()
-    # LOAD LW STATION INFO
-    filename = os.path.join("data", "lw_station_info.csv")
-    station_info = pd.read_csv(filename)
-
+def get_lw_station_data():
     # LOAD LW STATION DATA
     filename = os.path.join("data", "lw_station_data.csv")
     df = pd.read_csv(filename, index_col=0, parse_dates=True)
+    return df
+
+
+def get_station_info():
+    # LOAD LW STATION INFO
+    filename = os.path.join("data", "lw_station_info.csv")
+    df = pd.read_csv(filename)
+    return df
+
+
+if __name__ == "__main__":
+    print()
+
+    # import dataframes
+    station_info = get_station_info()
+    df = get_lw_station_data()
 
     plot_data_w_models("HN164", station_info, df)
 
-    # make_full_lw_plot(station_info, df)
+    # make_full_lw_plot()
     plot_26b()
 
 
