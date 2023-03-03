@@ -287,11 +287,11 @@ def get_station_info():
 if __name__ == "__main__":
     print()
 
-    # import dataframes
-    station_info = get_station_info()
-    df = get_lw_station_data()
-
-    plot_data_w_models("HN164", station_info, df)
+    # # import dataframes
+    # station_info = get_station_info()
+    # df = get_lw_station_data()
+    #
+    # plot_data_w_models("HN164", station_info, df)
 
     # make_full_lw_plot()
     plot_26b()

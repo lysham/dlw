@@ -19,6 +19,7 @@ from main import SIGMA, get_pw, get_esky_c, li_lw, CORR26A
 SITES = [
     'Bondville_IL', 'Boulder_CO', 'Desert_Rock_NV', 'Fort_Peck_MT', 
     'Goodwin_Creek_MS', 'Penn_State_PA', 'Sioux_Falls_SD']  # Tbl 1
+SURF_SITE_CODES = ['BON', 'BOU', 'DRA', 'FPK', 'GWC', 'PSU', 'SXF']
 LATs = [40.05, 40.13, 36.62, 48.31, 34.25, 40.72, 43.73]
 LONs = [-88.37, -105.24, -116.06, -105.10, -89.87, -77.93, -96.62]
 ALTs = [213, 1689, 1007, 634, 98, 376, 437]  # m
@@ -30,6 +31,16 @@ COLNAMES = [
     'netsolar', 'qc13', 'netir', 'qc14', 'totalnet', 'qc15', 'temp', 'qc16',
     'rh', 'qc17', 'windspd', 'qc18', 'winddir', 'qc19', 'pressure', 'qc20'
 ]
+
+# ASOS stations
+ASOS_SITES = [
+    'UNIVERSI OF WILLARD APT', 'BOULDER MUNICIPAL AIRPORT',
+    'DESERT ROCK AIRPORT', 'L M CLAYTON AIRPORT', 'OXFORD UNIV',
+    'UNIVERSITY PARK AIRPORT', 'JOE FOSS FIELD AIRPORT'
+]
+INDEX_N = [20085, 17433, 19277, 17446, 21205, 19962, 20756]
+USAF = [725315, 720533, 723870, 720541, 727686, 725128, 726510]
+WBAN = [94870, 160, 3160, 53806, 94017, 54739, 14944]
 
 
 def pw_tdp(t_a, rh):
@@ -110,6 +121,7 @@ def look_at_jyj():
 
 
 def process_site_yr(yr="2012"):
+    # export to csv a combination of data from all SURF sites, sampled
     start_time = time.time()
     data = pd.DataFrame()  # collect all data for the given year
     for i in range(len(SITES)):
@@ -190,40 +202,43 @@ def process_site_yr(yr="2012"):
     # Determine T_sky values, and correct for 3-50 micron range
     temp = df.temp.values
     dwir = df.dw_ir.values
-    Tsky = []
-    DLW = []
+    t_sky = []
+    dlw = []
     for i in range(df.shape[0]):
-        ir, t = get_tsky(temp[i], dwir[i])
-        ir_act = SIGMA * t ** 4  # determine actual DLW using sky temp
-        Tsky.append(t)
-        DLW.append(ir_act)
-    df['Tsky'] = Tsky
-    df['DLW'] = DLW
+        ir, tsky = get_tsky(temp[i], dwir[i])
+        ir_act = SIGMA * tsky ** 4  # determine actual DLW using sky temp
+        t_sky.append(tsky)
+        dlw.append(ir_act)
+    df['t_sky'] = t_sky
+    df['lw_s'] = dlw
     # df['kT'] = df.GHI_m / df.GHI_c
     # kTc = df.GHI_m / df.GHI_c
     # kTc[kTc > 1] = 1
     # df['kTc'] = kTc
+    df = df.rename(columns={"temp": "t_a"})
 
     filename = os.path.join("data", "SURFRAD", f"sites_{yr}.csv")
     df.to_csv(filename)
     return None
 
 
+def asos_site_data():
+    return None
+
+
 if __name__ == "__main__":
     print()
 
-    # process_site_yr(yr='2012')
+    # process_site_yr(yr='2012')  # run with tsky
     # process_site_yr(yr='2013')
 
     filename = os.path.join("data", "SURFRAD", "sites_2012.csv")
     df = pd.read_csv(filename, index_col=0, parse_dates=True)
 
-    # TODO add LW_s correction
+    # TODO import ASOS data for CF values
     # TODO write solver for MLR
     # TODO make a clear sky filter based on 10 tests
-    # TODO import ASOS data for CF values
-    # TODO apply clear sky identification process
-    df = df.rename(columns={"temp": "t_a"})
+
     df["pw"] = get_pw(df.t_a, df.rh) / 100  # hPa
     df["esky_c"] = get_esky_c(df.pw)
     df["lw_c"] = df.esky_c * SIGMA * np.power(df.t_a, 4)
@@ -231,14 +246,18 @@ if __name__ == "__main__":
     df = df.loc[df.zen < 85]  # remove night values
     df["cmf"] = 1 - (df.GHI_m / df.GHI_c)
     # apply 26a correlation
-    df["li_lw"] = li_lw(df.cmf, df.t_a, df.rh, c=CORR26A, lwc=df.lw_c)
+    # df["li_lw"] = li_lw(df.cmf, df.t_a, df.rh, c=CORR26A, lwc=df.lw_c)
 
     fig, ax = plt.subplots()
     ax.axline((300, 300), slope=1, ls=":", color="0.0")
-    ax.scatter(df.dw_ir, df.li_lw, c=df.zen, alpha=0.2, fc=None)
+    ax.scatter(df.dw_ir, df.lw_s, c=df.zen, alpha=0.2, fc=None)
+    # ax.scatter(df.dw_ir, df.li_lw, c=df.zen, alpha=0.2, fc=None)
     ax.set_xlabel("Measured (uncorrected) [W/m$^{2}$]")
     ax.set_ylabel("Modeled [W/m$^{2}$]")
-    ax.set_title("Daytime (26a)")
+    # ax.set_title("Daytime (26a)")
     cbar = plt.colorbar(ax=ax)
     cbar.set_label("zenith angle")
     plt.show()
+
+    # df["f"] = df.lw_s / df.dw_ir
+    # df.f.hist(bins=100)
