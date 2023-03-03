@@ -232,32 +232,42 @@ if __name__ == "__main__":
     # process_site_yr(yr='2012')  # run with tsky
     # process_site_yr(yr='2013')
 
-    filename = os.path.join("data", "SURFRAD", "sites_2012.csv")
+    # filename = os.path.join("data", "SURFRAD", "sites_2012.csv")
+    # df = pd.read_csv(filename, index_col=0, parse_dates=True)
+
+    folder = os.path.join(
+        "/Volumes", "Lysha_drive", "Archive", "proj_data",
+        "ASOS2", "processed"
+    )
+    filename = os.path.join(folder, "ASOS_2012.csv")
     df = pd.read_csv(filename, index_col=0, parse_dates=True)
+    df = df.loc[df.ASOS_loc == ASOS_SITES[0]]  # What is this timestamp?
+    # And how do I join it with the data I have?
+    # I should be able to calculate CMF, but I need CF from ASOS stations
 
     # TODO import ASOS data for CF values
     # TODO write solver for MLR
     # TODO make a clear sky filter based on 10 tests
 
-    df["pw"] = get_pw(df.t_a, df.rh) / 100  # hPa
-    df["esky_c"] = get_esky_c(df.pw)
-    df["lw_c"] = df.esky_c * SIGMA * np.power(df.t_a, 4)
+    # df["pw"] = get_pw(df.t_a, df.rh) / 100  # hPa
+    # df["esky_c"] = get_esky_c(df.pw)
+    # df["lw_c"] = df.esky_c * SIGMA * np.power(df.t_a, 4)
+    #
+    # df = df.loc[df.zen < 85]  # remove night values
+    # df["cmf"] = 1 - (df.GHI_m / df.GHI_c)
+    # # apply 26a correlation
+    # # df["li_lw"] = li_lw(df.cmf, df.t_a, df.rh, c=CORR26A, lwc=df.lw_c)
 
-    df = df.loc[df.zen < 85]  # remove night values
-    df["cmf"] = 1 - (df.GHI_m / df.GHI_c)
-    # apply 26a correlation
-    # df["li_lw"] = li_lw(df.cmf, df.t_a, df.rh, c=CORR26A, lwc=df.lw_c)
-
-    fig, ax = plt.subplots()
-    ax.axline((300, 300), slope=1, ls=":", color="0.0")
-    ax.scatter(df.dw_ir, df.lw_s, c=df.zen, alpha=0.2, fc=None)
-    # ax.scatter(df.dw_ir, df.li_lw, c=df.zen, alpha=0.2, fc=None)
-    ax.set_xlabel("Measured (uncorrected) [W/m$^{2}$]")
-    ax.set_ylabel("Modeled [W/m$^{2}$]")
-    # ax.set_title("Daytime (26a)")
-    cbar = plt.colorbar(ax=ax)
-    cbar.set_label("zenith angle")
-    plt.show()
+    # fig, ax = plt.subplots()
+    # ax.axline((300, 300), slope=1, ls=":", color="0.0")
+    # ax.scatter(df.dw_ir, df.lw_s, c=df.zen, alpha=0.2, fc=None)
+    # # ax.scatter(df.dw_ir, df.li_lw, c=df.zen, alpha=0.2, fc=None)
+    # ax.set_xlabel("Measured (uncorrected) [W/m$^{2}$]")
+    # ax.set_ylabel("Modeled [W/m$^{2}$]")
+    # # ax.set_title("Daytime (26a)")
+    # cbar = plt.colorbar(ax=ax)
+    # cbar.set_label("zenith angle")
+    # plt.show()
 
     # df["f"] = df.lw_s / df.dw_ir
     # df.f.hist(bins=100)
