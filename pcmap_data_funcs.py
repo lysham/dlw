@@ -11,16 +11,30 @@ import ftplib
 import io
 import gzip
 import shutil
+import os
 
 
-def get_US_stations(year, local_dir):
+# ASOS stations
+ASOS_SITES = [
+    'UNIVERSI OF WILLARD APT', 'BOULDER MUNICIPAL AIRPORT',
+    'DESERT ROCK AIRPORT', 'L M CLAYTON AIRPORT', 'OXFORD UNIV',
+    'UNIVERSITY PARK AIRPORT', 'JOE FOSS FIELD AIRPORT'
+]
+# INDEX_N = [20085, 17433, 19277, 17446, 21205, 19962, 20756]
+USAF = [725315, 720533, 723870, 720541, 727686, 725128, 726510]
+WBAN = [94870, 160, 3160, 53806, 94017, 54739, 14944]
+
+
+def get_asos_stations(year, local_dir):
     """
-    function to output station ID for US stations.
+    Function to retrieve one year of data for multiple ASOS stations.
+    Deprecated: Function to output station ID for US stations.
     Author: Hannah Peterson 10/08/2018
-    Last modified: Mengying Li 11/13/2018
+    Modified: Lysha 03/03/2023
+
     Parameters
     ----------
-    year: required data year
+    year: required data year, int
     local_dir: local directory to save the downloaded data.
     Returns
     -------
@@ -30,9 +44,9 @@ def get_US_stations(year, local_dir):
     file_address = 'ftp://ftp.ncdc.noaa.gov/pub/data/noaa/isd-history.csv'
     # read csv instead
     df = pd.read_csv(file_address)  # total of 29705 stations worldwide
-    US_stations = df[df.CTRY == "US"]  # total of 7320 US stations
-    USAF = US_stations.USAF.values
-    WBAN = US_stations.WBAN.values
+    # US_stations = df[df.CTRY == "US"]  # total of 7320 US stations
+    # USAF = US_stations.USAF.values
+    # WBAN = US_stations.WBAN.values
     US_list = [''] * len(USAF)  # initialize list of filenames of US stations: USAF-WBAN
     for i in range(0, len(USAF)):
         US_list[i] = str(USAF[i]) + '-' + str(WBAN[i])
@@ -40,8 +54,7 @@ def get_US_stations(year, local_dir):
     ftp_host = "ftp.ncdc.noaa.gov"
     with ftplib.FTP(host=ftp_host, user='ftp', passwd='') as ftpconn:
         year_dir = "pub/data/noaa/{YEAR}".format(YEAR=year)
-        file_list = ftpconn.nlst(
-            year_dir)  # returns list of file names in year directory of format 'pub/data/noaa/YEAR/USAFID-WBAN#-YEAR.gz'
+        file_list = ftpconn.nlst(year_dir)  # returns list of file names in year directory of format 'pub/data/noaa/YEAR/USAFID-WBAN#-YEAR.gz'
         US_year_files = []
         for filename in file_list:
             if filename[19:31] in US_list:  # if is US station, then download and unzip and save to local directory
@@ -59,7 +72,8 @@ def get_US_stations(year, local_dir):
                 with gzip.open(response, 'rb') as f_in:
                     with open(local_dir + filename[19:36], 'wb') as f_out:
                         shutil.copyfileobj(f_in, f_out)
-                ish2csv(local_dir + filename[19:36])  # covert to CSV and save
+                f = os.path.join(local_dir, filename[19:36])
+                ish2csv(f)  # covert to CSV and save
     return US_year_files
 
 
@@ -92,7 +106,7 @@ def ish2csv(fileName):
 
         headers = ['UTC', 'DIR', 'SPD', 'CLG', 'VSB', 'TEMP', 'DEWP', 'SLP',
                    'CF1', 'CBH1', 'CF2', 'CBH2', 'CF3', 'CF4', 'CF5', 'CBH5',
-                   'CT_low', 'CT_mid', 'CT_high','W_TYPE','PERCP']
+                   'CT_low', 'CT_mid', 'CT_high', 'W_TYPE', 'PERCP']
         csv_writer.writerow(headers)  # write headers
         # write data
         for noaa_string in data.split("\n"):  # read+parse+write line by line
@@ -101,6 +115,7 @@ def ish2csv(fileName):
             except:
                 csv_line = ''
             csv_writer.writerow(csv_line)  # write the string to csv files
+    return None
 
 
 def parse_ish_line(noaa_string):
@@ -134,9 +149,9 @@ def parse_ish_line(noaa_string):
         """ some cases, we get 2400 hours, which is really the next day, so 
         this is a workaround for those cases """
         utc_time = noaa_string[15:27]
-        print (utc_time)
+        print(utc_time)
         utc_time = utc_time.replace("2400", "2300")
-        print (utc_time)
+        print(utc_time)
         utc_time = datetime.strptime(utc_time, '%Y%m%d%H%M')
         utc_time += timedelta(hours=1)
     utc_time = utc_time.replace(tzinfo=pytz.UTC)  # in UTC timezone
@@ -161,8 +176,7 @@ def parse_ish_line(noaa_string):
     DEWP = int(noaa_string[93:98]) / TEMPERATURE_SCALE * QC_value(noaa_string[98])  # dew point in oC
     DEWP = np.nan if (DEWP == 999.9) else DEWP
 
-    SLP = int(noaa_string[99:104]) / PRESSURE_SCALE * QC_value(
-        noaa_string[104])  # air pressure relative to mean sea level (MSL)
+    SLP = int(noaa_string[99:104]) / PRESSURE_SCALE * QC_value(noaa_string[104])  # air pressure relative to mean sea level (MSL)
     SLP = np.nan if (SLP == 9999.9) else SLP
     # handling the addtional data about sky cover
     CF1, CBH1, CF2, CBH2, CF3, CF4, CF5, CBH5, CT_low, CT_mid, CT_high = ['' for i in
@@ -273,6 +287,7 @@ def get_cloudInfo(string):
     # cloud fraction, cloud base height, cloud type
     return CF1, CBH1, CF2, CBH2, CF3, CF4, CF5, CBH5, CT_low, CT_mid, CT_high
 
+
 def get_weatherInfo(string):
     """
     function to get weather type, and apply data quality control.
@@ -299,6 +314,7 @@ def get_weatherInfo(string):
             temp2=str(temp*QC_value(string[pos_init+5]))
             W_TYPE+=str(temp2)+'/'
     return W_TYPE # weather type indicator
+
 
 def get_percipationInfo(string):
     """

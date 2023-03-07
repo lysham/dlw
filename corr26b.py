@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from scipy import integrate
 
 from main import SIGMA, get_pw, get_esky_c, li_lw, CORR26A
+from pcmap_data_funcs import ASOS_SITES, WBAN, USAF
 
 
 SITES = [
@@ -31,16 +32,6 @@ COLNAMES = [
     'netsolar', 'qc13', 'netir', 'qc14', 'totalnet', 'qc15', 'temp', 'qc16',
     'rh', 'qc17', 'windspd', 'qc18', 'winddir', 'qc19', 'pressure', 'qc20'
 ]
-
-# ASOS stations
-ASOS_SITES = [
-    'UNIVERSI OF WILLARD APT', 'BOULDER MUNICIPAL AIRPORT',
-    'DESERT ROCK AIRPORT', 'L M CLAYTON AIRPORT', 'OXFORD UNIV',
-    'UNIVERSITY PARK AIRPORT', 'JOE FOSS FIELD AIRPORT'
-]
-INDEX_N = [20085, 17433, 19277, 17446, 21205, 19962, 20756]
-USAF = [725315, 720533, 723870, 720541, 727686, 725128, 726510]
-WBAN = [94870, 160, 3160, 53806, 94017, 54739, 14944]
 
 
 def pw_tdp(t_a, rh):
@@ -84,40 +75,6 @@ def get_pw_esky(rh, t):
     # (22a) -- daytime clear-sky model Pw in hPa
     esky = 0.598 + 0.057 * np.sqrt(pw / 100)
     return esky, pw
-
-
-def look_at_jyj():
-    # Code below from python notebooks looking at 26b correlation
-    filename = os.path.join("data", "jyj_2017_data", "JYJ_traindataforcollapse")
-    train = pd.read_pickle(filename)
-    t_a = train['temp'].values + 273.15
-    rh_vals = train['rh'].values
-    lw_meas = train['LWmeas'].values
-
-    # fig, ax = plt.subplots()
-    # ax.plot(train.dw_ir, train.LWmeas, ".", alpha=0.3)
-    # ax.axline((1, 1), slope=1, c="0.0")
-    # plt.show()
-
-    # import test values
-    filename = os.path.join("data", "jyj_2017_data", "JYJ_testdataforcollapse")
-    test = pd.read_pickle(filename)
-    t_a_ = test['temp'].values + 273.15
-    rh_ = test['rh'].values
-    pa_ = test['pressure'].values * 100
-    lw_meas_ = test['LWmeas'].values
-
-    t = 292.85
-    rh = 25.1
-    ir_mea = 291.8
-    ir, t_sky = get_tsky(t, ir_mea)
-    # ir = SIGMA * t_sky ** 4
-    pw = get_pw(t, rh)
-    esky = get_esky_c(pw)
-    t_sky2 = esky ** (1 / 4) * t
-    print(t_sky, t_sky2, t_sky - t_sky2)
-    print(ir)
-    return None
 
 
 def process_site_yr(yr="2012"):
@@ -222,6 +179,16 @@ def process_site_yr(yr="2012"):
     return None
 
 
+def isd_history():
+    # Import and store ASOS station info
+    file_address = 'ftp://ftp.ncdc.noaa.gov/pub/data/noaa/isd-history.csv'
+    df = pd.read_csv(file_address)  # total of 29705 stations worldwide
+    filename = os.path.join("data", "isd_history.csv")
+    df = df.rename(columns={"STATION NAME": "STATION_NAME", "ELEV(M)": "ELEV"})
+    df.to_csv(filename, index=False)
+    return None
+
+
 def asos_site_data():
     return None
 
@@ -235,17 +202,76 @@ if __name__ == "__main__":
     # filename = os.path.join("data", "SURFRAD", "sites_2012.csv")
     # df = pd.read_csv(filename, index_col=0, parse_dates=True)
 
-    folder = os.path.join(
-        "/Volumes", "Lysha_drive", "Archive", "proj_data",
-        "ASOS2", "processed"
+    # folder = os.path.join(
+    #     "/Volumes", "Lysha_drive", "Archive", "proj_data",
+    #     "ASOS2", "processed"
+    # )
+    # filename = os.path.join(folder, "ASOS_2012.csv")
+    # df = pd.read_csv(filename, index_col=0, parse_dates=True)
+    # df = df.loc[df.ASOS_loc == ASOS_SITES[0]]  # What is this timestamp?
+
+    # TODO create look up table for closest ASOS station
+
+    # after running the retrieve scripts
+    # get_asos_stations(year=2012, local_dir=os.path.join("data", "asos_2012"))
+    usaf_sub = [725315, 720541, 727686, 725128, 726510]  # only
+    wban_sub = [94870, 53806, 94017, 54739, 14944]
+
+    folder = os.path.join("data", "asos_2012")
+    sid = []
+    files = []
+    for i, j in zip(usaf_sub, wban_sub):
+        sid.append(f"{i}-{j}")
+        files.append(os.path.join(folder, f"{i}-{j}-2012.csv"))
+
+    i = 0  # BONDVILLE_IL, UNIVERSITY OF WILLARD
+    # get ASOS station metadata
+    filename = os.path.join("data", "isd_history.csv")
+    asos = pd.read_csv(filename)
+    asos_site = asos.loc[(asos.USAF == str(usaf_sub[i])) & (asos.WBAN == wban_sub[i])].iloc[0]
+    # get SURFRAD data (after processing)
+    filename = os.path.join("data", "SURFRAD", "sites_2012.csv")
+    site = pd.read_csv(filename, index_col=0, parse_dates=True)
+    site = site.loc[site.location == SITES[i]]
+    site.sort_index(inplace=True)
+    site = site.tz_localize("UTC")
+    # get ASOS station data
+    station = sid[i]
+    df = pd.read_csv(files[i], skiprows=1, index_col=0, parse_dates=True)
+    df = df[['CF2', 'CBH2', 'TEMP', 'VSB', 'DEWP', 'SLP', 'PERCP']]
+    mask = df.index.duplicated(keep="first")
+    df = df[~mask].sort_index()  # drop duplicate indices
+
+    # merge
+    df = pd.merge_asof(
+        site, df, left_index=True, right_index=True,
+        tolerance=pd.Timedelta("1h"), direction="nearest"
     )
-    filename = os.path.join(folder, "ASOS_2012.csv")
-    df = pd.read_csv(filename, index_col=0, parse_dates=True)
-    df = df.loc[df.ASOS_loc == ASOS_SITES[0]]  # What is this timestamp?
-    # And how do I join it with the data I have?
-    # I should be able to calculate CMF, but I need CF from ASOS stations
+
+    fig, ax = plt.subplots()
+    ax.grid(True, alpha=0.3)
+    ax.scatter(df.TEMP + 273.15, df.t_a, alpha=0.3)
+    ax.axline((300, 300), slope=1, c="0.1", ls="--")
+    ax.set_xlabel("ASOS temperature [K]")
+    ax.set_ylabel("SURF temperature [K]")
+    ax.set_title(SITES[i])
+    filename = os.path.join("figures", "temperature_comparison.png")
+    fig.savefig(filename, dpi=300, bbox_inches="tight")
+    plt.show()
+
+    fig, ax = plt.subplots()
+    ax.grid(True, alpha=0.3)
+    ax.plot(df.index, df.t_a, ".-", label="SURFRAD")
+    ax.plot(df.index, df.TEMP + 273.15, ".-", label="ASOS")
+    ax.legend()
+    ax.set_ylabel("Temperature [K]")
+    ax.set_title(SITES[i])
+    plt.show()
+
+    # check different ways to join (bfill, linear interp)
 
     # TODO import ASOS data for CF values
+    # not all locations will have a full history
     # TODO write solver for MLR
     # TODO make a clear sky filter based on 10 tests
 
