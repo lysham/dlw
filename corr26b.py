@@ -13,6 +13,12 @@ import datetime as dt
 import matplotlib.pyplot as plt
 from scipy import integrate
 
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+from sklearn.pipeline import Pipeline
+from copy import deepcopy
+
 from main import SIGMA, get_pw, get_esky_c, li_lw, CORR26A
 from pcmap_data_funcs import ASOS_SITES, WBAN, USAF
 
@@ -193,6 +199,12 @@ def asos_site_data():
     return None
 
 
+def custom_form(lwc, cf, t, rh, c1, c2, c3, c4, c5):
+    term1 = (-1 * c1) * lwc * (np.power(cf, c2))
+    term2 = c3 * SIGMA * np.power(t, 4) * np.power(cf, c4) * np.power(rh, c5)
+    return lwc + term1 + term2
+
+
 if __name__ == "__main__":
     print()
 
@@ -247,53 +259,56 @@ if __name__ == "__main__":
         site, df, left_index=True, right_index=True,
         tolerance=pd.Timedelta("1h"), direction="nearest"
     )
+    df["asos_t"] = df.TEMP + 273.15
+    df[["asos_t", "t_a"]].corr()
+    df["pw"] = get_pw(df.t_a, df.rh) / 100  # hPa
+    df["esky_c"] = get_esky_c(df.pw)
+    df["lw_c"] = df.esky_c * SIGMA * np.power(df.t_a, 4)
+    # TODO check different ways to join (bfill, linear interp)
+    check = df.copy()
 
-    fig, ax = plt.subplots()
+    df = df.rename(columns={"CF2": "cf"})
+    # drop rows with missing values in parameter columns
+    x = df.shape[0]
+    df.dropna(subset=["t_a", "rh", "cf", "lw_c", "lw_s"], inplace=True)
+    print(x, df.shape[0])
+
+    df = df.assign(
+        t1=df.lw_c * df.cf,
+        t2=SIGMA * (df.t_a ** 4) * df.cf * (df.rh / 100),
+        y=df.lw_s - df.lw_c
+    )
+    # inexact fit, only solving for two params
+
+    b = df.lw_c.to_numpy()
+    train_x = df[["t1", "t2"]].to_numpy()
+    train_y = df.y.to_numpy()
+
+    model = LinearRegression(fit_intercept=False)
+    model.fit(train_x, train_y)
+    print(model.coef_, model.intercept_)
+    rmse = np.sqrt(mean_squared_error(train_y, model.predict(train_x)))
+    print(f"{rmse:.2f}")
+
+    y_true = train_y + b
+    y_pred = model.predict(train_x) + b
+
+    fig, ax = plt.subplots(figsize=(4, 4))
     ax.grid(True, alpha=0.3)
-    ax.scatter(df.TEMP + 273.15, df.t_a, alpha=0.3)
+    ax.scatter(y_true, y_pred, alpha=0.3)
     ax.axline((300, 300), slope=1, c="0.1", ls="--")
-    ax.set_xlabel("ASOS temperature [K]")
-    ax.set_ylabel("SURF temperature [K]")
-    ax.set_title(SITES[i])
-    filename = os.path.join("figures", "temperature_comparison.png")
+    ax.set_xlabel("LW measured [W/m$^2$]")
+    ax.set_ylabel("Modeled [W/m$^2$]")
+    ax.set_title("BON")
+    filename = os.path.join("figures", "first_fit.png")
     fig.savefig(filename, dpi=300, bbox_inches="tight")
-    plt.show()
 
-    fig, ax = plt.subplots()
-    ax.grid(True, alpha=0.3)
-    ax.plot(df.index, df.t_a, ".-", label="SURFRAD")
-    ax.plot(df.index, df.TEMP + 273.15, ".-", label="ASOS")
-    ax.legend()
-    ax.set_ylabel("Temperature [K]")
-    ax.set_title(SITES[i])
-    plt.show()
-
-    # check different ways to join (bfill, linear interp)
-
-    # TODO import ASOS data for CF values
-    # not all locations will have a full history
-    # TODO write solver for MLR
     # TODO make a clear sky filter based on 10 tests
 
-    # df["pw"] = get_pw(df.t_a, df.rh) / 100  # hPa
-    # df["esky_c"] = get_esky_c(df.pw)
-    # df["lw_c"] = df.esky_c * SIGMA * np.power(df.t_a, 4)
-    #
     # df = df.loc[df.zen < 85]  # remove night values
     # df["cmf"] = 1 - (df.GHI_m / df.GHI_c)
     # # apply 26a correlation
     # # df["li_lw"] = li_lw(df.cmf, df.t_a, df.rh, c=CORR26A, lwc=df.lw_c)
-
-    # fig, ax = plt.subplots()
-    # ax.axline((300, 300), slope=1, ls=":", color="0.0")
-    # ax.scatter(df.dw_ir, df.lw_s, c=df.zen, alpha=0.2, fc=None)
-    # # ax.scatter(df.dw_ir, df.li_lw, c=df.zen, alpha=0.2, fc=None)
-    # ax.set_xlabel("Measured (uncorrected) [W/m$^{2}$]")
-    # ax.set_ylabel("Modeled [W/m$^{2}$]")
-    # # ax.set_title("Daytime (26a)")
-    # cbar = plt.colorbar(ax=ax)
-    # cbar.set_label("zenith angle")
-    # plt.show()
 
     # df["f"] = df.lw_s / df.dw_ir
     # df.f.hist(bins=100)
