@@ -12,32 +12,14 @@ import pandas as pd
 import datetime as dt
 import matplotlib.pyplot as plt
 from scipy import integrate
-
-from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
-from sklearn.pipeline import Pipeline
 from copy import deepcopy
 
 from main import SIGMA, get_pw, get_esky_c, li_lw, CORR26A
-from pcmap_data_funcs import ASOS_SITES, WBAN, USAF
+from pcmap_data_funcs import get_asos_stations
 
-
-SITES = [
-    'Bondville_IL', 'Boulder_CO', 'Desert_Rock_NV', 'Fort_Peck_MT', 
-    'Goodwin_Creek_MS', 'Penn_State_PA', 'Sioux_Falls_SD']  # Tbl 1
-SURF_SITE_CODES = ['BON', 'BOU', 'DRA', 'FPK', 'GWC', 'PSU', 'SXF']
-LATs = [40.05, 40.13, 36.62, 48.31, 34.25, 40.72, 43.73]
-LONs = [-88.37, -105.24, -116.06, -105.10, -89.87, -77.93, -96.62]
-ALTs = [213, 1689, 1007, 634, 98, 376, 437]  # m
-COLNAMES = [
-    'yr', 'jday', 'month', 'day', 'hr', 'minute', 'dt', 'zen', 'dw_solar',
-    'qc1', 'uw_solar', 'qc2', 'direct_n', 'qc3', 'diffuse', 'qc4', 'dw_ir',
-    'qc5', 'dw_casetemp', 'qc6', 'dw_dometemp', 'qc7', 'uw_ir', 'qc8',
-    'uw_castemp', 'qc9', 'uw_dometemp', 'qc10', 'uvb', 'qc11', 'par', 'qc12',
-    'netsolar', 'qc13', 'netir', 'qc14', 'totalnet', 'qc15', 'temp', 'qc16',
-    'rh', 'qc17', 'windspd', 'qc18', 'winddir', 'qc19', 'pressure', 'qc20'
-]
+from constants import SURFRAD, SURF_COLS, SURF_ASOS
 
 
 def pw_tdp(t_a, rh):
@@ -83,27 +65,33 @@ def get_pw_esky(rh, t):
     return esky, pw
 
 
-def process_site_yr(yr="2012"):
-    # export to csv a combination of data from all SURF sites, sampled
+def process_site(site, yr="2012"):
+    # export to csv of processed, sampled data from one SURF site for one year
     start_time = time.time()
-    data = pd.DataFrame()  # collect all data for the given year
-    for i in range(len(SITES)):
-        lat = LATs[i]
-        lon = LONs[i]
-        alt = ALTs[i]
-        folder = os.path.join(
-            "/Volumes", "Lysha_drive", "Archive", "proj_data",
-            "SURFRAD", SITES[i], yr
-        )
+    site_name = SURFRAD[site]["name"]
+    lat = SURFRAD[site]["lat"]
+    lon = SURFRAD[site]["lon"]
+    alt = SURFRAD[site]["alt"]  # m
+    directory = os.path.join(
+        "/Volumes", "Lysha_drive", "Archive",
+        "proj_data", "SURFRAD", site_name
+    )
+    all_years = os.listdir(directory)
+    keep_cols = [
+        'zen', 'dw_solar', 'qc1', 'direct_n', 'qc3', 'diffuse', 'qc4',
+        'dw_ir', 'qc5', 'temp', 'qc16', 'rh', 'qc17', 'pressure', 'qc20'
+    ]  # narrow down columns from SURF_COLNAMES
+    if yr in all_years:
+        folder = os.path.join(directory, yr)
         lst = os.listdir(folder)
         lst.sort()
         tmp = pd.DataFrame()
-        expected_columns = len(COLNAMES)
+        expected_columns = len(SURF_COLS)
         for f in lst:  # import data by day and concatenate to `tmp`
             filename = os.path.join(folder, f)
             try:
                 df = pd.DataFrame(
-                    np.loadtxt(filename, skiprows=2), columns=COLNAMES
+                    np.loadtxt(filename, skiprows=2), columns=SURF_COLS
                 )
                 if len(df.columns) == expected_columns:
                     df['TS'] = pd.to_datetime(
@@ -111,11 +99,7 @@ def process_site_yr(yr="2012"):
                          'hour': df.hr, 'minute': df.minute}
                     )
                     df = df.set_index('TS')
-                    df = df[
-                        ['zen', 'dw_solar', 'qc1', 'direct_n', 'qc3', 'diffuse',
-                         'qc4', 'dw_ir', 'qc5', 'temp', 'qc16', 'rh', 'qc17',
-                         'pressure', 'qc20']
-                    ]
+                    df = df[keep_cols]
                     tmp = pd.concat([tmp, df])
                 else:
                     print(
@@ -123,10 +107,7 @@ def process_site_yr(yr="2012"):
                     )
             except pd.errors.ParserError as e:
                 print(f"Error: {e}")
-
-        tmp['location'] = SITES[i]
-        # switch back to df
-        df = tmp.copy()
+        df = tmp.copy()  # switch back to df
 
         # Do some clean-up
         df = df[
@@ -134,17 +115,18 @@ def process_site_yr(yr="2012"):
             (df.qc4 == 0) & (df.qc5 == 0) &
             (df.qc16 == 0) & (df.qc17 == 0) &
             (df.qc20 == 0)
-        ]  # REMOVE FLAGGED VALUES
+        ]
         df = df[
             ['zen', 'direct_n', 'diffuse', 'dw_ir', 'dw_solar', 'temp',
-             'rh', 'pressure', 'location']]  # reduce data columns
-        df['temp'] = df.temp + 273.15  # convert celsius to kelvin
+             'rh', 'pressure']]  # reduce data columns
+        df['t_a'] = df.temp + 273.15  # convert celsius to kelvin
         # df = df[df.zen < 85]  # remove night values
+
         # remove negative GHI and DNI values
         df = df.loc[(df.dw_solar > 0) & (df.direct_n > 0)]
 
-        # Reduce sample here TODO remove later(?)
-        df = df.sample(frac=0.01, random_state=96)
+        # Reduce sample here TODO remove later(?) (orig 1%)
+        df = df.sample(frac=0.05, random_state=96)
 
         # apply clear sky analysis
         location = pvlib.location.Location(lat, lon, altitude=alt)
@@ -155,33 +137,32 @@ def process_site_yr(yr="2012"):
         }
         df = df.merge(cs_out, how='outer', left_index=True, right_index=True)
         df = df.rename(columns=col_rename)
-        #     sdf = find_clearsky(sdf) # no clear-sky analysis for now
-        data = pd.concat([data, df])  # add year of site data to `data`
-        print(f"{SITES[i]} {time.time() - start_time:.3f}s")
+        # sdf = find_clearsky(sdf) # no clear-sky analysis for now
 
-    # After all sites have been collected
-    df = data.copy()
+        # Determine T_sky values, and correct for 3-50 micron range
+        temp = df.t_a.values
+        dwir = df.dw_ir.values
+        t_sky = []
+        dlw = []
+        for i in range(df.shape[0]):
+            ir, tsky = get_tsky(temp[i], dwir[i])
+            ir_act = SIGMA * tsky ** 4  # determine actual DLW using sky temp
+            t_sky.append(tsky)
+            dlw.append(ir_act)
+        df['t_sky'] = t_sky
+        df['lw_s'] = dlw
+        # df['kT'] = df.GHI_m / df.GHI_c
+        # kTc = df.GHI_m / df.GHI_c
+        # kTc[kTc > 1] = 1
+        # df['kTc'] = kTc
 
-    # Determine T_sky values, and correct for 3-50 micron range
-    temp = df.temp.values
-    dwir = df.dw_ir.values
-    t_sky = []
-    dlw = []
-    for i in range(df.shape[0]):
-        ir, tsky = get_tsky(temp[i], dwir[i])
-        ir_act = SIGMA * tsky ** 4  # determine actual DLW using sky temp
-        t_sky.append(tsky)
-        dlw.append(ir_act)
-    df['t_sky'] = t_sky
-    df['lw_s'] = dlw
-    # df['kT'] = df.GHI_m / df.GHI_c
-    # kTc = df.GHI_m / df.GHI_c
-    # kTc[kTc > 1] = 1
-    # df['kTc'] = kTc
-    df = df.rename(columns={"temp": "t_a"})
+        filename = os.path.join("data", "SURFRAD", f"{site}_{yr}.csv")
+        df.to_csv(filename)
+    else:
+        print(f"Error: {yr} is not available for {site_name}")
 
-    filename = os.path.join("data", "SURFRAD", f"sites_{yr}.csv")
-    df.to_csv(filename)
+    dt = time.time() - start_time
+    print(f"Completed {site} in {dt:.0f}s")
     return None
 
 
@@ -199,109 +180,87 @@ def asos_site_data():
     return None
 
 
-def custom_form(lwc, cf, t, rh, c1, c2, c3, c4, c5):
-    term1 = (-1 * c1) * lwc * (np.power(cf, c2))
-    term2 = c3 * SIGMA * np.power(t, 4) * np.power(cf, c4) * np.power(rh, c5)
-    return lwc + term1 + term2
-
-
 if __name__ == "__main__":
     print()
 
-    # process_site_yr(yr='2012')  # run with tsky
+    process_site(site="BON", yr='2012')
     # process_site_yr(yr='2013')
 
-    # filename = os.path.join("data", "SURFRAD", "sites_2012.csv")
-    # df = pd.read_csv(filename, index_col=0, parse_dates=True)
-
-    # folder = os.path.join(
-    #     "/Volumes", "Lysha_drive", "Archive", "proj_data",
-    #     "ASOS2", "processed"
-    # )
-    # filename = os.path.join(folder, "ASOS_2012.csv")
-    # df = pd.read_csv(filename, index_col=0, parse_dates=True)
-    # df = df.loc[df.ASOS_loc == ASOS_SITES[0]]  # What is this timestamp?
-
     # TODO create look up table for closest ASOS station
-
-    # after running the retrieve scripts
+    # modify script to look up one station specifically
+    # process asos station data
     # get_asos_stations(year=2012, local_dir=os.path.join("data", "asos_2012"))
-    usaf_sub = [725315, 720541, 727686, 725128, 726510]  # only
-    wban_sub = [94870, 53806, 94017, 54739, 14944]
 
-    folder = os.path.join("data", "asos_2012")
-    sid = []
-    files = []
-    for i, j in zip(usaf_sub, wban_sub):
-        sid.append(f"{i}-{j}")
-        files.append(os.path.join(folder, f"{i}-{j}-2012.csv"))
+    # site = "BON"  # BONDVILLE_IL, UNIVERSITY OF WILLARD
+    # usaf = SURF_ASOS[site]["usaf"]
+    # wban = SURF_ASOS[site]["wban"]
+    # # get ASOS station metadata
+    # filename = os.path.join("data", "isd_history.csv")
+    # asos = pd.read_csv(filename)
+    # asos_site = asos.loc[(asos.USAF == str(usaf)) &
+    #                      (asos.WBAN == wban)].iloc[0]
+    # # get SURFRAD data (after processing)
+    # filename = os.path.join("data", "SURFRAD", f"{site}_2012.csv")
+    # site = pd.read_csv(filename, index_col=0, parse_dates=True)
+    # # site = site.loc[site.location == SURFRAD["BON"]["name"]]
+    # site.sort_index(inplace=True)
+    # site = site.tz_localize("UTC")
+    # # get ASOS station data
+    # filename = os.path.join("data", "asos_2012", f"{usaf}-{wban}-2012.csv")
+    # df = pd.read_csv(filename, skiprows=1, index_col=0, parse_dates=True)
+    # df = df[['CF2', 'CBH2', 'TEMP', 'VSB', 'DEWP', 'SLP', 'PERCP']]
+    # mask = df.index.duplicated(keep="first")
+    # df = df[~mask].sort_index()  # drop duplicate indices
+    #
+    # # merge
+    # df = pd.merge_asof(
+    #     site, df, left_index=True, right_index=True,
+    #     tolerance=pd.Timedelta("1h"), direction="nearest"
+    # )
+    # df["asos_t"] = df.TEMP + 273.15
+    # df[["asos_t", "t_a"]].corr()
+    # df["pw"] = get_pw(df.t_a, df.rh) / 100  # hPa
+    # df["esky_c"] = get_esky_c(df.pw)
+    # df["lw_c"] = df.esky_c * SIGMA * np.power(df.t_a, 4)
+    # # TODO check different ways to join (bfill, linear interp)
+    # check = df.copy()
 
-    i = 0  # BONDVILLE_IL, UNIVERSITY OF WILLARD
-    # get ASOS station metadata
-    filename = os.path.join("data", "isd_history.csv")
-    asos = pd.read_csv(filename)
-    asos_site = asos.loc[(asos.USAF == str(usaf_sub[i])) & (asos.WBAN == wban_sub[i])].iloc[0]
-    # get SURFRAD data (after processing)
-    filename = os.path.join("data", "SURFRAD", "sites_2012.csv")
-    site = pd.read_csv(filename, index_col=0, parse_dates=True)
-    site = site.loc[site.location == SITES[i]]
-    site.sort_index(inplace=True)
-    site = site.tz_localize("UTC")
-    # get ASOS station data
-    station = sid[i]
-    df = pd.read_csv(files[i], skiprows=1, index_col=0, parse_dates=True)
-    df = df[['CF2', 'CBH2', 'TEMP', 'VSB', 'DEWP', 'SLP', 'PERCP']]
-    mask = df.index.duplicated(keep="first")
-    df = df[~mask].sort_index()  # drop duplicate indices
-
-    # merge
-    df = pd.merge_asof(
-        site, df, left_index=True, right_index=True,
-        tolerance=pd.Timedelta("1h"), direction="nearest"
-    )
-    df["asos_t"] = df.TEMP + 273.15
-    df[["asos_t", "t_a"]].corr()
-    df["pw"] = get_pw(df.t_a, df.rh) / 100  # hPa
-    df["esky_c"] = get_esky_c(df.pw)
-    df["lw_c"] = df.esky_c * SIGMA * np.power(df.t_a, 4)
-    # TODO check different ways to join (bfill, linear interp)
-    check = df.copy()
-
-    df = df.rename(columns={"CF2": "cf"})
-    # drop rows with missing values in parameter columns
-    x = df.shape[0]
-    df.dropna(subset=["t_a", "rh", "cf", "lw_c", "lw_s"], inplace=True)
-    print(x, df.shape[0])
-
-    df = df.assign(
-        t1=df.lw_c * df.cf,
-        t2=SIGMA * (df.t_a ** 4) * df.cf * (df.rh / 100),
-        y=df.lw_s - df.lw_c
-    )
-    # inexact fit, only solving for two params
-
-    b = df.lw_c.to_numpy()
-    train_x = df[["t1", "t2"]].to_numpy()
-    train_y = df.y.to_numpy()
-
-    model = LinearRegression(fit_intercept=False)
-    model.fit(train_x, train_y)
-    print(model.coef_, model.intercept_)
-    rmse = np.sqrt(mean_squared_error(train_y, model.predict(train_x)))
-    print(f"{rmse:.2f}")
-
-    y_true = train_y + b
-    y_pred = model.predict(train_x) + b
-
-    fig, ax = plt.subplots(figsize=(4, 4))
-    ax.grid(True, alpha=0.3)
-    ax.scatter(y_true, y_pred, alpha=0.3)
-    ax.axline((300, 300), slope=1, c="0.1", ls="--")
-    ax.set_xlabel("LW measured [W/m$^2$]")
-    ax.set_ylabel("Modeled [W/m$^2$]")
-    ax.set_title("BON")
-    filename = os.path.join("figures", "first_fit.png")
-    fig.savefig(filename, dpi=300, bbox_inches="tight")
+    # df = df.rename(columns={"CF2": "cf"})
+    # # drop rows with missing values in parameter columns
+    # x = df.shape[0]
+    # df.dropna(subset=["t_a", "rh", "cf", "lw_c", "lw_s"], inplace=True)
+    # print(x, df.shape[0])
+    #
+    # df = df.assign(
+    #     t1=df.lw_c * df.cf,
+    #     t2=SIGMA * (df.t_a ** 4) * df.cf * (df.rh / 100),
+    #     y=df.lw_s - df.lw_c
+    # )
+    # # inexact fit, only solving for two params
+    #
+    # b = df.lw_c.to_numpy()
+    # train_x = df[["t1", "t2"]].to_numpy()
+    # train_y = df.y.to_numpy()
+    #
+    # model = LinearRegression(fit_intercept=False)
+    # model.fit(train_x, train_y)
+    # print(model.coef_, model.intercept_)
+    # rmse = np.sqrt(mean_squared_error(train_y, model.predict(train_x)))
+    # print(f"{rmse:.2f}")
+    #
+    # y_true = train_y + b
+    # y_pred = model.predict(train_x) + b
+    #
+    # fig, ax = plt.subplots(figsize=(4, 4))
+    # ax.grid(True, alpha=0.3)
+    # ax.scatter(y_true, y_pred, alpha=0.3)
+    # ax.axline((300, 300), slope=1, c="0.1", ls="--")
+    # ax.set_xlabel("LW measured [W/m$^2$]")
+    # ax.set_ylabel("Modeled [W/m$^2$]")
+    # ax.set_title("BON")
+    # plt.show()
+    # # filename = os.path.join("figures", "first_fit.png")
+    # # fig.savefig(filename, dpi=300, bbox_inches="tight")
 
     # TODO make a clear sky filter based on 10 tests
 

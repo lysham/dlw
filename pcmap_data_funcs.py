@@ -12,17 +12,18 @@ import io
 import gzip
 import shutil
 import os
+from constants import SURF_ASOS
 
 
-# ASOS stations
-ASOS_SITES = [
-    'UNIVERSI OF WILLARD APT', 'BOULDER MUNICIPAL AIRPORT',
-    'DESERT ROCK AIRPORT', 'L M CLAYTON AIRPORT', 'OXFORD UNIV',
-    'UNIVERSITY PARK AIRPORT', 'JOE FOSS FIELD AIRPORT'
-]
-# INDEX_N = [20085, 17433, 19277, 17446, 21205, 19962, 20756]
-USAF = [725315, 720533, 723870, 720541, 727686, 725128, 726510]
-WBAN = [94870, 160, 3160, 53806, 94017, 54739, 14944]
+# # ASOS stations
+# ASOS_SITES = [
+#     'UNIVERSI OF WILLARD APT', 'BOULDER MUNICIPAL AIRPORT',
+#     'DESERT ROCK AIRPORT', 'L M CLAYTON AIRPORT', 'OXFORD UNIV',
+#     'UNIVERSITY PARK AIRPORT', 'JOE FOSS FIELD AIRPORT'
+# ]
+# # INDEX_N = [20085, 17433, 19277, 17446, 21205, 19962, 20756]
+# USAF = [725315, 720533, 723870, 720541, 727686, 725128, 726510]
+# WBAN = [94870, 160, 3160, 53806, 94017, 54739, 14944]
 
 
 def get_asos_stations(year, local_dir):
@@ -41,12 +42,13 @@ def get_asos_stations(year, local_dir):
     US_year_files: Saved file names in a list.
     Save unzipped US data files to local directory indicated by 'local_dir'.
     """
-    file_address = 'ftp://ftp.ncdc.noaa.gov/pub/data/noaa/isd-history.csv'
-    # read csv instead
-    df = pd.read_csv(file_address)  # total of 29705 stations worldwide
+    # file_address = 'ftp://ftp.ncdc.noaa.gov/pub/data/noaa/isd-history.csv'
+    # # read csv instead
+    # df = pd.read_csv(file_address)  # total of 29705 stations worldwide
     # US_stations = df[df.CTRY == "US"]  # total of 7320 US stations
-    # USAF = US_stations.USAF.values
-    # WBAN = US_stations.WBAN.values
+    df = pd.DataFrame.from_dict(SURF_ASOS, orient="index")
+    USAF = df.usaf.values
+    WBAN = df.wban.values
     US_list = [''] * len(USAF)  # initialize list of filenames of US stations: USAF-WBAN
     for i in range(0, len(USAF)):
         US_list[i] = str(USAF[i]) + '-' + str(WBAN[i])
@@ -56,7 +58,7 @@ def get_asos_stations(year, local_dir):
         year_dir = "pub/data/noaa/{YEAR}".format(YEAR=year)
         file_list = ftpconn.nlst(year_dir)  # returns list of file names in year directory of format 'pub/data/noaa/YEAR/USAFID-WBAN#-YEAR.gz'
         US_year_files = []
-        for filename in file_list:
+        for filename in file_list:  # TODO should revert to run through US_list
             if filename[19:31] in US_list:  # if is US station, then download and unzip and save to local directory
                 US_year_files.append(filename[19:36])
                 response = io.BytesIO()  # store the file in memory
@@ -69,12 +71,13 @@ def get_asos_stations(year, local_dir):
                         raise
                 response.seek(0)  # jump back to the beginning of the stream
                 # unzip and save to local directory
-                with gzip.open(response, 'rb') as f_in:
-                    with open(local_dir + filename[19:36], 'wb') as f_out:
-                        shutil.copyfileobj(f_in, f_out)
                 f = os.path.join(local_dir, filename[19:36])
+                with gzip.open(response, 'rb') as f_in:
+                    with open(f, 'wb') as f_out:
+                        shutil.copyfileobj(f_in, f_out)
+                print(f)
                 ish2csv(f)  # covert to CSV and save
-    return US_year_files
+    return None
 
 
 def ish2csv(fileName):
