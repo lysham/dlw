@@ -26,7 +26,7 @@ from constants import SURF_ASOS
 # WBAN = [94870, 160, 3160, 53806, 94017, 54739, 14944]
 
 
-def get_asos_stations(year, local_dir):
+def get_asos_stations(year, local_dir, usaf, wban):
     """
     Function to retrieve one year of data for multiple ASOS stations.
     Deprecated: Function to output station ID for US stations.
@@ -37,6 +37,9 @@ def get_asos_stations(year, local_dir):
     ----------
     year: required data year, int
     local_dir: local directory to save the downloaded data.
+    usaf : list or array-like
+    wban : list or array-like
+
     Returns
     -------
     US_year_files: Saved file names in a list.
@@ -46,20 +49,23 @@ def get_asos_stations(year, local_dir):
     # # read csv instead
     # df = pd.read_csv(file_address)  # total of 29705 stations worldwide
     # US_stations = df[df.CTRY == "US"]  # total of 7320 US stations
-    df = pd.DataFrame.from_dict(SURF_ASOS, orient="index")
-    USAF = df.usaf.values
-    WBAN = df.wban.values
-    US_list = [''] * len(USAF)  # initialize list of filenames of US stations: USAF-WBAN
-    for i in range(0, len(USAF)):
-        US_list[i] = str(USAF[i]) + '-' + str(WBAN[i])
+
+    # US_list = [''] * len(usaf)  # initialize list of filenames of US stations: USAF-WBAN
+    US_list = []
+    for i in range(0, len(usaf)):
+        US_list.append(f"{usaf[i]}-{wban[i]:05d}")  # add leading zeros if necessary
+        # US_list[i] = str(usaf[i]) + '-' + str(wban[i])
+    print(US_list)
 
     ftp_host = "ftp.ncdc.noaa.gov"
     with ftplib.FTP(host=ftp_host, user='ftp', passwd='') as ftpconn:
         year_dir = "pub/data/noaa/{YEAR}".format(YEAR=year)
         file_list = ftpconn.nlst(year_dir)  # returns list of file names in year directory of format 'pub/data/noaa/YEAR/USAFID-WBAN#-YEAR.gz'
         US_year_files = []
-        for filename in file_list:  # TODO should revert to run through US_list
-            if filename[19:31] in US_list:  # if is US station, then download and unzip and save to local directory
+        for filename in file_list:
+            file_parts = filename[19:].split("-")  # [usaf, wban, yr.gz]
+            code = f"{file_parts[0]}-{file_parts[1]}"
+            if code in US_list:  # if is US station, then download and unzip and save to local directory
                 US_year_files.append(filename[19:36])
                 response = io.BytesIO()  # store the file in memory
                 try:
