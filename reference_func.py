@@ -2,6 +2,7 @@
 
 from main import *
 from corr26b import get_tsky
+from constants import SURF_ASOS
 
 
 def look_at_jyj():
@@ -36,6 +37,22 @@ def look_at_jyj():
     print(t_sky, t_sky2, t_sky - t_sky2)
     print(ir)
     return None
+
+
+def isd_history():
+    # Import and store ASOS station info
+    # only need to run once to create isd_history.csv
+    file_address = 'ftp://ftp.ncdc.noaa.gov/pub/data/noaa/isd-history.csv'
+    df = pd.read_csv(file_address)  # total of 29705 stations worldwide
+    filename = os.path.join("data", "isd_history.csv")
+    df = df.rename(columns={"STATION NAME": "STATION_NAME", "ELEV(M)": "ELEV"})
+    df.to_csv(filename, index=False)
+    return None
+
+
+def make_surf_asos_df():
+    df = pd.DataFrame.from_dict(SURF_ASOS, orient="index")
+    return df
 
 
 if __name__ == "__main__":

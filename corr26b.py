@@ -65,8 +65,44 @@ def get_pw_esky(rh, t):
     return esky, pw
 
 
+def import_asos_yr(yr):
+    """Import ASOS station data for a given year to a local directory.
+    References get_asos_stations() from pcmap_data_funcs.py
+
+    Parameters
+    ----------
+    yr : int
+        Specify year to import
+
+    Returns
+    -------
+    None
+    """
+    df = pd.DataFrame.from_dict(SURF_ASOS, orient="index")
+    local_dir = os.path.join("data", f"asos_{yr}")
+    if not os.path.exists(local_dir):
+        os.mkdir(local_dir)
+    get_asos_stations(year=yr, local_dir=local_dir,
+                      usaf=df.usaf.values, wban=df.wban.values)
+    return None
+
+
 def process_site(site, yr="2012"):
-    # export to csv of processed, sampled data from one SURF site for one year
+    """
+    Gather data for a given SURFRAD site in a given year.
+    Perform quality control checks, format, and sample data.
+    Requires access to hard drive.
+    Processed data is saved as csv to data/SURFRAD folder.
+
+    Parameters
+    ----------
+    site : string
+    yr : string, optional
+
+    Returns
+    -------
+    None
+    """
     start_time = time.time()
     site_name = SURFRAD[site]["name"]
     lat = SURFRAD[site]["lat"]
@@ -108,6 +144,7 @@ def process_site(site, yr="2012"):
             except pd.errors.ParserError as e:
                 print(f"Error: {e}")
         df = tmp.copy()  # switch back to df
+        print("Data collected.", time.time() - start_time)
 
         # Do some clean-up
         df = df[
@@ -138,6 +175,7 @@ def process_site(site, yr="2012"):
         df = df.merge(cs_out, how='outer', left_index=True, right_index=True)
         df = df.rename(columns=col_rename)
         # sdf = find_clearsky(sdf) # no clear-sky analysis for now
+        print("QC and clear sky applied.", time.time() - start_time)
 
         # Determine T_sky values, and correct for 3-50 micron range
         temp = df.t_a.values
@@ -155,6 +193,7 @@ def process_site(site, yr="2012"):
         # kTc = df.GHI_m / df.GHI_c
         # kTc[kTc > 1] = 1
         # df['kTc'] = kTc
+        print("T_sky determined.", time.time() - start_time)
 
         filename = os.path.join("data", "SURFRAD", f"{site}_{yr}.csv")
         df.to_csv(filename)
@@ -166,101 +205,124 @@ def process_site(site, yr="2012"):
     return None
 
 
-def isd_history():
-    # Import and store ASOS station info
-    file_address = 'ftp://ftp.ncdc.noaa.gov/pub/data/noaa/isd-history.csv'
-    df = pd.read_csv(file_address)  # total of 29705 stations worldwide
-    filename = os.path.join("data", "isd_history.csv")
-    df = df.rename(columns={"STATION NAME": "STATION_NAME", "ELEV(M)": "ELEV"})
-    df.to_csv(filename, index=False)
+def plot_fit(site, coefs, y_true, y_pred, rmse):
+    fig, ax = plt.subplots(figsize=(5, 5))
+    ax.grid(True, alpha=0.3)
+    ax.scatter(y_true, y_pred, alpha=0.05)
+    ax.axline((300, 300), slope=1, c="0.1", ls="--")
+    c1, c3 = coefs
+    ax.text(0.1, 0.9, s=f"c1={c1:.3f}, c3={c3:.3f}",
+            transform=ax.transAxes, backgroundcolor="1.0")
+    ax.text(0.1, 0.8, s=f"RMSE={rmse:.2f} W/m$^2$",
+            transform=ax.transAxes, backgroundcolor="1.0")
+    ax.set_xlabel("LW measured [W/m$^2$]")
+    ax.set_ylabel("Modeled [W/m$^2$]")
+    ax.set_title(f"{site}")
+    ax.set_xlim(100, 600)
+    ax.set_ylim(100, 600)
+    # plt.show()
+    filename = os.path.join("figures", f"{site}_fit.png")
+    fig.savefig(filename, dpi=300, bbox_inches="tight")
     return None
 
 
-def asos_site_data():
-    return None
+def join_surfrad_asos(site="BON"):
+    # assumes SURFRAD data has already been processed
+    usaf = SURF_ASOS[site]["usaf"]
+    wban = SURF_ASOS[site]["wban"]
+    # get SURFRAD data (after processing)
+    filename = os.path.join("data", "SURFRAD", f"{site}_2012.csv")
+    tmp = pd.read_csv(filename, index_col=0, parse_dates=True)
+    # site = site.loc[site.location == SURFRAD["BON"]["name"]]
+    tmp.sort_index(inplace=True)
+    tmp = tmp.tz_localize("UTC")
+    # get ASOS station data
+    filename = os.path.join("data", "asos_2012", f"{usaf}-{wban}-2012.csv")
+    df = pd.read_csv(filename, skiprows=1, index_col=0, parse_dates=True)
+    df = df[['CF2', 'CBH2', 'TEMP', 'VSB', 'DEWP', 'SLP', 'PERCP']]
+    mask = df.index.duplicated(keep="first")
+    df = df[~mask].sort_index()  # drop duplicate indices
+    df = df.rename(columns={"CF2": "cf"})
+
+    # merge
+    # TODO try other methods of merging (strict bfill, interpolation)
+    df = pd.merge_asof(
+        tmp, df, left_index=True, right_index=True,
+        tolerance=pd.Timedelta("1h"), direction="nearest"
+    )
+    df["asos_t"] = df.TEMP + 273.15  # K
+    df["pw"] = get_pw(df.t_a, df.rh) / 100  # hPa
+    df["esky_c"] = get_esky_c(df.pw)
+    df["lw_c"] = df.esky_c * SIGMA * np.power(df.t_a, 4)
+
+    # drop rows with missing values in parameter columns
+    x = df.shape[0]
+    df.dropna(subset=["t_a", "rh", "cf", "lw_c", "lw_s"], inplace=True)
+    print(x, df.shape[0])
+    return df
+
+
+def custom_fit(df):
+    df = df.assign(
+        t1=-1 * df.lw_c * df.cf,
+        t2=SIGMA * (df.t_a ** 4) * df.cf * (df.rh / 100),
+        y=df.lw_s - df.lw_c
+    )
+    # inexact fit, only solving for two params
+
+    b = df.lw_c.to_numpy()
+    train_x = df[["t1", "t2"]].to_numpy()
+    train_y = df.y.to_numpy()
+
+    model = LinearRegression(fit_intercept=False)
+    model.fit(train_x, train_y)
+    print(model.coef_, model.intercept_)
+    rmse = np.sqrt(mean_squared_error(train_y, model.predict(train_x)))
+    print(f"{rmse:.2f}")
+
+    y_true = train_y + b
+    y_pred = model.predict(train_x) + b
+    return model, y_true, y_pred, rmse
 
 
 if __name__ == "__main__":
     print()
 
-    process_site(site="BON", yr='2012')
-    # process_site_yr(yr='2013')
-
-    # TODO create look up table for closest ASOS station
-    # modify script to look up one station specifically
-    # process asos station data
-    # get_asos_stations(year=2012, local_dir=os.path.join("data", "asos_2012"))
-
-    # site = "BON"  # BONDVILLE_IL, UNIVERSITY OF WILLARD
-    # usaf = SURF_ASOS[site]["usaf"]
-    # wban = SURF_ASOS[site]["wban"]
-    # # get ASOS station metadata
+    # # ASOS
+    # # TODO create look up table for closest ASOS station
+    # import_asos_yr(yr=2012)  # import closest asos stations for a given year
+    # # NOTE: specified stations may not be available for a given year
+    # # find info for a specific site
+    # site = "DRA"
     # filename = os.path.join("data", "isd_history.csv")
     # asos = pd.read_csv(filename)
-    # asos_site = asos.loc[(asos.USAF == str(usaf)) &
-    #                      (asos.WBAN == wban)].iloc[0]
-    # # get SURFRAD data (after processing)
-    # filename = os.path.join("data", "SURFRAD", f"{site}_2012.csv")
-    # site = pd.read_csv(filename, index_col=0, parse_dates=True)
-    # # site = site.loc[site.location == SURFRAD["BON"]["name"]]
-    # site.sort_index(inplace=True)
-    # site = site.tz_localize("UTC")
-    # # get ASOS station data
-    # filename = os.path.join("data", "asos_2012", f"{usaf}-{wban}-2012.csv")
-    # df = pd.read_csv(filename, skiprows=1, index_col=0, parse_dates=True)
-    # df = df[['CF2', 'CBH2', 'TEMP', 'VSB', 'DEWP', 'SLP', 'PERCP']]
-    # mask = df.index.duplicated(keep="first")
-    # df = df[~mask].sort_index()  # drop duplicate indices
-    #
-    # # merge
-    # df = pd.merge_asof(
-    #     site, df, left_index=True, right_index=True,
-    #     tolerance=pd.Timedelta("1h"), direction="nearest"
-    # )
-    # df["asos_t"] = df.TEMP + 273.15
-    # df[["asos_t", "t_a"]].corr()
-    # df["pw"] = get_pw(df.t_a, df.rh) / 100  # hPa
-    # df["esky_c"] = get_esky_c(df.pw)
-    # df["lw_c"] = df.esky_c * SIGMA * np.power(df.t_a, 4)
-    # # TODO check different ways to join (bfill, linear interp)
-    # check = df.copy()
+    # asos_site = asos.loc[(asos.USAF == str(SURF_ASOS[site]["usaf"])) &
+    #                      (asos.WBAN == SURF_ASOS[site]["wban"])].iloc[0]
 
-    # df = df.rename(columns={"CF2": "cf"})
-    # # drop rows with missing values in parameter columns
-    # x = df.shape[0]
-    # df.dropna(subset=["t_a", "rh", "cf", "lw_c", "lw_s"], inplace=True)
-    # print(x, df.shape[0])
-    #
-    # df = df.assign(
-    #     t1=df.lw_c * df.cf,
-    #     t2=SIGMA * (df.t_a ** 4) * df.cf * (df.rh / 100),
-    #     y=df.lw_s - df.lw_c
-    # )
-    # # inexact fit, only solving for two params
-    #
-    # b = df.lw_c.to_numpy()
-    # train_x = df[["t1", "t2"]].to_numpy()
-    # train_y = df.y.to_numpy()
-    #
-    # model = LinearRegression(fit_intercept=False)
-    # model.fit(train_x, train_y)
-    # print(model.coef_, model.intercept_)
-    # rmse = np.sqrt(mean_squared_error(train_y, model.predict(train_x)))
-    # print(f"{rmse:.2f}")
-    #
-    # y_true = train_y + b
-    # y_pred = model.predict(train_x) + b
-    #
-    # fig, ax = plt.subplots(figsize=(4, 4))
-    # ax.grid(True, alpha=0.3)
-    # ax.scatter(y_true, y_pred, alpha=0.3)
-    # ax.axline((300, 300), slope=1, c="0.1", ls="--")
-    # ax.set_xlabel("LW measured [W/m$^2$]")
-    # ax.set_ylabel("Modeled [W/m$^2$]")
-    # ax.set_title("BON")
-    # plt.show()
-    # # filename = os.path.join("figures", "first_fit.png")
-    # # fig.savefig(filename, dpi=300, bbox_inches="tight")
+    # SURFRAD
+    site = "BON"
+    # process_site(site=site, yr='2012')
+    df = join_surfrad_asos(site)
+    model, y_true, y_pred, rmse = custom_fit(df)
+    plot_fit(site, model.coef_, y_true, y_pred, rmse)
+
+    # check which stations have CF data
+    folder = os.path.join("data", "asos_2012")
+    all_files = os.listdir(folder)
+    stations = []
+    for x in os.listdir(folder):
+        f = x.split(".")
+        if len(f) > 1:
+            if len(f[0]) > 10:
+                stations.append(x)
+
+    for f in stations:
+        filename = os.path.join(folder, f)
+        df = pd.read_csv(filename, skiprows=1, index_col=0, parse_dates=True)
+        cols = df.columns
+        print(f, cols)
+        if "CF2" in cols:
+            print(f, "CF2 exists", df.CF2.mean())
 
     # TODO make a clear sky filter based on 10 tests
 
