@@ -17,13 +17,13 @@ SURFRAD = dict(
 )
 
 SURF_ASOS = dict(
-    BON=dict(usaf=999999, wban=54808),
+    BON=dict(usaf=725315, wban=94870),
     BOU=dict(usaf=720533, wban=160),
     DRA=dict(usaf=723870, wban=3160),
     FPK=dict(usaf=727686, wban=94017),
     GWC=dict(usaf=720541, wban=53806),
     PSU=dict(usaf=725105, wban=14770),
-    SXF=dict(usaf=711680, wban=99999),
+    SXF=dict(usaf=726510, wban=14944),
 )
 
 SURF_COLS = [
