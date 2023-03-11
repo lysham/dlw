@@ -185,6 +185,7 @@ def make_full_lw_plot():
     markers = [".", "o", "v", "^", "*", "s", "<", ">"]
     i = 0
     for sid in stations.keys():
+        # if df[[f"{sid}_lw"]].mean()[0] < 100:  # if filtering pos/neg
         ax.plot(
             df.index, df[[f"{sid}_lw"]], label=stations[sid], alpha=0.5,
             ls=lines[i // len(markers)], marker=markers[i % len(markers)]
@@ -194,9 +195,10 @@ def make_full_lw_plot():
     ax.xaxis.set_major_formatter(mpl.dates.DateFormatter("%Y"))
     ax.legend(bbox_to_anchor=(1.0, 1.0), loc="upper left")
     ax.set_ylabel("LW [W m$^{-2}$]")
-    plt.show()
-    # filename = os.path.join("figures", "lw_data.png")
-    # fig.savefig(filename, dpi=300)
+    ax.set_xlim(df.loc[df.index.year == 2009].index[0], df.index[-1])
+    # plt.show()
+    filename = os.path.join("figures", "lw_data.png")
+    fig.savefig(filename, dpi=300)
     return None
 
 
@@ -294,7 +296,8 @@ if __name__ == "__main__":
     # plot_data_w_models("HN164", station_info, df)
 
     # make_full_lw_plot()
-    plot_26b()
+    # plot_26b()
+
 
 
 
