@@ -205,27 +205,6 @@ def process_site(site, yr="2012"):
     return None
 
 
-def plot_fit(site, coefs, y_true, y_pred, rmse):
-    fig, ax = plt.subplots(figsize=(5, 5))
-    ax.grid(True, alpha=0.3)
-    ax.scatter(y_true, y_pred, alpha=0.05)
-    ax.axline((300, 300), slope=1, c="0.1", ls="--")
-    c1, c3 = coefs
-    ax.text(0.1, 0.9, s=f"c1={c1:.3f}, c3={c3:.3f}",
-            transform=ax.transAxes, backgroundcolor="1.0")
-    ax.text(0.1, 0.8, s=f"RMSE={rmse:.2f} W/m$^2$",
-            transform=ax.transAxes, backgroundcolor="1.0")
-    ax.set_xlabel("LW measured [W/m$^2$]")
-    ax.set_ylabel("Modeled [W/m$^2$]")
-    ax.set_title(f"{site}")
-    ax.set_xlim(100, 600)
-    ax.set_ylim(100, 600)
-    # plt.show()
-    filename = os.path.join("figures", f"{site}_fit.png")
-    fig.savefig(filename, dpi=300, bbox_inches="tight")
-    return None
-
-
 def join_surfrad_asos(site="BON"):
     # assumes SURFRAD data has already been processed
     usaf = SURF_ASOS[site]["usaf"]
@@ -285,6 +264,35 @@ def custom_fit(df):
     return model, y_true, y_pred, rmse
 
 
+def plot_fit(site, coefs, y_true, y_pred, rmse):
+    fig, ax = plt.subplots(figsize=(5, 5))
+    ax.grid(True, alpha=0.3)
+    ax.scatter(y_true, y_pred, alpha=0.05)
+    ax.axline((300, 300), slope=1, c="0.1", ls="--")
+    c1, c3 = coefs
+    ax.text(0.1, 0.9, s=f"c1={c1:.3f}, c3={c3:.3f}",
+            transform=ax.transAxes, backgroundcolor="1.0")
+    ax.text(0.1, 0.8, s=f"RMSE={rmse:.2f} W/m$^2$",
+            transform=ax.transAxes, backgroundcolor="1.0")
+    ax.set_xlabel("LW measured [W/m$^2$]")
+    ax.set_ylabel("Modeled [W/m$^2$]")
+    ax.set_title(f"{site}")
+    ax.set_xlim(100, 600)
+    ax.set_ylim(100, 600)
+    # plt.show()
+    filename = os.path.join("figures", f"{site}_fit.png")
+    fig.savefig(filename, dpi=300, bbox_inches="tight")
+    return None
+
+
+def retrieve_asos_site_info(site):
+    filename = os.path.join("data", "isd_history.csv")
+    asos = pd.read_csv(filename)
+    asos_site = asos.loc[(asos.USAF == str(SURF_ASOS[site]["usaf"])) &
+                         (asos.WBAN == SURF_ASOS[site]["wban"])].iloc[0]
+    return asos_site
+
+
 if __name__ == "__main__":
     print()
 
@@ -294,35 +302,14 @@ if __name__ == "__main__":
     # # NOTE: specified stations may not be available for a given year
     # # find info for a specific site
     # site = "DRA"
-    # filename = os.path.join("data", "isd_history.csv")
-    # asos = pd.read_csv(filename)
-    # asos_site = asos.loc[(asos.USAF == str(SURF_ASOS[site]["usaf"])) &
-    #                      (asos.WBAN == SURF_ASOS[site]["wban"])].iloc[0]
+
 
     # SURFRAD
     site = "BON"
     # process_site(site=site, yr='2012')
     df = join_surfrad_asos(site)
     model, y_true, y_pred, rmse = custom_fit(df)
-    plot_fit(site, model.coef_, y_true, y_pred, rmse)
-
-    # check which stations have CF data
-    folder = os.path.join("data", "asos_2012")
-    all_files = os.listdir(folder)
-    stations = []
-    for x in os.listdir(folder):
-        f = x.split(".")
-        if len(f) > 1:
-            if len(f[0]) > 10:
-                stations.append(x)
-
-    for f in stations:
-        filename = os.path.join(folder, f)
-        df = pd.read_csv(filename, skiprows=1, index_col=0, parse_dates=True)
-        cols = df.columns
-        print(f, cols)
-        if "CF2" in cols:
-            print(f, "CF2 exists", df.CF2.mean())
+    # plot_fit(site, model.coef_, y_true, y_pred, rmse)
 
     # TODO make a clear sky filter based on 10 tests
 

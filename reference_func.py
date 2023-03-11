@@ -55,5 +55,26 @@ def make_surf_asos_df():
     return df
 
 
+def check_for_cf_in_asos_data():
+    # check which stations have CF data
+    folder = os.path.join("data", "asos_2012")
+    all_files = os.listdir(folder)
+    stations = []
+    for x in os.listdir(folder):
+        f = x.split(".")
+        if len(f) > 1:
+            if len(f[0]) > 10:
+                stations.append(x)
+
+    for f in stations:
+        filename = os.path.join(folder, f)
+        df = pd.read_csv(filename, skiprows=1, index_col=0, parse_dates=True)
+        cols = df.columns
+        print(f, cols)
+        if "CF2" in cols:
+            print(f, "CF2 exists", df.CF2.mean())
+    return None
+
+
 if __name__ == "__main__":
     print()
