@@ -465,63 +465,6 @@ if __name__ == "__main__":
     site = "BOU"
     df = shakespeare_comparison(site=site)
 
-    # FIGURE
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=True)
-    plt.subplots_adjust(hspace=0.05)
-    ax = axes[0]
-    ax.grid(alpha=0.3)
-    c0 = ax.scatter(
-        df.rh, df.t_a, c=df.esky_c - df.esky_t,
-        alpha=0.7, marker=".", vmin=0.01, vmax=0.08
-    )
-    ax.set_xlim(0, 100)
-    ax.set_xlabel("RH [-]")
-    ax.set_ylim(255, 315)
-    ax.set_ylabel("T [K]")
-    ax.set_axisbelow(True)
-    s = r"$\Delta \varepsilon = \varepsilon_{Li} - \varepsilon_{Sh}$ [-]"
-    fig.colorbar(
-        c0, ax=ax, label=s, extend="both")
-    ax.set_title(f"{site}, difference in esky_c", loc="left")
-
-    ax = axes[1]
-    ax.grid(alpha=0.3)
-    c1 = ax.scatter(
-        df.rh, df.t_a, c=df.lw_c, marker=".", alpha=0.7, vmin=150, vmax=450)
-    ax.set_xlim(0, 100)
-    ax.set_xlabel("RH [-]")
-    ax.set_ylim(255, 315)
-    ax.set_title("LW_c from Li", loc="left")
-    fig.colorbar(c1, ax=axes[1], label="LW$_{c}$ [W/m$^2$]", extend="both")
-    ax.set_axisbelow(True)
-
-    ax = axes[2]
-    ax.grid(alpha=0.3)
-    c = ax.scatter(
-        df.rh, df.t_a, c=df.lw_c - df.lw_c_t,
-        alpha=0.7, marker=".", vmin=5, vmax=30
-    )
-    ax.set_xlim(0, 100)
-    ax.set_xlabel("RH [-]")
-    ax.set_ylim(255, 315)
-    ax.set_axisbelow(True)
-    fig.colorbar(
-        c, ax=axes[2], label=r"$\Delta$ LW$_c$ [W/m$^2$]", extend="both")
-    ax.set_title("Difference in LW_c (Li - Sh)")
-    filename = os.path.join("figures", f"TvRH_LivSh_{site}.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
-
-    # Plot of e_sky differences as a function of P_w
-    fig, ax = plt.subplots()
-    ax.grid(alpha=0.3)
-    c = ax.scatter(df.pw_hpa, df.t_a, marker=".", alpha=0.7, c=df.esky_c - df.esky_t)
-    ax.set_xlabel("P$_w$ [hPa]")
-    ax.set_ylabel("T [K]")
-    ax.set_title(f"{site}")
-    ax.set_axisbelow(True)
-    fig.colorbar(c, label=r"$\Delta \varepsilon$")
-    filename = os.path.join("figures", f"TvPw_LivSh_{site}.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
 
 
 
