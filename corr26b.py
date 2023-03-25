@@ -10,6 +10,7 @@ import pvlib
 import numpy as np
 import pandas as pd
 import datetime as dt
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from scipy import integrate, interpolate
 from sklearn.linear_model import LinearRegression
@@ -408,6 +409,35 @@ def shakespeare(lat, lon):
     return h1, tau_spline
 
 
+def shakespeare_comparison(site):
+    lat1 = SURFRAD[site]["lat"]
+    lon1 = SURFRAD[site]["lon"]
+    h1, spline = shakespeare(lat1, lon1)
+
+    df = join_surfrad_asos(site)
+    df = df[[
+        "rh", "pressure", "t_a", "pw", "dw_ir", "lw_s",
+        "esky_c", "lw_c", "zen", "cs_period"
+    ]]
+    df = df.rename(columns={"pressure": "pa_hpa", "pw": "pw_hpa"})
+    df["w"] = 0.62198 * df.pw_hpa / (df.pa_hpa - df.pw_hpa)
+    df["q"] = df.w / (1 + df.w)
+    p0 = 101325  # Pa
+    df["p_ratio"] = (df.pa_hpa * 100) / p0
+    df["he"] = (h1 / np.cos(40.3 * np.pi / 180)) * (df.p_ratio ** 1.8)
+    df = df.drop(columns=["p_ratio"])
+    # solve for tau at each q and he
+    tau = []
+    for q1, he1 in zip(df.q.values, df.he.values):
+        tau.append(spline.ev(q1, he1).item())
+    df["tau"] = tau
+
+    # calc emissivity
+    df["esky_t"] = 1 - np.exp(-1 * df.tau)
+    df["lw_c_t"] = df.esky_t * SIGMA * np.power(df.t_a, 4)
+    return df
+
+
 if __name__ == "__main__":
     print()
 
@@ -418,9 +448,6 @@ if __name__ == "__main__":
     # # find info for a specific site
 
     # SURFRAD
-    # sites = ["BON", "BOU", "DRA", "FPK"]
-    # for site in sites:
-    #     process_site(site=site, yr='2012')
     # site = "BON"
     # process_site(site=site, yr='2012')
     # df = join_surfrad_asos(site)
@@ -434,6 +461,67 @@ if __name__ == "__main__":
 
     # df["f"] = df.lw_s / df.dw_ir
     # df.f.hist(bins=100)
+
+    site = "BOU"
+    df = shakespeare_comparison(site=site)
+
+    # FIGURE
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=True)
+    plt.subplots_adjust(hspace=0.05)
+    ax = axes[0]
+    ax.grid(alpha=0.3)
+    c0 = ax.scatter(
+        df.rh, df.t_a, c=df.esky_c - df.esky_t,
+        alpha=0.7, marker=".", vmin=0.01, vmax=0.08
+    )
+    ax.set_xlim(0, 100)
+    ax.set_xlabel("RH [-]")
+    ax.set_ylim(255, 315)
+    ax.set_ylabel("T [K]")
+    ax.set_axisbelow(True)
+    s = r"$\Delta \varepsilon = \varepsilon_{Li} - \varepsilon_{Sh}$ [-]"
+    fig.colorbar(
+        c0, ax=ax, label=s, extend="both")
+    ax.set_title(f"{site}, difference in esky_c", loc="left")
+
+    ax = axes[1]
+    ax.grid(alpha=0.3)
+    c1 = ax.scatter(
+        df.rh, df.t_a, c=df.lw_c, marker=".", alpha=0.7, vmin=150, vmax=450)
+    ax.set_xlim(0, 100)
+    ax.set_xlabel("RH [-]")
+    ax.set_ylim(255, 315)
+    ax.set_title("LW_c from Li", loc="left")
+    fig.colorbar(c1, ax=axes[1], label="LW$_{c}$ [W/m$^2$]", extend="both")
+    ax.set_axisbelow(True)
+
+    ax = axes[2]
+    ax.grid(alpha=0.3)
+    c = ax.scatter(
+        df.rh, df.t_a, c=df.lw_c - df.lw_c_t,
+        alpha=0.7, marker=".", vmin=5, vmax=30
+    )
+    ax.set_xlim(0, 100)
+    ax.set_xlabel("RH [-]")
+    ax.set_ylim(255, 315)
+    ax.set_axisbelow(True)
+    fig.colorbar(
+        c, ax=axes[2], label=r"$\Delta$ LW$_c$ [W/m$^2$]", extend="both")
+    ax.set_title("Difference in LW_c (Li - Sh)")
+    filename = os.path.join("figures", f"TvRH_LivSh_{site}.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+
+    # Plot of e_sky differences as a function of P_w
+    fig, ax = plt.subplots()
+    ax.grid(alpha=0.3)
+    c = ax.scatter(df.pw_hpa, df.t_a, marker=".", alpha=0.7, c=df.esky_c - df.esky_t)
+    ax.set_xlabel("P$_w$ [hPa]")
+    ax.set_ylabel("T [K]")
+    ax.set_title(f"{site}")
+    ax.set_axisbelow(True)
+    fig.colorbar(c, label=r"$\Delta \varepsilon$")
+    filename = os.path.join("figures", f"TvPw_LivSh_{site}.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
 
 
 
