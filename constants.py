@@ -1,3 +1,6 @@
+SIGMA = 5.6697e-8  # W/m^2 K^4
+P_ATM = 101325  # Pa
+
 SURFRAD_SITES = [
     'Bondville_IL', 'Boulder_CO', 'Desert_Rock_NV', 'Fort_Peck_MT',
     'Goodwin_Creek_MS', 'Penn_State_PA', 'Sioux_Falls_SD']  # Tbl 1
@@ -34,3 +37,16 @@ SURF_COLS = [
     'netsolar', 'qc13', 'netir', 'qc14', 'totalnet', 'qc15', 'temp', 'qc16',
     'rh', 'qc17', 'windspd', 'qc18', 'winddir', 'qc19', 'pressure', 'qc20'
 ]  # used in process_site in corr26b.py
+
+# broadband values
+LI_TABLE1 = {
+    "H2O": [0.2996, 2.2747, 0.3784],
+    "CO2": [0.2893, -0.5640, 0.1821],
+    "O3": [0.0126, -0.5119, 1.1744],
+    "aerosols": [0.0191, -0.1421, 0.6121],
+    "N2O": [13.8712, -13.8761, 0.0001],
+    "CH4": [0.0245, -0.0313, 0.0790],
+    "overlaps": [0.0524, -0.1423, 0.2998]
+}
+N_SPECIES = 7  # number of contributing components (from TABLE 1)
+N_BANDS = 7  # number of bands

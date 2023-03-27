@@ -6,6 +6,8 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
+from constants import SIGMA
+
 # location of data txt files stored locally
 LONGMAN_FOLDER = os.path.join("data", "Longman_2018_figshare")
 
@@ -15,8 +17,6 @@ LW_STATION_IDS = [
     'HN161', 'HN162', 'HN164', 'HVO', 'HVT', 'MLO'
 ]  # HE288 not included in Tmin and Tmax
 
-
-SIGMA = 5.6697e-8  # W/m^2 K^4
 
 # list calibrated constants (Table 8 in Li et al. 2017)
 CORR26A = [1.29, 0.8, 0.7, 0.78, 0.13]

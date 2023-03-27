@@ -18,17 +18,17 @@ from sklearn.metrics import mean_squared_error
 from copy import deepcopy
 from scipy.io import loadmat
 
-from main import SIGMA, get_pw, get_esky_c, li_lw, CORR26A
+from main import get_pw, get_esky_c, li_lw, CORR26A
 from pcmap_data_funcs import get_asos_stations
 
-from constants import SURFRAD, SURF_COLS, SURF_ASOS
+from constants import SIGMA, SURFRAD, SURF_COLS, SURF_ASOS
 
 
-def pw_tdp(t_a, rh):
-    # the function of calculating Pw(Pa) and Tdp(C)
-    pw = 610.94 * (rh / 100) * np.exp(17.625 * (t_a - 273.15) / (t_a - 30.11))
-    tdp = (243.04 * np.log(pw / 610.94)) / (17.625 - np.log(pw / 610.94))
-    return pw, tdp
+# def pw_tdp(t_a, rh):
+#     # the function of calculating Pw(Pa) and Tdp(C)
+#     pw = 610.94 * (rh / 100) * np.exp(17.625 * (t_a - 273.15) / (t_a - 30.11))
+#     tdp = (243.04 * np.log(pw / 610.94)) / (17.625 - np.log(pw / 610.94))
+#     return pw, tdp
 
 
 def int_func(x, t):
