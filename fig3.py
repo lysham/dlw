@@ -125,6 +125,10 @@ if __name__ == "__main__":
     for i in range(len(species)):
         e_broad[:, i] = get_emissivity_i(pw_norm, sp=species[i])
 
+    # special function
+    tau = 1.1 + (41 * pw_norm)
+    e_tau41 = 1 - np.exp(-1 * tau)
+
     # FIGURE
     fig, ax = plt.subplots(figsize=(8, 4))
     cmap = mpl.colormaps["Paired"]
@@ -137,8 +141,9 @@ if __name__ == "__main__":
         prev_y = prev_y + e_broad[:, i]
     # ax.plot(pw_x, e_ttl, ls="-", c="teal", label="total")
     # ax.plot(pw_x, e_ref8, ls="--", c="teal", label="ref8")
-    ax.plot(pw_x, e_tau, "k", label=r"(1-e$^{- \tau}$), P=P0")
+    # ax.plot(pw_x, e_tau, "k", label=r"(1-e$^{- \tau}$), P=P0")
     ax.plot(pw_x, e_tau_p0, "k--", label=r"(1-e$^{- \tau}$), P=900hPa")
+    ax.plot(pw_x, e_tau41, "b-", label=r"$\tau$=1.1+41p$_w$")
     ax.set_xlim(pw_x[0], pw_x[-1])
     ax.set_ylim(0, 1)
     ax.set_yticks(np.linspace(0, 1, 11))
@@ -147,7 +152,7 @@ if __name__ == "__main__":
     ax.set_axisbelow(True)
     ax.legend(frameon=True, ncol=5, loc="lower right")
     plt.tight_layout()
-    plt.show()
-    # filename = os.path.join("figures", "fig3_s.png")
-    # fig.savefig(filename, bbox_inches="tight", dpi=300)
+    # plt.show()
+    filename = os.path.join("figures", "fig3_.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
 
