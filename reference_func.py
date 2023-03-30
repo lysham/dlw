@@ -5,7 +5,7 @@ from sklearn.metrics import mean_squared_error
 from corr26b import get_tsky, join_surfrad_asos, shakespeare, \
     shakespeare_comparison
 
-from constants import SURF_ASOS, SURFRAD
+from constants import *
 
 
 def look_at_jyj():
@@ -201,6 +201,112 @@ def plot_li_vs_sh():
     fig.colorbar(c, label=r"$\Delta \varepsilon$")
     filename = os.path.join("figures", f"TvPw_LivSh_{site}.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def esky_clr_vs_params():
+    site = "BON"
+    df = shakespeare_comparison(site=site)
+
+    df["e_act"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))
+    df["e_act_s"] = df.lw_s / (SIGMA * np.power(df.t_a, 4))
+
+    f = df.loc[~df.cs_period]
+    t = df.loc[df.cs_period]  # clear skies only
+    df = t.copy()
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    x = df["pw_hpa"]
+    ax.scatter(x, df.e_act, marker=".", c="0.8", alpha=0.9,
+               label=r"$\varepsilon_{act}$")
+    ax.scatter(x, df.e_act_s, marker="^", c="0.8", alpha=0.9,
+               label=r"$\varepsilon_{act,s}$")
+    ax.scatter(x, df.esky_c, marker=".", label=r"$\varepsilon_{B}$")
+    ax.scatter(x, df.esky_t, marker=".", label=r"$\varepsilon_{\tau}$")
+    ax.set_ylabel(r"$\varepsilon$ [-]")
+    ax.set_xlabel(r"$p_w$ [hPa]")
+    leg = ax.legend(loc="lower right")
+    for lh in leg.legendHandles:
+        lh.set_alpha(1)
+    ax.set_ylim(0.6, 1)
+    ax.set_title(f"{site} clr")
+    filename = os.path.join("figures", f"e_v_pw_{site}.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    rmse = np.sqrt(mean_squared_error(df.esky_c, df.e_act_s))
+    print(rmse)
+    rmse = np.sqrt(mean_squared_error(df.esky_t, df.e_act))
+    print(rmse)
+
+    rmse = np.sqrt(mean_squared_error(df.lw_s, df.lw_c))
+    print(rmse)
+    rmse = np.sqrt(mean_squared_error(df.dw_ir, df.lw_c_t))
+    print(rmse)
+
+    fig, ax = plt.subplots()
+    ax.grid(alpha=0.3)
+    c = ax.scatter(df.dw_ir, df.t_a, c=df.e_act, marker=".")
+    ax.set_xlim(100, 600)
+    ax.set_ylim(250, 320)
+    ax.set_ylabel("Temperature [K]")
+    ax.set_xlabel("DLW [W/m$^2$]")
+    ax.set_axisbelow(True)
+    ax.set_title(f"{site} clr")
+    fig.colorbar(c, label=r"$\varepsilon = DLW / \sigma T^4$")
+    filename = os.path.join("figures", f"TvsDLW_{site}.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.grid(alpha=0.3)
+    ax.scatter(f.t_a, f.e_act, label="non-CS")
+    ax.scatter(t.t_a, t.e_act, label="CS")
+    ax.set_ylabel(r"$\varepsilon = DLW / \sigma T^4$")
+    ax.set_xlabel("Temperature [K]")
+    ax.legend()
+    ax.set_axisbelow(True)
+    filename = os.path.join("figures", f"e_v_T_{site}.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.grid(alpha=0.3)
+    ax.scatter(f.pw_hpa, f.e_act, label="non-CS")
+    ax.scatter(t.pw_hpa, t.e_act, label="CS")
+    ax.set_ylabel(r"$\varepsilon = DLW / \sigma T^4$")
+    ax.set_xlabel(r"$p_w$ [hPa]")
+    ax.legend()
+    ax.set_axisbelow(True)
+    filename = os.path.join("figures", f"e_v_pw_{site}.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def print_lw_clr_err_by_site():
+    filename = os.path.join("data", "cs_compare_2012.csv")
+    df = pd.read_csv(filename, index_col=0, parse_dates=True)
+    df["e_act"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))
+    df["e_act_s"] = df.lw_s / (SIGMA * np.power(df.t_a, 4))
+    df["lw_err_t"] = df.lw_c_t - df.dw_ir
+    df["lw_err_b"] = df.lw_c - df.lw_s
+
+    # print out errors by site
+    b_rmse = []
+    b_mbe = []
+    t_rmse = []
+    t_mbe = []
+    for s, q in df.groupby(df.site):
+        # if s != "BOU":
+        rmse = np.sqrt(mean_squared_error(q.lw_s, q.lw_c))
+        mbe = compute_mbe(q.lw_s.values, q.lw_c.values)
+        b_rmse.append(rmse)
+        b_mbe.append(mbe)
+        print(s, "(Brunt then tau)")
+        print(f"rmse={rmse:.2f}, mbe={mbe:.2f}")
+        rmse = np.sqrt(mean_squared_error(q.dw_ir, q.lw_c_t))
+        mbe = compute_mbe(q.dw_ir.values, q.lw_c_t.values)
+        print(f"rmse={rmse:.2f}, mbe={mbe:.2f}\n")
+        t_rmse.append(rmse)
+        t_mbe.append(mbe)
+    print(np.mean(np.array(b_rmse)), np.mean(np.array(b_mbe)))
+    print(np.mean(np.array(t_rmse)), np.mean(np.array(t_mbe)))
     return None
 
 

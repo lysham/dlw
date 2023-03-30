@@ -286,6 +286,10 @@ def get_station_info():
     return df
 
 
+def compute_mbe(actual, model):
+    return np.nanmean((model - actual), axis=0)
+
+
 if __name__ == "__main__":
     print()
 
