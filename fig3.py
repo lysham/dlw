@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
     e_tau = np.zeros(len(pw_x))
     e_tau_p0 = np.zeros(len(pw_x))
-    site = "BON"
+    site = "BOU"
     lat1 = SURFRAD[site]["lat"]
     lon1 = SURFRAD[site]["lon"]
     h1, spline = shakespeare(lat1, lon1)
@@ -166,18 +166,20 @@ if __name__ == "__main__":
         prev_y = prev_y + e_broad[:, i]
     # ax.plot(pw_x, e_ttl, ls="-", c="teal", label="total")
     # ax.plot(pw_x, e_ref8, ls="--", c="teal", label="ref8")
-    # ax.plot(pw_x, e_tau, "k", label=r"(1-e$^{- \tau}$), P=P0")
+    ax.plot(pw_x, e_tau, "k", label=r"(1-e$^{- \tau}$), P=P0")
     ax.plot(pw_x, e_tau_p0, "k--", label=r"(1-e$^{- \tau}$), P=900hPa")
-    ax.plot(pw_x, e_tau41, "b-", label=r"$\tau$=1.1+41p$_w$")
+    # ax.plot(pw_x, e_tau41, "b-", label=r"$\tau$=1.1+41p$_w$")
     ax.set_xlim(pw_x[0], pw_x[-1])
-    ax.set_ylim(0, 1)
+    # ax.set_ylim(0, 1)
+    ax.set_ylim(0.5, 0.9)
+    ax.set_title(r"height scale from BOU")
     ax.set_yticks(np.linspace(0, 1, 11))
     ax.set_xlabel("pw x 100")
     ax.set_ylabel(r"$\varepsilon$")
     ax.set_axisbelow(True)
     ax.legend(frameon=True, ncol=5, loc="lower right")
     plt.tight_layout()
-    # plt.show()
-    filename = os.path.join("figures", "fig3_.png")
+    plt.show()
+    filename = os.path.join("figures", "fig3_BOU.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
 
