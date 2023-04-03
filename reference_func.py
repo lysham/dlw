@@ -310,5 +310,15 @@ def print_lw_clr_err_by_site():
     return None
 
 
+def afgl_from_longwave_github():
+    filename = os.path.join("data", "raw.csv")
+    colnames = ["alt_km", "pres_mb", "temp_k", "density_cm-3", "h2o_ppmv",
+                "o3_ppmv", "n2o_ppmv", "co_ppmv", "ch4_ppmv"]
+    df = pd.read_csv(filename, names=colnames, index_col=False)
+    filename = os.path.join("data", "afgl_midlatitude_summer.csv")
+    df.to_csv(filename, index=False)
+    return None
+
+
 if __name__ == "__main__":
     print()
