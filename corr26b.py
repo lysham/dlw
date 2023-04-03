@@ -639,7 +639,7 @@ if __name__ == "__main__":
 
     df = df.assign(pp=np.sqrt(df.pw_hpa))
     train_x = df[["pp"]].to_numpy()
-    train_y = df.e_act.to_numpy()
+    train_y = df.e_act.to_numpy()  # e_act or e_act_s
 
     model = LinearRegression(fit_intercept=True)
     model.fit(train_x, train_y)
