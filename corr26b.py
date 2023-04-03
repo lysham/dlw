@@ -110,10 +110,7 @@ def process_site(site, yr="2012"):
     lat = SURFRAD[site]["lat"]
     lon = SURFRAD[site]["lon"]
     alt = SURFRAD[site]["alt"]  # m
-    directory = os.path.join(
-        "/Volumes", "Lysha_drive", "Archive",
-        "proj_data", "SURFRAD", site_name
-    )
+    directory = os.path.join("/Volumes", "LMM_drive", "SURFRAD", site_name)
     all_years = os.listdir(directory)
     keep_cols = [
         'zen', 'dw_solar', 'qc1', 'direct_n', 'qc3', 'diffuse', 'qc4',
@@ -533,11 +530,11 @@ def plot_lwerr_bin(df, mod, x, nbins=4, site=None, save_fig=False):
 
 if __name__ == "__main__":
     print()
-    # s = "BON"
-    # process_site(s, "2013")
-    # process_site(s, "2014")
-    # process_site(s, "2015")
-    # process_site(s, "2016")
+    s = "BON"
+    process_site(s, "2013")
+    process_site(s, "2014")
+    process_site(s, "2015")
+    process_site(s, "2016")
 
     # # ASOS
     # # TODO create look up table for closest ASOS station
@@ -590,40 +587,49 @@ if __name__ == "__main__":
     df["lw_err_b"] = df.lw_c - df.lw_s
     # df = df.loc[df.site == site]
 
-    # Graph histograms of error by quartile of some humidity metric
-    nbins = 4
-    xvar = "rh"  # ["pw", "rh", "tk", "pa"]
-    # mod = "t"  # ["t", "b"] model type (tau or Brunt)
-    plot_lwerr_bin(df, "t", xvar, nbins=nbins, save_fig=0)
-    plot_lwerr_bin(df, "b", xvar, nbins=nbins, save_fig=0)
+    # locate data near T=294.2
+    stp = df.loc[abs(df.t_a - 294.2) <= 1].copy()  # ts near 294.2K
+    stp = stp.loc[stp.pa_hpa > 1000]  # reduce to ts above 1000 hPa
 
-    pdf = df.sample(frac=0.2, random_state=96)
-    fig, ax = plt.subplots(figsize=(10, 5))
-    x = np.linspace(250, 305, 20)
-    y90 = get_pw(x, 90) / 100  # hpa
-    y70 = get_pw(x, 70) / 100  # hpa
-    y50 = get_pw(x, 50) / 100  # hpa
-    ax.grid(alpha=0.3)
-    c = ax.scatter(
-        pdf.t_a, pdf.pw_hpa, marker=".", alpha=0.7, c=pdf.lw_err_b,
-        cmap="seismic", vmin=-20, vmax=20, s=0.3
-    )
-    ax.plot(x, y90, c="0.9", ls="-", label="RH=90%")
-    ax.plot(x, y70, c="0.7", ls="--", label="RH=70%")
-    ax.plot(x, y50, c="0.5", ls=":", label="RH=50%")
-    # norm = mpl.colors.SymLogNorm(linthresh=10, linscale=0.5, vmin=-20, vmax=20)
-    ax.set_ylim(0, 35)
-    ax.set_ylabel("P$_w$ [hPa]")
-    ax.set_xlabel("T [K]")
-    ax.set_axisbelow(True)
-    ax.legend()
-    clabel = r"$\Delta LW = LW_{\tau} - LW$ [W/m$^2$]"
-    # clabel = r"$\Delta LW = LW_{B} - LW_{s}$ [W/m$^2$]"
-    fig.colorbar(c, label=clabel, extend="both")
-    ax.set_title("All sites, clr")
-    # plt.show()
-    filename = os.path.join("figures", "LWerr_T_v_pw_2.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    fig, ax = plt.subplots()
+    c = ax.scatter(stp.t_a, stp.pa_hpa, c=stp.lw_err_b, cmap="seismic",
+                   vmin=-20, vmax=20)
+    fig.colorbar(c, extend="both")
+    plt.show()
+
+    # Graph histograms of error by quartile of some humidity metric
+    nbins = 8
+    xvar = "pw"  # ["pw", "rh", "tk", "pa"]
+    # mod = "t"  # ["t", "b"] model type (tau or Brunt)
+    plot_lwerr_bin(df, "b", xvar, nbins=nbins, save_fig=1)
+
+    # pdf = df.sample(frac=0.2, random_state=96)
+    # fig, ax = plt.subplots(figsize=(10, 5))
+    # x = np.linspace(250, 305, 20)
+    # y90 = get_pw(x, 90) / 100  # hpa
+    # y70 = get_pw(x, 70) / 100  # hpa
+    # y50 = get_pw(x, 50) / 100  # hpa
+    # ax.grid(alpha=0.3)
+    # c = ax.scatter(
+    #     pdf.t_a, pdf.pw_hpa, marker=".", alpha=0.7, c=pdf.lw_err_b,
+    #     cmap="seismic", vmin=-20, vmax=20, s=0.3
+    # )
+    # ax.plot(x, y90, c="0.9", ls="-", label="RH=90%")
+    # ax.plot(x, y70, c="0.7", ls="--", label="RH=70%")
+    # ax.plot(x, y50, c="0.5", ls=":", label="RH=50%")
+    # # norm = mpl.colors.SymLogNorm(linthresh=10, linscale=0.5, vmin=-20, vmax=20)
+    # ax.set_ylim(0, 35)
+    # ax.set_ylabel("P$_w$ [hPa]")
+    # ax.set_xlabel("T [K]")
+    # ax.set_axisbelow(True)
+    # ax.legend()
+    # clabel = r"$\Delta LW = LW_{\tau} - LW$ [W/m$^2$]"
+    # # clabel = r"$\Delta LW = LW_{B} - LW_{s}$ [W/m$^2$]"
+    # fig.colorbar(c, label=clabel, extend="both")
+    # ax.set_title("All sites, clr")
+    # # plt.show()
+    # filename = os.path.join("figures", "LWerr_T_v_pw_2.png")
+    # fig.savefig(filename, bbox_inches="tight", dpi=300)
 
 
 
