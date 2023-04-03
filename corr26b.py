@@ -21,7 +21,8 @@ from scipy.io import loadmat
 from main import get_pw, get_esky_c, li_lw, CORR26A, compute_mbe
 from pcmap_data_funcs import get_asos_stations
 
-from constants import SIGMA, SURFRAD, SURF_COLS, SURF_ASOS, SURF_SITE_CODES
+from constants import SIGMA, SURFRAD, SURF_COLS, SURF_ASOS, SURF_SITE_CODES, \
+    P_ATM
 
 
 # def pw_tdp(t_a, rh):
@@ -528,13 +529,86 @@ def plot_lwerr_bin(df, mod, x, nbins=4, site=None, save_fig=False):
     return None
 
 
+def plot_lwerr_TvPw():
+    df = import_cs_compare_csv("cs_compare_2012.csv")
+    pdf = df.sample(frac=0.2, random_state=96)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    x = np.linspace(250, 305, 20)
+    y90 = get_pw(x, 90) / 100  # hpa
+    y70 = get_pw(x, 70) / 100  # hpa
+    y50 = get_pw(x, 50) / 100  # hpa
+    ax.grid(alpha=0.3)
+    c = ax.scatter(
+        pdf.t_a, pdf.pw_hpa, marker=".", alpha=0.7, c=pdf.lw_err_b,
+        cmap="seismic", vmin=-20, vmax=20, s=0.3
+    )
+    ax.plot(x, y90, c="0.9", ls="-", label="RH=90%")
+    ax.plot(x, y70, c="0.7", ls="--", label="RH=70%")
+    ax.plot(x, y50, c="0.5", ls=":", label="RH=50%")
+    # norm = mpl.colors.SymLogNorm(linthresh=10, linscale=0.5, vmin=-20, vmax=20)
+    ax.set_ylim(0, 35)
+    ax.set_ylabel("P$_w$ [hPa]")
+    ax.set_xlabel("T [K]")
+    ax.set_axisbelow(True)
+    ax.legend()
+    clabel = r"$\Delta LW = LW_{\tau} - LW$ [W/m$^2$]"
+    # clabel = r"$\Delta LW = LW_{B} - LW_{s}$ [W/m$^2$]"
+    fig.colorbar(c, label=clabel, extend="both")
+    ax.set_title("All sites, clr")
+    # plt.show()
+    filename = os.path.join("figures", "LWerr_T_v_pw_2.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def create_cs_compare_csv(xvar, const, xlist):
+    """Create a compiled data file. Store in cs_compare folder.
+
+    Parameters
+    ----------
+    xvar : ["year", "site"]
+
+    const : str
+        Name to be appended to filename as cs_compare_{const}.csv
+    xlist : list
+        Values of xvar to loop through. Either list of years or list of sites.
+
+    Returns
+    -------
+    None
+    """
+    df = pd.DataFrame()
+    for x in xlist:
+        if xvar == "year":
+            tmp = shakespeare_comparison(site=const, year=str(x))
+            tmp = tmp.loc[tmp.cs_period]  # keep only clear skies
+            # tmp["site"] = site
+            tmp["year"] = x
+        elif xvar == "site":
+            tmp = shakespeare_comparison(site=x, year=const)
+            tmp = tmp.loc[tmp.cs_period]  # keep only clear skies
+            tmp["site"] = x
+        df = pd.concat([df, tmp])
+    # print(df.shape)
+    filename = os.path.join("data", "cs_compare", f"cs_compare_{const}.csv")
+    df.to_csv(filename)
+    return None
+
+
+def import_cs_compare_csv(csvname, site=None):
+    filename = os.path.join("data", "cs_compare", csvname)
+    df = pd.read_csv(filename, index_col=0, parse_dates=True)
+    df["e_act"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))
+    df["e_act_s"] = df.lw_s / (SIGMA * np.power(df.t_a, 4))
+    df["lw_err_t"] = df.lw_c_t - df.dw_ir
+    df["lw_err_b"] = df.lw_c - df.lw_s
+    if site is not None:
+        df = df.loc[df.site == site]
+    return df
+
+
 if __name__ == "__main__":
     print()
-    s = "BON"
-    process_site(s, "2013")
-    process_site(s, "2014")
-    process_site(s, "2015")
-    process_site(s, "2016")
 
     # # ASOS
     # # TODO create look up table for closest ASOS station
@@ -549,87 +623,34 @@ if __name__ == "__main__":
     # model, y_true, y_pred, rmse = custom_fit(df)
     # plot_fit(site, model.coef_, y_true, y_pred, rmse)
 
-    # df = df.loc[df.zen < 85]  # remove night values
-    # df["cmf"] = 1 - (df.GHI_m / df.GHI_c)
-    # # apply 26a correlation
-    # # df["li_lw"] = li_lw(df.cmf, df.t_a, df.rh, c=CORR26A, lwc=df.lw_c)
-
-    # df["f"] = df.lw_s / df.dw_ir
-    # df.f.hist(bins=100)
-
-    # df = pd.DataFrame()
-    # xvar = "year"
+    # CREATE CS_COMPARE
+    # create_cs_compare_csv(xvar="site", const="2012", xlist=SURF_SITE_CODES)
     # xlist = [2012, 2013, 2014, 2015, 2016]
-    # const = "DRA"  # either keep year constant or site constant
-    # for x in xlist:
-    #     # for site in SURF_SITE_CODES:
-    #     if xvar == "year":
-    #         tmp = shakespeare_comparison(site=const, year=str(x))
-    #         tmp = tmp.loc[tmp.cs_period]  # keep only clear skies
-    #         # tmp["site"] = site
-    #         tmp["year"] = x
-    #     elif xvar == "site":
-    #         tmp = shakespeare_comparison(site=x, year=const)
-    #         tmp = tmp.loc[tmp.cs_period]  # keep only clear skies
-    #         tmp["site"] = x
-    #     df = pd.concat([df, tmp])
-    # print(df.shape)
-    # filename = os.path.join("data", f"cs_compare_{const}.csv")
-    # df.to_csv(filename)
+    # create_cs_compare_csv(xvar="year", const="DRA", xlist=xlist)
 
-    filename = os.path.join("data", "cs_compare_2012.csv")
-    df = pd.read_csv(filename, index_col=0, parse_dates=True)
-    # site = "BOU"
-    # df = df.sample(frac=0.1, random_state=96)
-    df["e_act"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))
-    df["e_act_s"] = df.lw_s / (SIGMA * np.power(df.t_a, 4))
-    df["lw_err_t"] = df.lw_c_t - df.dw_ir
-    df["lw_err_b"] = df.lw_c - df.lw_s
-    # df = df.loc[df.site == site]
+    # GRAPH histograms of error by quartile of some humidity metric
+    # df = import_cs_compare_csv("cs_compare_2012.csv")
+    # nbins = 8
+    # xvar = "pw"  # ["pw", "rh", "tk", "pa"]
+    # # mod = "t"  # ["t", "b"] model type (tau or Brunt)
+    # plot_lwerr_bin(df, "b", xvar, nbins=nbins, save_fig=1)
 
-    # locate data near T=294.2
-    stp = df.loc[abs(df.t_a - 294.2) <= 1].copy()  # ts near 294.2K
-    stp = stp.loc[stp.pa_hpa > 1000]  # reduce to ts above 1000 hPa
+    df = import_cs_compare_csv("cs_compare_2012.csv")
 
-    fig, ax = plt.subplots()
-    c = ax.scatter(stp.t_a, stp.pa_hpa, c=stp.lw_err_b, cmap="seismic",
-                   vmin=-20, vmax=20)
-    fig.colorbar(c, extend="both")
-    plt.show()
+    df = df.assign(pp=np.sqrt(df.pw_hpa))
+    train_x = df[["pp"]].to_numpy()
+    train_y = df.e_act.to_numpy()
 
-    # Graph histograms of error by quartile of some humidity metric
-    nbins = 8
-    xvar = "pw"  # ["pw", "rh", "tk", "pa"]
-    # mod = "t"  # ["t", "b"] model type (tau or Brunt)
-    plot_lwerr_bin(df, "b", xvar, nbins=nbins, save_fig=1)
-
-    # pdf = df.sample(frac=0.2, random_state=96)
-    # fig, ax = plt.subplots(figsize=(10, 5))
-    # x = np.linspace(250, 305, 20)
-    # y90 = get_pw(x, 90) / 100  # hpa
-    # y70 = get_pw(x, 70) / 100  # hpa
-    # y50 = get_pw(x, 50) / 100  # hpa
-    # ax.grid(alpha=0.3)
-    # c = ax.scatter(
-    #     pdf.t_a, pdf.pw_hpa, marker=".", alpha=0.7, c=pdf.lw_err_b,
-    #     cmap="seismic", vmin=-20, vmax=20, s=0.3
-    # )
-    # ax.plot(x, y90, c="0.9", ls="-", label="RH=90%")
-    # ax.plot(x, y70, c="0.7", ls="--", label="RH=70%")
-    # ax.plot(x, y50, c="0.5", ls=":", label="RH=50%")
-    # # norm = mpl.colors.SymLogNorm(linthresh=10, linscale=0.5, vmin=-20, vmax=20)
-    # ax.set_ylim(0, 35)
-    # ax.set_ylabel("P$_w$ [hPa]")
-    # ax.set_xlabel("T [K]")
-    # ax.set_axisbelow(True)
-    # ax.legend()
-    # clabel = r"$\Delta LW = LW_{\tau} - LW$ [W/m$^2$]"
-    # # clabel = r"$\Delta LW = LW_{B} - LW_{s}$ [W/m$^2$]"
-    # fig.colorbar(c, label=clabel, extend="both")
-    # ax.set_title("All sites, clr")
-    # # plt.show()
-    # filename = os.path.join("figures", "LWerr_T_v_pw_2.png")
-    # fig.savefig(filename, bbox_inches="tight", dpi=300)
+    model = LinearRegression(fit_intercept=True)
+    model.fit(train_x, train_y)
+    c2 = model.coef_[0].round(3)
+    c1 = model.intercept_.round(3)
+    pred_y = c1 + (c2 * df.pp)
+    rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+    mbe = compute_mbe(train_y, pred_y)
+    print(c1, c2)
+    print(f"{rmse:.4f}")
+    print(f"{mbe:.4f}")
 
 
 

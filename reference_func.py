@@ -3,7 +3,7 @@
 from main import *
 from sklearn.metrics import mean_squared_error
 from corr26b import get_tsky, join_surfrad_asos, shakespeare, \
-    shakespeare_comparison
+    shakespeare_comparison, import_cs_compare_csv
 
 from constants import *
 
@@ -280,13 +280,7 @@ def esky_clr_vs_params():
 
 
 def print_lw_clr_err_by_site():
-    filename = os.path.join("data", "cs_compare_2012.csv")
-    df = pd.read_csv(filename, index_col=0, parse_dates=True)
-    df["e_act"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))
-    df["e_act_s"] = df.lw_s / (SIGMA * np.power(df.t_a, 4))
-    df["lw_err_t"] = df.lw_c_t - df.dw_ir
-    df["lw_err_b"] = df.lw_c - df.lw_s
-
+    df = import_cs_compare_csv("cs_compare_2012.csv")
     # print out errors by site
     b_rmse = []
     b_mbe = []
