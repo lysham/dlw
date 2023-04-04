@@ -609,6 +609,9 @@ def import_cs_compare_csv(csvname, site=None):
 
 if __name__ == "__main__":
     print()
+    sites = ['GWC', 'PSU', 'SXF']
+    for s in sites:
+        process_site(s, yr="2013")
 
     # # ASOS
     # # TODO create look up table for closest ASOS station
@@ -651,6 +654,25 @@ if __name__ == "__main__":
     print(c1, c2)
     print(f"{rmse:.4f}")
     print(f"{mbe:.4f}")
+
+    # back out tsky
+    df = df.assign(tsky=np.power(df.lw_s / SIGMA, 0.25))
+    # add dt / t_m
+    df["dt"] = df.t_a - df.tsky
+    df["t_m"] = (df.t_a + df.tsky) / 2
+    df["m"] = df.dt / df.t_m
+
+    fig, ax = plt.subplots()
+    pdf = df.sample(frac=0.1, random_state=96)
+    ax.scatter(pdf.t_a, pdf.tsky, alpha=0.1)
+    ax.axline((300, 300), slope=1, ls="--", c="0.5")
+    x1, x2 = (230, 320)
+    ax.set_xlim(x1, x2)
+    ax.set_ylim(x1, x2)
+    ax.set_xlabel(r"$T_a$ [K]")
+    ax.set_ylabel(r"$T_{sky}$ [K]")
+    filename = os.path.join("figures", "Tsky_v_Ta.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
 
 
 
