@@ -120,6 +120,8 @@ def process_site(site, yr="2012"):
     if yr in all_years:
         folder = os.path.join(directory, yr)
         lst = os.listdir(folder)
+        # remove hidden files in MacOS
+        lst = [i for i in lst if not i.startswith(".")]
         lst.sort()
         tmp = pd.DataFrame()
         expected_columns = len(SURF_COLS)
@@ -607,11 +609,81 @@ def import_cs_compare_csv(csvname, site=None):
     return df
 
 
+def compare_esky_fits(p="hpa", lw="s", tra_yr=2012, val_yr=2013, rm_loc=None):
+    """Train and evaluate the Brunt model fit (22a) for daytime clear sky
+    samples with variations for the input parameter (p), the LW measurement
+    used to determine sky emissivity (lw), the training and validation years,
+    and the number of sites to incorporate in training and validation.
+
+    Parameters
+    ----------
+    p : ["hpa", "scaled"], optional
+        Use an input value of p_w in hPa ("hpa") or a normalzed value of
+        p_w (p_w / p_0) ("scaled") as the input parameter for the Brunt
+        emissivity regression.
+    lw : "s" or None, optional
+        If "s" then used emissivity determined from corrected LW measurements (LW_s)
+    tra_yr : int, optional
+        Data year to use on training.
+    val_yr : int, optional
+        Data year to use on evaluating fit.
+    rm_loc : str or list, optional
+        The defualt value means that no locations are removed and all data
+        from the cs_compare csv will be used in training and validation.
+        User can input a string corresponding to the SURFRAD site code or a
+        list of site codes to indicate that the location(s) be removed from
+        both training and validation sets.
+
+    Returns
+    -------
+    None
+    """
+    tra = import_cs_compare_csv(f"cs_compare_{tra_yr}.csv")
+    val = import_cs_compare_csv(f"cs_compare_{val_yr}.csv")
+    if rm_loc is not None:
+        if isinstance(rm_loc, list):
+            for s in rm_loc:  # remove multiple loc
+                tra = tra.loc[tra.site != s]
+                val = val.loc[val.site != s]
+        elif isinstance(rm_loc, str):
+            tra = tra.loc[tra.site != rm_loc]  # remove single loc
+            val = val.loc[val.site != rm_loc]
+    print(f"TRA samples: {tra.shape[0]:,}")
+    print(f"VAL samples: {val.shape[0]:,}\n")
+
+    if p == "hpa":
+        tra["pp"] = np.sqrt(tra.pw_hpa)
+        val["pp"] = np.sqrt(val.pw_hpa)
+    elif p == "scaled":
+        tra["pp"] = np.sqrt((tra.pw_hpa * 100) / P_ATM)
+        val["pp"] = np.sqrt((val.pw_hpa * 100) / P_ATM)
+
+    if lw == "s":  # corrected to LW_s
+        train_y = tra.e_act_s.to_numpy()
+        val_y = val.e_act_s.to_numpy()
+    else:
+        train_y = tra.e_act.to_numpy()
+        val_y = val.e_act.to_numpy()
+
+    train_x = tra[["pp"]].to_numpy()
+    model = LinearRegression(fit_intercept=True)
+    model.fit(train_x, train_y)
+    c2 = model.coef_[0].round(3)
+    c1 = model.intercept_.round(3)
+    pred_y = c1 + (c2 * tra.pp)
+    rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+    mbe = compute_mbe(train_y, pred_y)
+    print("(c1, c2): ", c1, c2)
+    print(f"Training RMSE:{rmse:.4f} and MBE:{mbe:.4f}\n")
+    pred_y = c1 + (c2 * val.pp)
+    rmse = np.sqrt(mean_squared_error(val_y, pred_y))
+    print(f"Validation RMSE:{rmse:.4f}")
+    return None
+
+
 if __name__ == "__main__":
     print()
-    sites = ['GWC', 'PSU', 'SXF']
-    for s in sites:
-        process_site(s, yr="2013")
+    # process_site("GWC", yr="2013")
 
     # # ASOS
     # # TODO create look up table for closest ASOS station
@@ -627,7 +699,7 @@ if __name__ == "__main__":
     # plot_fit(site, model.coef_, y_true, y_pred, rmse)
 
     # CREATE CS_COMPARE
-    # create_cs_compare_csv(xvar="site", const="2012", xlist=SURF_SITE_CODES)
+    # create_cs_compare_csv(xvar="site", const="2013", xlist=SURF_SITE_CODES)
     # xlist = [2012, 2013, 2014, 2015, 2016]
     # create_cs_compare_csv(xvar="year", const="DRA", xlist=xlist)
 
@@ -638,41 +710,27 @@ if __name__ == "__main__":
     # # mod = "t"  # ["t", "b"] model type (tau or Brunt)
     # plot_lwerr_bin(df, "b", xvar, nbins=nbins, save_fig=1)
 
-    df = import_cs_compare_csv("cs_compare_2012.csv")
+    # Compare e_sky_c fits on different pressure and LW variables
+    compare_esky_fits(p="scaled", lw="", tra_yr=2012, val_yr=2013, rm_loc=None)
 
-    df = df.assign(pp=np.sqrt(df.pw_hpa))
-    train_x = df[["pp"]].to_numpy()
-    train_y = df.e_act.to_numpy()  # e_act or e_act_s
-
-    model = LinearRegression(fit_intercept=True)
-    model.fit(train_x, train_y)
-    c2 = model.coef_[0].round(3)
-    c1 = model.intercept_.round(3)
-    pred_y = c1 + (c2 * df.pp)
-    rmse = np.sqrt(mean_squared_error(train_y, pred_y))
-    mbe = compute_mbe(train_y, pred_y)
-    print(c1, c2)
-    print(f"{rmse:.4f}")
-    print(f"{mbe:.4f}")
-
-    # back out tsky
-    df = df.assign(tsky=np.power(df.lw_s / SIGMA, 0.25))
-    # add dt / t_m
-    df["dt"] = df.t_a - df.tsky
-    df["t_m"] = (df.t_a + df.tsky) / 2
-    df["m"] = df.dt / df.t_m
-
-    fig, ax = plt.subplots()
-    pdf = df.sample(frac=0.1, random_state=96)
-    ax.scatter(pdf.t_a, pdf.tsky, alpha=0.1)
-    ax.axline((300, 300), slope=1, ls="--", c="0.5")
-    x1, x2 = (230, 320)
-    ax.set_xlim(x1, x2)
-    ax.set_ylim(x1, x2)
-    ax.set_xlabel(r"$T_a$ [K]")
-    ax.set_ylabel(r"$T_{sky}$ [K]")
-    filename = os.path.join("figures", "Tsky_v_Ta.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    # # back out tsky
+    # df = df.assign(tsky=np.power(df.lw_s / SIGMA, 0.25))
+    # # add dt / t_m
+    # df["dt"] = df.t_a - df.tsky
+    # df["t_m"] = (df.t_a + df.tsky) / 2
+    # df["m"] = df.dt / df.t_m
+    #
+    # fig, ax = plt.subplots()
+    # pdf = df.sample(frac=0.1, random_state=96)
+    # ax.scatter(pdf.t_a, pdf.tsky, alpha=0.1)
+    # ax.axline((300, 300), slope=1, ls="--", c="0.5")
+    # x1, x2 = (230, 320)
+    # ax.set_xlim(x1, x2)
+    # ax.set_ylim(x1, x2)
+    # ax.set_xlabel(r"$T_a$ [K]")
+    # ax.set_ylabel(r"$T_{sky}$ [K]")
+    # filename = os.path.join("figures", "Tsky_v_Ta.png")
+    # fig.savefig(filename, bbox_inches="tight", dpi=300)
 
 
 
