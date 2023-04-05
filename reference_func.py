@@ -4,6 +4,7 @@ from main import *
 from sklearn.metrics import mean_squared_error
 from corr26b import get_tsky, join_surfrad_asos, shakespeare, \
     shakespeare_comparison, import_cs_compare_csv
+from fraction import fe_lt, fi_lt
 
 from constants import *
 
@@ -311,6 +312,30 @@ def afgl_from_longwave_github():
     df = pd.read_csv(filename, names=colnames, index_col=False)
     filename = os.path.join("data", "afgl_midlatitude_summer.csv")
     df.to_csv(filename, index=False)
+    return None
+
+
+def plot_leinhard_fig1():
+    lt_cm = np.geomspace(0.01, 1.5, 100)
+    fi = []
+    fe = []
+    for x in lt_cm:
+        fe.append(fe_lt(x * 1e4))
+        fi.append(fi_lt(x * 1e4))
+    fi = np.array(fi)
+    fe = np.array(fe)
+
+    fig, ax = plt.subplots(figsize=(6, 3))
+    ax.grid(alpha=0.3)
+    ax.plot(lt_cm, fi, c="b", label=r"$f_i$")
+    ax.plot(lt_cm, fe, c="r", label=r"$f_e$")
+    ax.plot(lt_cm, fi - fe, c="g", label=r"$f_i - f_e$")
+    ax.set_xlim(0, 1.5)
+    ax.set_ylim(0, 1)
+    ax.set_xlabel(r"$\lambda$T (cm K)")
+    ax.legend()
+    filename = os.path.join("figures", "lienhard_f1.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 
 

@@ -3,6 +3,7 @@
 import os
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from scipy import integrate
 
 from constants import SIGMA
@@ -84,3 +85,5 @@ if __name__ == "__main__":
 
     # fraction function implementations imperfect (inf approximated as 256)
     print(fi_lt(14300))  # 0.9875 Table 6.5
+
+
