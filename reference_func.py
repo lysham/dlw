@@ -1,6 +1,7 @@
 """Keep functions not in use but helpful for referencing"""
 
 from main import *
+import scipy
 from sklearn.metrics import mean_squared_error
 from corr26b import get_tsky, join_surfrad_asos, shakespeare, \
     shakespeare_comparison, import_cs_compare_csv
@@ -137,6 +138,36 @@ def plot_shakespeare_comparison():
     print(rmse)
     rmse = np.sqrt(mean_squared_error(pdf.lw_s, pdf.lw_c_t))
     print(rmse)
+    return None
+
+
+def plot_gridded_H():
+    # Figure of gridded H
+    filename = os.path.join("data", "shakespeare", "data.mat")
+    f = scipy.io.loadmat(filename)
+    # Get scale height H
+    lon_pts = f["lon"]
+    lat_pts = np.flip(f["lat"])  # must be in ascending order for interp
+    h = np.flip(f["H"], axis=1)
+    xx = np.rot90(h)
+    plt.imshow(xx, norm="log")
+    plt.colorbar()
+    plt.show()
+    return None
+
+
+def print_H_and_He_values():
+    # explore h and h_e values
+    site = "BON"
+    lat1 = SURFRAD[site]["lat"]
+    lon1 = SURFRAD[site]["lon"]
+    h1, spline = shakespeare(lat1, lon1)
+    pa = 900e2  # Pa
+    p_ratio = pa / P_ATM
+    he = (h1 / np.cos(40.3 * np.pi / 180)) * (p_ratio ** 1.8)
+    he_p0 = (h1 / np.cos(40.3 * np.pi / 180))
+    print(site)
+    print(f"H={h1:.2f}, He_900={he:.2f}, He_1bar={he_p0:.2f}")
     return None
 
 

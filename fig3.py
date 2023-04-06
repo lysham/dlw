@@ -85,35 +85,7 @@ def get_emissivity_i(p_w, sp="H2O"):
     return e
 
 
-if __name__ == "__main__":
-    print()
-    # t_a = 294.2  # [K]
-    # rh = 50  # %
-    # pw = get_pw_norm(t_a, rh)
-
-    # explore h and h_e values
-    site = "BON"
-    lat1 = SURFRAD[site]["lat"]
-    lon1 = SURFRAD[site]["lon"]
-    h1, spline = shakespeare(lat1, lon1)
-    pa = 900e2  # Pa
-    p_ratio = pa / P_ATM
-    he = (h1 / np.cos(40.3 * np.pi / 180)) * (p_ratio ** 1.8)
-    he_p0 = (h1 / np.cos(40.3 * np.pi / 180))
-    print(site)
-    print(f"H={h1:.2f}, He_900={he:.2f}, He_1bar={he_p0:.2f}")
-
-    # Figure of gridded H
-    # filename = os.path.join("data", "shakespeare", "data.mat")
-    # f = scipy.io.loadmat(filename)
-    # # Get scale height H
-    # lon_pts = f["lon"]
-    # lat_pts = np.flip(f["lat"])  # must be in ascending order for interp
-    # h = np.flip(f["H"], axis=1)
-    # xx = np.rot90(h)
-    # plt.imshow(xx, norm="log")
-    # plt.colorbar()
-
+def plot_fig3_shakespeare_comparison():
     species = list(LI_TABLE1.keys())
 
     pw_x = np.linspace(0.1, 2.3, 20)
@@ -121,7 +93,7 @@ if __name__ == "__main__":
 
     e_tau = np.zeros(len(pw_x))
     e_tau_p0 = np.zeros(len(pw_x))
-    site = "BOU"
+    site = "BON"
     lat1 = SURFRAD[site]["lat"]
     lon1 = SURFRAD[site]["lon"]
     h1, spline = shakespeare(lat1, lon1)
@@ -172,7 +144,7 @@ if __name__ == "__main__":
     ax.set_xlim(pw_x[0], pw_x[-1])
     # ax.set_ylim(0, 1)
     ax.set_ylim(0.5, 0.9)
-    ax.set_title(r"height scale from BOU")
+    # ax.set_title(r"height scale from BOU")
     ax.set_yticks(np.linspace(0, 1, 11))
     ax.set_xlabel("pw x 100")
     ax.set_ylabel(r"$\varepsilon$")
@@ -180,6 +152,76 @@ if __name__ == "__main__":
     ax.legend(frameon=True, ncol=5, loc="lower right")
     plt.tight_layout()
     plt.show()
-    filename = os.path.join("figures", "fig3_BOU.png")
+    filename = os.path.join("figures", "fig3.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def import_ijhmt_df(filename):
+    # first column gives Pw/Patm
+    # second column gives contribution by H2O
+    # subsequent columns give the sum of previous columns plus constituent
+    # pOverlap represents total emissivity for the given pw
+    filename = os.path.join("data", "ijhmt_2019_data", filename)
+    colnames = ['pw', 'H2O', 'pCO2', 'pO3', 'pAerosols',
+                'pN2O', 'pCH4', 'pO2', 'pN2', 'pOverlaps']
+    df = pd.read_csv(filename, names=colnames, header=0)
+    return df
+
+
+def plot_fig3():
+    # graph fig3 from data Mengying provided
+    df = import_ijhmt_df("fig3_esky_i.csv")
+    cmap = mpl.colormaps["Paired"]
+    cmaplist = [cmap(i) for i in range(N_SPECIES)]
+    fig, ax = plt.subplots()
+    x = df.pw.to_numpy()
+    species = list(LI_TABLE1.keys())
+    species = species[::-1]
+    j = 0
+    for i in species:
+        if i == "H2O":
+            y = i
+        elif i == "aerosols" or i == "overlaps":
+            y = f"p{i[0].upper() + i[1:]}"
+        else:
+            y = f"p{i}"
+        ax.fill_between(x, 0, df[y].to_numpy(), label=i, fc=cmaplist[-(j + 1)])
+        j += 1
+    ax.set_ylim(bottom=0)
+    ax.set_xlim(x[0], x[-1])
+    ax.set_xlabel("pw")
+    ax.set_ylabel(r"$\varepsilon$")
+    plt.show()
+    return None
+
+
+if __name__ == "__main__":
+    print()
+    # t_a = 294.2  # [K]
+    # rh = 50  # %
+    # pw = get_pw_norm(t_a, rh)
+
+    df = pd.DataFrame()
+    for i in range(N_BANDS):
+        tmp = import_ijhmt_df(f"fig5_esky_ij_b{i + 1}.csv")
+        tmp["CO2"] = tmp.pCO2 - tmp.H2O
+        if i == 0:
+            tmp = tmp[["pw", "H2O", "CO2"]]
+        else:
+            tmp = tmp[["H2O", "CO2"]]
+        tmp = tmp.rename(columns={"H2O": f"h2o_b{i + 1}",
+                                  "CO2": f"co2_b{i + 1}"})
+        df = pd.concat([df, tmp], axis=1)
+    pw = df.pw.to_numpy()
+    co2 = df.filter(like="co2").sum(axis=1).to_numpy()
+    h2o = df.filter(like="h2o").sum(axis=1).to_numpy()
+
+    fig, ax = plt.subplots()
+    ax.plot(pw, co2)
+    ax.plot(pw, h2o)
+    ax.plot(pw, co2 + h2o)
+    plt.show()
+
+
 
