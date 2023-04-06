@@ -711,7 +711,7 @@ if __name__ == "__main__":
     # plot_lwerr_bin(df, "b", xvar, nbins=nbins, save_fig=1)
 
     # Compare e_sky_c fits on different pressure and LW variables
-    compare_esky_fits(p="scaled", lw="", tra_yr=2012, val_yr=2013, rm_loc=None)
+    # compare_esky_fits(p="scaled", lw="", tra_yr=2012, val_yr=2013, rm_loc=None)
 
     # # back out tsky
     # df = df.assign(tsky=np.power(df.lw_s / SIGMA, 0.25))
@@ -732,7 +732,16 @@ if __name__ == "__main__":
     # filename = os.path.join("figures", "Tsky_v_Ta.png")
     # fig.savefig(filename, bbox_inches="tight", dpi=300)
 
+    df = import_cs_compare_csv("cs_compare_2012.csv")
+    pdf = df.sample(frac=0.1, random_state=31)
+    pdf["lw_up"] = SIGMA*np.power(pdf.t_a, 4)
+    pdf["lw_diff"] = pdf.lw_up - pdf.dw_ir
+    # pdf.lw_diff.describe()
 
+    fig, ax = plt.subplots()
+    ax.scatter(pdf.dw_ir, pdf.lw_up, alpha=0.3)
+    ax.axline((300, 300), slope=1, c="0.3")
+    plt.show()
 
 
 
