@@ -13,10 +13,11 @@ import datetime as dt
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from scipy import integrate, interpolate
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error
+from sklearn.linear_model import LinearRegression, SGDRegressor
+from sklearn.metrics import mean_squared_error, r2_score
 from copy import deepcopy
 from scipy.io import loadmat
+from scipy.optimize import curve_fit
 
 from main import get_pw, get_esky_c, li_lw, CORR26A, compute_mbe
 from pcmap_data_funcs import get_asos_stations
@@ -668,8 +669,8 @@ def compare_esky_fits(p="hpa", lw="s", tra_yr=2012, val_yr=2013, rm_loc=None):
     train_x = tra[["pp"]].to_numpy()
     model = LinearRegression(fit_intercept=True)
     model.fit(train_x, train_y)
-    c2 = model.coef_[0].round(3)
-    c1 = model.intercept_.round(3)
+    c2 = model.coef_[0].round(4)
+    c1 = model.intercept_.round(4)
     pred_y = c1 + (c2 * tra.pp)
     rmse = np.sqrt(mean_squared_error(train_y, pred_y))
     mbe = compute_mbe(train_y, pred_y)
@@ -679,6 +680,10 @@ def compare_esky_fits(p="hpa", lw="s", tra_yr=2012, val_yr=2013, rm_loc=None):
     rmse = np.sqrt(mean_squared_error(val_y, pred_y))
     print(f"Validation RMSE:{rmse:.4f}")
     return None
+
+
+def esky_format(x, c1, c2, c3):
+    return c1 + (c2 * np.power(x, c3))
 
 
 if __name__ == "__main__":
@@ -732,16 +737,52 @@ if __name__ == "__main__":
     # filename = os.path.join("figures", "Tsky_v_Ta.png")
     # fig.savefig(filename, bbox_inches="tight", dpi=300)
 
-    df = import_cs_compare_csv("cs_compare_2012.csv")
-    pdf = df.sample(frac=0.1, random_state=31)
-    pdf["lw_up"] = SIGMA*np.power(pdf.t_a, 4)
-    pdf["lw_diff"] = pdf.lw_up - pdf.dw_ir
-    # pdf.lw_diff.describe()
+    # df = import_cs_compare_csv("cs_compare_2012.csv")
+    # pdf = df.sample(frac=0.1, random_state=31)
+    # pdf["lw_up"] = SIGMA*np.power(pdf.t_a, 4)
+    # pdf["lw_diff"] = pdf.lw_up - pdf.dw_ir
+    # # pdf.lw_diff.describe()
+    #
+    # fig, ax = plt.subplots()
+    # ax.scatter(pdf.dw_ir, pdf.lw_up, alpha=0.3)
+    # ax.axline((300, 300), slope=1, c="0.3")
+    # plt.show()
 
-    fig, ax = plt.subplots()
-    ax.scatter(pdf.dw_ir, pdf.lw_up, alpha=0.3)
-    ax.axline((300, 300), slope=1, c="0.3")
-    plt.show()
+    # df = pd.DataFrame()
+    df = import_cs_compare_csv("cs_compare_DRA.csv")
+    # tmp = import_cs_compare_csv("cs_compare_2013.csv")
+    # df = pd.concat([df, tmp])
+    # df = df.loc[df.site != "BOU"]
+    # df = df.loc[abs(df.t_a - 294.2) < 1]
+    df["pp"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
+    train_y = df.e_act_s.to_numpy()
+    train_x = df[["pp"]].to_numpy()
+    model = LinearRegression(fit_intercept=True)
+    # model = SGDRegressor(fit_intercept=True)
+    model.fit(train_x, train_y)
+    c2 = model.coef_[0].round(4)
+    c1 = model.intercept_.round(4)
+    pred_y = c1 + (c2 * df.pp)
+    rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+    print("(c1, c2): ", c1, c2)
+    r2 = r2_score(train_y, pred_y)
+    print(rmse.round(5), r2.round(5))
+
+    df["pp"] = (df.pw_hpa * 100) / P_ATM
+    train_x = df.pp.to_numpy()
+    out = curve_fit(
+        f=esky_format, xdata=train_x, ydata=train_y,
+        p0=[0.5, 0.0, 0.5], bounds=(-100, 100)
+    )
+    c1, c2, c3 = out[0]
+    c1 = c1.round(4)
+    c2 = c2.round(4)
+    c3 = c3.round(4)
+    pred_y = esky_format(train_x, c1, c2, c3)
+    rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+    print("(c1, c2, c3): ", c1, c2, c3)
+    r2 = r2_score(train_y, pred_y)
+    print(rmse.round(5), r2.round(5))
 
 
 

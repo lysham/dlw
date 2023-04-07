@@ -9,6 +9,9 @@ import matplotlib.pyplot as plt
 
 from main import get_pw
 from corr26b import shakespeare
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.linear_model import LinearRegression, Ridge, SGDRegressor
+from scipy.optimize import curve_fit
 
 from constants import LI_TABLE1, P_ATM, SIGMA, N_BANDS, N_SPECIES, SURFRAD
 
@@ -196,6 +199,10 @@ def plot_fig3():
     return None
 
 
+def esky_format(x, c1, c2, c3):
+    return c1 + (c2 * np.power(x, c3))
+
+
 if __name__ == "__main__":
     print()
     # t_a = 294.2  # [K]
@@ -223,5 +230,49 @@ if __name__ == "__main__":
     ax.plot(pw, co2 + h2o)
     plt.show()
 
+    df = import_ijhmt_df("fig3_esky_i.csv")
+    x = df.pw.to_numpy()
+    df["total"] = df.pOverlaps
+
+    df["pred_y"] = 0.622 + (1.711 * (np.power(x, 0.5)))
+    fig, ax = plt.subplots()
+    ax.plot(x, df.total, label="LBL")
+    ax.plot(x, df.pred_y, ls="--", label="regression")
+    ax.set_ylim(0.5, 0.9)
+    plt.show()
+
+    rmse = np.sqrt(mean_squared_error(df.total, df.pred_y))
+    r2 = r2_score(df.total, df.pred_y)
+    print(rmse, r2)
+
+    df["pp"] = np.sqrt(df.pw)
+    train_y = df.pOverlaps.to_numpy()
+    train_x = df[["pp"]].to_numpy()
+    model = LinearRegression(fit_intercept=True)
+    # model = Ridge(fit_intercept=True, alpha=0.5)
+    # model = SGDRegressor(fit_intercept=True)
+    model.fit(train_x, train_y)
+    c2 = model.coef_[0].round(4)
+    c1 = model.intercept_.round(4)
+    pred_y = c1 + (c2 * df.pp)
+    rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+    print("(c1, c2): ", c1, c2)
+    r2 = r2_score(df.total, df.pred_y)
+    print(rmse, r2)
+
+    train_x = df.pw.to_numpy()
+    out = curve_fit(
+        f=esky_format, xdata=train_x, ydata=train_y,
+        p0=[0.5, 0.0, 0.5], bounds=(-100, 100)
+    )
+    c1, c2, c3 = out[0]
+    c1 = c1.round(4)
+    c2 = c2.round(4)
+    c3 = c3.round(4)
+    pred_y = esky_format(train_x, c1, c2, c3)
+    rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+    print("(c1, c2, c3): ", c1, c2, c3)
+    r2 = r2_score(df.total, df.pred_y)
+    print(rmse, r2)
 
 
