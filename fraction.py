@@ -4,7 +4,7 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from scipy import integrate
+from scipy import integrate, special
 
 from constants import SIGMA
 
@@ -76,6 +76,14 @@ def fi_lt(lt):
     return const * out
 
 
+def _fe(lt):
+    return 1 - ((90/np.power(np.pi, 4)) * special.zeta(E_C2/lt, 4))
+
+
+def fi_fe(x):
+    return (15 / np.power(np.pi, 4)) * np.power(x, 4) / (np.exp(x) - 1)
+
+
 if __name__ == "__main__":
     print()
 
@@ -84,6 +92,21 @@ if __name__ == "__main__":
     print(out)
 
     # fraction function implementations imperfect (inf approximated as 256)
-    print(fi_lt(14300))  # 0.9875 Table 6.5
+    # print(fi_lt(14300))  # 0.9875 Table 6.5
 
+    x = np.linspace(0.001, 20, 100)
+    y = fi_fe(x)
+    fig, ax = plt.subplots(figsize=(6, 3))
+    ax.grid(True, alpha=0.1)
+    ax.plot(x, y)
+    ax.axvline(3.92069, c="0.4", ls="--", label=r"$X_z$")
+    ax.axvline(12.23, c="0.6", ls=":", label=r"X$_{c,2}$")
+    ax.set_xlim(x[0], x[-1])
+    ax.set_xlabel("X")
+    ax.set_ylabel("F(X)")
+    ax.set_axisbelow(True)
+    ax.legend()
+    filename = os.path.join("figures", "F_v_X.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
 
+    X_param = E_C2 / (7 * 290)
