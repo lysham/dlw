@@ -370,5 +370,52 @@ def plot_leinhard_fig1():
     return None
 
 
+# 4/7/23
+def plot_lwadjustment_vs_t_ir():
+    n = 20
+    ta = np.linspace(240, 315, n)
+    ir = np.linspace(300, 400, n)
+    lw_corr = np.zeros((n, n))
+    lw_adj = np.zeros((n, n))
+    e_adj = np.zeros((n, n))
+    for i in range(len(ta)):
+        for j in range(len(ir)):
+            ts = get_tsky(ta[i], ir[j])[1]
+            lw_corr[i, j] = SIGMA * np.power(ts, 4)
+            lw_adj[i, j] = lw_corr[i, j] / ir[j]
+            e_meas = ir[j] / (SIGMA * np.power(ta[i], 4))
+            e_corr = lw_corr[i, j] / (SIGMA * np.power(ta[i], 4))
+            e_adj[i, j] = e_corr / e_meas
+
+    # lw_corr / np.tile(ir, 5).reshape(5, -1)
+    fig, ax = plt.subplots()
+    c = ax.imshow(lw_adj)
+    ax.set_xlabel("LW meas [W/m^2]")
+    ax.set_ylabel("Ta [K]")
+    ylabels = [f"{x:.2f}" for x in ta]
+    xlabels = [f"{x:.2f}" for x in ir]
+    ax.set_xticks(range(n))
+    ax.set_yticks(range(n))
+    ax.set_yticklabels(ylabels)
+    ax.set_xticklabels(xlabels, rotation=90)
+    fig.colorbar(c, label="LW corr / LW meas [-]")
+    filename = os.path.join("figures", "LWadjustment_vs_T_IR.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+
+    # Essentially the exact same figure
+    fig, ax = plt.subplots()
+    c = ax.imshow(e_adj)
+    ax.set_xlabel("LW meas [W/m^2]")
+    ax.set_ylabel("Ta [K]")
+    ylabels = [f"{x:.2f}" for x in ta]
+    xlabels = [f"{x:.2f}" for x in ir]
+    ax.set_xticks(range(n))
+    ax.set_yticks(range(n))
+    ax.set_yticklabels(ylabels)
+    ax.set_xticklabels(xlabels, rotation=90)
+    fig.colorbar(c, label="e corr / e meas [-]")
+    return None
+
+
 if __name__ == "__main__":
     print()
