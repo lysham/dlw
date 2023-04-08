@@ -129,6 +129,21 @@ def get_pw(t, rh):
     return pw
 
 
+def pw2tdp(pw):
+    # pw in Pa, tdp returned in K
+    t1 = 243.04 * np.log(pw / 610.94)
+    t2 = 17.625 - np.log(pw / 610.94)
+    tdp = 273.15 + (t1/t2)
+    return tdp
+
+
+def tdp2pw(tdp):
+    # tdp in K, pw in Pa
+    t1 = 1 + (243.04 / (tdp - 273.15))
+    pw = np.exp(17.625 / t1) * 610.94
+    return pw
+
+
 def get_esky_c(pw):
     # All day model
     e_sky = 0.618 + (0.056 * np.sqrt(pw))  # calibrated Brunt
