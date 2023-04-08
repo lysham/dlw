@@ -19,7 +19,7 @@ from copy import deepcopy
 from scipy.io import loadmat
 from scipy.optimize import curve_fit
 
-from main import get_pw, get_esky_c, li_lw, CORR26A, compute_mbe
+from main import get_pw, get_esky_c, li_lw, CORR26A, compute_mbe, pw2tdp, tdp2pw
 from pcmap_data_funcs import get_asos_stations
 
 from constants import SIGMA, SURFRAD, SURF_COLS, SURF_ASOS, SURF_SITE_CODES, \
@@ -52,8 +52,7 @@ def get_tsky(t, ir_mea):
     delta = ir_mea - result
 
     delta_thresh = 0.1  # SET: within 0.1 W/m^2 of measured DLW is good enough
-    if (delta > 0) & (
-            np.abs(delta) > delta_thresh):  # if delta>0 guessed Tsky should increase
+    if (delta > 0) & (np.abs(delta) > delta_thresh):  # if delta>0 guessed Tsky should increase
         t = t * 1.01
         result, t = get_tsky(t, ir_mea)
     elif (delta < 0) & (np.abs(delta) > delta_thresh):
@@ -113,98 +112,92 @@ def process_site(site, yr="2012"):
     lon = SURFRAD[site]["lon"]
     alt = SURFRAD[site]["alt"]  # m
     directory = os.path.join("/Volumes", "LMM_drive", "SURFRAD", site_name)
-    all_years = os.listdir(directory)
+    # all_years = os.listdir(directory)
     keep_cols = [
         'zen', 'dw_solar', 'qc1', 'direct_n', 'qc3', 'diffuse', 'qc4',
         'dw_ir', 'qc5', 'temp', 'qc16', 'rh', 'qc17', 'pressure', 'qc20'
     ]  # narrow down columns from SURF_COLNAMES
-    if yr in all_years:
-        folder = os.path.join(directory, yr)
-        lst = os.listdir(folder)
-        # remove hidden files in MacOS
-        lst = [i for i in lst if not i.startswith(".")]
-        lst.sort()
-        tmp = pd.DataFrame()
-        expected_columns = len(SURF_COLS)
-        for f in lst:  # import data by day and concatenate to `tmp`
-            filename = os.path.join(folder, f)
-            try:
-                df = pd.DataFrame(
-                    np.loadtxt(filename, skiprows=2), columns=SURF_COLS
+    # if yr in all_years:
+    folder = os.path.join(directory, yr)
+    lst = os.listdir(folder)
+    # remove hidden files in MacOS
+    lst = [i for i in lst if not i.startswith(".")]
+    lst.sort()
+    tmp = pd.DataFrame()
+    expected_columns = len(SURF_COLS)
+    for f in lst:  # import data by day and concatenate to `tmp`
+        filename = os.path.join(folder, f)
+        try:
+            df = pd.DataFrame(
+                np.loadtxt(filename, skiprows=2), columns=SURF_COLS
+            )
+            if len(df.columns) == expected_columns:
+                df['TS'] = pd.to_datetime(
+                    {'year': df.yr, 'month': df.month, 'day': df.day,
+                     'hour': df.hr, 'minute': df.minute}
                 )
-                if len(df.columns) == expected_columns:
-                    df['TS'] = pd.to_datetime(
-                        {'year': df.yr, 'month': df.month, 'day': df.day,
-                         'hour': df.hr, 'minute': df.minute}
-                    )
-                    df = df.set_index('TS')
-                    df = df[keep_cols]
-                    tmp = pd.concat([tmp, df])
-                else:
-                    print(
-                        f"{filename} does not have expected number of columns."
-                    )
-            except pd.errors.ParserError as e:
-                print(f"Error: {e}")
-        df = tmp.copy()  # switch back to df
-        print("Data collected.", time.time() - start_time)
+                df = df.set_index('TS')
+                df = df[keep_cols]
+                tmp = pd.concat([tmp, df])
+            else:
+                print(
+                    f"{filename} does not have expected number of columns."
+                )
+        except pd.errors.ParserError as e:
+            print(f"Error: {e}")
+    df = tmp.copy()  # switch back to df
+    print("Data collected.", time.time() - start_time)
 
-        # Do some clean-up
-        df = df[
-            (df.qc1 == 0) & (df.qc3 == 0) &
-            (df.qc4 == 0) & (df.qc5 == 0) &
-            (df.qc16 == 0) & (df.qc17 == 0) &
-            (df.qc20 == 0)
-        ]
-        df = df[
-            ['zen', 'direct_n', 'diffuse', 'dw_ir', 'dw_solar', 'temp',
-             'rh', 'pressure']]  # reduce data columns
-        df['t_a'] = df.temp + 273.15  # convert celsius to kelvin
+    # Do some clean-up
+    df = df[
+        (df.qc1 == 0) & (df.qc3 == 0) &
+        (df.qc4 == 0) & (df.qc5 == 0) &
+        (df.qc16 == 0) & (df.qc17 == 0) &
+        (df.qc20 == 0)
+    ]
+    df = df[
+        ['zen', 'direct_n', 'diffuse', 'dw_ir', 'dw_solar', 'temp',
+         'rh', 'pressure']]  # reduce data columns
+    df['t_a'] = df.temp + 273.15  # convert celsius to kelvin
 
-        # remove negative GHI and DNI values
-        df = df.loc[(df.dw_solar > 0) & (df.direct_n > 0)]
+    # remove negative GHI and DNI values
+    df = df.loc[(df.dw_solar > 0) & (df.direct_n > 0)]
 
-        # apply clear sky analysis
-        location = pvlib.location.Location(lat, lon, altitude=alt)
-        cs_out = location.get_clearsky(df.index)
-        col_rename = {
-            'direct_n': 'DNI_m', 'dw_solar': 'GHI_m',
-            'ghi': 'GHI_c', 'dni': 'DNI_c'
-        }
-        df = df.merge(cs_out, how='outer', left_index=True, right_index=True)
-        df = df.rename(columns=col_rename)
-        print("QC and clear sky applied.", time.time() - start_time)
+    # apply clear sky analysis
+    location = pvlib.location.Location(lat, lon, altitude=alt)
+    cs_out = location.get_clearsky(df.index)
+    col_rename = {
+        'direct_n': 'DNI_m', 'dw_solar': 'GHI_m',
+        'ghi': 'GHI_c', 'dni': 'DNI_c'
+    }
+    df = df.merge(cs_out, how='outer', left_index=True, right_index=True)
+    df = df.rename(columns=col_rename)
+    print("QC and clear sky applied.", time.time() - start_time)
 
-        # Apply clear sky period filter
-        df = find_clearsky(df)
-        # need to apply clear sky filter before data is sampled
-        print("Clear sky filter applied.", time.time() - start_time)
+    # Apply clear sky period filter
+    df = find_clearsky(df)
+    # need to apply clear sky filter before data is sampled
+    print("Clear sky filter applied.", time.time() - start_time)
 
-        # Reduce sample size TODO remove later(?) (orig 1%)
-        df = df.sample(frac=0.05, random_state=96)
+    # Reduce sample size TODO remove later(?) (orig 1%)
+    df = df.sample(frac=0.05, random_state=96)
 
-        # Determine T_sky values, and correct for 3-50 micron range
-        temp = df.t_a.values
-        dwir = df.dw_ir.values
-        t_sky = []
-        dlw = []
-        for i in range(df.shape[0]):
-            ir, tsky = get_tsky(temp[i], dwir[i])
-            ir_act = SIGMA * tsky ** 4  # determine actual DLW using sky temp
-            t_sky.append(tsky)
-            dlw.append(ir_act)
-        df['t_sky'] = t_sky
-        df['lw_s'] = dlw
-        # df['kT'] = df.GHI_m / df.GHI_c
-        # kTc = df.GHI_m / df.GHI_c
-        # kTc[kTc > 1] = 1
-        # df['kTc'] = kTc
-        print("T_sky determined.", time.time() - start_time)
+    # Determine T_sky values, and correct for 3-50 micron range
+    temp = df.t_a.values
+    dwir = df.dw_ir.values
+    t_sky = []
+    dlw = []
+    for i in range(df.shape[0]):
+        ir, tsky = get_tsky(temp[i], dwir[i])
+        ir_act = SIGMA * tsky ** 4  # determine actual DLW using sky temp
+        t_sky.append(tsky)
+        dlw.append(ir_act)
+    df['t_sky'] = t_sky
+    df['lw_s'] = dlw
+    print("T_sky determined.", time.time() - start_time)
 
-        filename = os.path.join("data", "SURFRAD", f"{site}_{yr}.csv")
-        df.to_csv(filename)
-    else:
-        print(f"Error: {yr} is not available for {site_name}")
+    filename = os.path.join("data", "SURFRAD", f"{site}_{yr}.csv")
+    df.to_csv(filename)
 
     dt = time.time() - start_time
     print(f"Completed {site} in {dt:.0f}s")
@@ -749,41 +742,66 @@ if __name__ == "__main__":
     # plt.show()
 
     # df = pd.DataFrame()
-    df = import_cs_compare_csv("cs_compare_DRA.csv")
+    df = import_cs_compare_csv("cs_compare_2012.csv")
     # tmp = import_cs_compare_csv("cs_compare_2013.csv")
     # df = pd.concat([df, tmp])
     # df = df.loc[df.site != "BOU"]
     # df = df.loc[abs(df.t_a - 294.2) < 1]
-    df["pp"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
-    train_y = df.e_act_s.to_numpy()
-    train_x = df[["pp"]].to_numpy()
-    model = LinearRegression(fit_intercept=True)
-    # model = SGDRegressor(fit_intercept=True)
-    model.fit(train_x, train_y)
-    c2 = model.coef_[0].round(4)
-    c1 = model.intercept_.round(4)
-    pred_y = c1 + (c2 * df.pp)
-    rmse = np.sqrt(mean_squared_error(train_y, pred_y))
-    print("(c1, c2): ", c1, c2)
-    r2 = r2_score(train_y, pred_y)
-    print(rmse.round(5), r2.round(5))
+    # df["pp"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
+    # train_y = df.e_act_s.to_numpy()
+    # train_x = df[["pp"]].to_numpy()
+    # model = LinearRegression(fit_intercept=True)
+    # # model = SGDRegressor(fit_intercept=True)
+    # model.fit(train_x, train_y)
+    # c2 = model.coef_[0].round(4)
+    # c1 = model.intercept_.round(4)
+    # pred_y = c1 + (c2 * df.pp)
+    # rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+    # print("(c1, c2): ", c1, c2)
+    # r2 = r2_score(train_y, pred_y)
+    # print(rmse.round(5), r2.round(5))
+    #
+    # df["pp"] = (df.pw_hpa * 100) / P_ATM
+    # train_x = df.pp.to_numpy()
+    # out = curve_fit(
+    #     f=esky_format, xdata=train_x, ydata=train_y,
+    #     p0=[0.5, 0.0, 0.5], bounds=(-100, 100)
+    # )
+    # c1, c2, c3 = out[0]
+    # c1 = c1.round(4)
+    # c2 = c2.round(4)
+    # c3 = c3.round(4)
+    # pred_y = esky_format(train_x, c1, c2, c3)
+    # rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+    # print("(c1, c2, c3): ", c1, c2, c3)
+    # r2 = r2_score(train_y, pred_y)
+    # print(rmse.round(5), r2.round(5))
 
-    df["pp"] = (df.pw_hpa * 100) / P_ATM
-    train_x = df.pp.to_numpy()
-    out = curve_fit(
-        f=esky_format, xdata=train_x, ydata=train_y,
-        p0=[0.5, 0.0, 0.5], bounds=(-100, 100)
-    )
-    c1, c2, c3 = out[0]
-    c1 = c1.round(4)
-    c2 = c2.round(4)
-    c3 = c3.round(4)
-    pred_y = esky_format(train_x, c1, c2, c3)
-    rmse = np.sqrt(mean_squared_error(train_y, pred_y))
-    print("(c1, c2, c3): ", c1, c2, c3)
-    r2 = r2_score(train_y, pred_y)
-    print(rmse.round(5), r2.round(5))
+    tdp = np.linspace(-12, 23, 15)  # degC
+    pw = tdp2pw(tdp + 273.15)  # Pa
+    pw_hpa = pw / 100
 
+    li_adj = 0.585 + 0.057 * np.sqrt(pw_hpa)
+    bermar = 0.564 + 0.059 * np.sqrt(pw_hpa)
+    alados = 0.612 + 0.044 * np.sqrt(pw_hpa)
+    sellers = 0.605 + 0.048 * np.sqrt(pw_hpa)
+    li_new = 0.589 + 0.055 * np.sqrt(pw_hpa)
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.grid(alpha=0.1)
+    ax.plot(tdp, li_adj, label="Li (adjusted)")
+    ax.plot(tdp, sellers, label="Sellers, 1965")
+    ax.plot(tdp, bermar, label="Berdahl and Martin, 1984")
+    ax.plot(tdp, alados, label="Alados, 2012")
+    ax.plot(tdp, li_new, ls="--", c="0.8", label="0.589 + 0.055sqrt(Pw)")
+    ax.legend()
+    ax.set_ylim(0.6, 0.9)
+    ax.set_xlabel("Dew point temperature [deg C]")
+    ax.set_ylabel("Emittance [-]")
+    ax.set_axisbelow(True)
+    # plt.show()
+    filename = os.path.join("figures", "berdahl_fig1_tdp.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
 
 
 
