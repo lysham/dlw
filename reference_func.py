@@ -372,6 +372,10 @@ def plot_leinhard_fig1():
 
 # 4/7/23
 def plot_lwadjustment_vs_t_ir():
+    # originally generated in corr26b.py
+    filename = os.path.join("data", "tsky_table_3_50.csv")
+    f = pd.read_csv(filename)
+
     n = 20
     ta = np.linspace(240, 315, n)
     ir = np.linspace(300, 400, n)
@@ -380,7 +384,8 @@ def plot_lwadjustment_vs_t_ir():
     e_adj = np.zeros((n, n))
     for i in range(len(ta)):
         for j in range(len(ir)):
-            ts = get_tsky(ta[i], ir[j])[1]
+            # ts = get_tsky(ta[i], ir[j])[1]
+            ts = np.interp(ir[j], f['ir_meas'].values, f['tsky'].values)
             lw_corr[i, j] = SIGMA * np.power(ts, 4)
             lw_adj[i, j] = lw_corr[i, j] / ir[j]
             e_meas = ir[j] / (SIGMA * np.power(ta[i], 4))
@@ -399,21 +404,51 @@ def plot_lwadjustment_vs_t_ir():
     ax.set_yticklabels(ylabels)
     ax.set_xticklabels(xlabels, rotation=90)
     fig.colorbar(c, label="LW corr / LW meas [-]")
-    filename = os.path.join("figures", "LWadjustment_vs_T_IR.png")
+    # filename = os.path.join("figures", "LWadjustment_vs_T_IR.png")
+    filename = os.path.join("figures", "LWadjustment_vs_IR.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
 
-    # Essentially the exact same figure
-    fig, ax = plt.subplots()
-    c = ax.imshow(e_adj)
-    ax.set_xlabel("LW meas [W/m^2]")
-    ax.set_ylabel("Ta [K]")
-    ylabels = [f"{x:.2f}" for x in ta]
-    xlabels = [f"{x:.2f}" for x in ir]
-    ax.set_xticks(range(n))
-    ax.set_yticks(range(n))
-    ax.set_yticklabels(ylabels)
-    ax.set_xticklabels(xlabels, rotation=90)
-    fig.colorbar(c, label="e corr / e meas [-]")
+    # # Essentially the exact same figure
+    # fig, ax = plt.subplots()
+    # c = ax.imshow(e_adj)
+    # ax.set_xlabel("LW meas [W/m^2]")
+    # ax.set_ylabel("Ta [K]")
+    # ylabels = [f"{x:.2f}" for x in ta]
+    # xlabels = [f"{x:.2f}" for x in ir]
+    # ax.set_xticks(range(n))
+    # ax.set_yticks(range(n))
+    # ax.set_yticklabels(ylabels)
+    # ax.set_xticklabels(xlabels, rotation=90)
+    # fig.colorbar(c, label="e corr / e meas [-]")
+    return None
+
+
+def plot_berdahl_fig1_tdp():
+    tdp = np.linspace(-12, 23, 15)  # degC
+    pw = tdp2pw(tdp + 273.15)  # Pa
+    pw_hpa = pw / 100
+
+    li_adj = 0.585 + 0.057 * np.sqrt(pw_hpa)
+    bermar = 0.564 + 0.059 * np.sqrt(pw_hpa)
+    alados = 0.612 + 0.044 * np.sqrt(pw_hpa)
+    sellers = 0.605 + 0.048 * np.sqrt(pw_hpa)
+    li_new = 0.589 + 0.055 * np.sqrt(pw_hpa)
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.grid(alpha=0.1)
+    ax.plot(tdp, li_adj, label="Li (adjusted)")
+    ax.plot(tdp, sellers, label="Sellers, 1965")
+    ax.plot(tdp, bermar, label="Berdahl and Martin, 1984")
+    ax.plot(tdp, alados, label="Alados, 2012")
+    ax.plot(tdp, li_new, ls="--", c="0.8", label="0.589 + 0.055sqrt(Pw)")
+    ax.legend()
+    ax.set_ylim(0.6, 0.9)
+    ax.set_xlabel("Dew point temperature [deg C]")
+    ax.set_ylabel("Emittance [-]")
+    ax.set_axisbelow(True)
+    # plt.show()
+    filename = os.path.join("figures", "berdahl_fig1_tdp.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 
 
