@@ -452,5 +452,37 @@ def plot_berdahl_fig1_tdp():
     return None
 
 
+def plot_f3_f4_comparisons():
+    f3 = pd.read_csv(os.path.join("data", "tsky_table_3_50.csv"))
+    f4 = pd.read_csv(os.path.join("data", "tsky_table_4_50.csv"))
+    f3["fl"] = f3.ir_meas / (SIGMA * np.power(f3.tsky, 4))
+    f4["fl"] = f4.ir_meas / (SIGMA * np.power(f4.tsky, 4))
+    f3 = f3.set_index("ir_meas")
+    f4 = f4.set_index("ir_meas")
+    df = f3.join(f4, lsuffix="_f3", rsuffix="_f4")
+
+    df["d_tsky"] = np.abs(df.tsky_f3 - df.tsky_f4)
+    df["d_fl"] = np.abs(df.fl_f3 - df.fl_f4)
+    df["d_lw"] = np.abs((SIGMA * np.power(df.tsky_f3, 4)) -
+                        (SIGMA * np.power(df.tsky_f4, 4)))
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.grid(alpha=0.3)
+    dlw3 = SIGMA * np.power(df.tsky_f3, 4)
+    dlw4 = SIGMA * np.power(df.tsky_f4, 4)
+    ax.plot(df.index, dlw3, label="3-50")
+    ax.plot(df.index, dlw4, ls="--", label="4-50")
+    ax.set_xlim(df.index[0], df.index[-1])
+    ax.set_xlabel("IR measured [W/m$^2$]")
+    # ax.set_ylabel("T_sky [K]")
+    ax.set_ylabel("DLW [W/m$^2$]")
+    # ax.set_ylabel(r"$\Delta$ T_sky [K]")
+    # ax.set_ylabel(r"$\Delta$ DLW [W/m$^2$]")
+    ax.legend()
+    filename = os.path.join("figures", "dlw_vs_ir.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
 if __name__ == "__main__":
     print()
