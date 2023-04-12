@@ -1,6 +1,10 @@
 SIGMA = 5.6697e-8  # W/m^2 K^4
 P_ATM = 101325  # Pa
 
+# radiative constants
+E_C1 = 3.7418e8  # W um^4 / m^2 ~> 2*pi*h*c^2
+E_C2 = 1.4389e4  # um K         ~> hc/k_B
+
 SURFRAD_SITES = [
     'Bondville_IL', 'Boulder_CO', 'Desert_Rock_NV', 'Fort_Peck_MT',
     'Goodwin_Creek_MS', 'Penn_State_PA', 'Sioux_Falls_SD']  # Tbl 1
