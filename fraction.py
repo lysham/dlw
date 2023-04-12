@@ -6,11 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy import integrate, special
 
-from constants import SIGMA
-
-# radiative constants
-E_C1 = 3.7418e8  # W um^4 / m^2 ~> 2*pi*h*c^2
-E_C2 = 1.4389e4  # um K         ~> hc/k_B
+from constants import SIGMA, E_C1, E_C2
 
 
 def planck_lambda(l, t):
