@@ -40,16 +40,17 @@ def int_func(x, t):
     return out
 
 
-def get_tsky(t, ir_mea):
+def get_tsky(t, ir_mea, l1=3, l2=50):
     # function to iteratively solve for T_sky
-    l1 = 3  # um
-    l2 = 50  # um
+    # l1 = 3  # um
+    # l2 = 50  # um
     c1 = 3.7418e8  # W um^4 / m^2 ~> 2*pi*h*c^2
     c2 = 1.4389e4  # um K         ~> hc/k_B
     y = lambda x: (c1 * np.power(x, -5)) / (np.exp(c2 / (x * t)) - 1)
     out = integrate.quad(func=y, a=l1, b=l2)
     result = out[0]  # output: result, error, infodict(?), message, ...
     delta = ir_mea - result
+    print(t, delta)
 
     delta_thresh = 0.1  # SET: within 0.1 W/m^2 of measured DLW is good enough
     if (delta > 0) & (np.abs(delta) > delta_thresh):  # if delta>0 guessed Tsky should increase
@@ -594,6 +595,10 @@ def create_cs_compare_csv(xvar, const, xlist):
 def import_cs_compare_csv(csvname, site=None):
     filename = os.path.join("data", "cs_compare", csvname)
     df = pd.read_csv(filename, index_col=0, parse_dates=True)
+    # update 4/11/23
+    df["esky_c"] = 0.6224 + 1.7108 * ((df.pw_hpa * 100) / P_ATM)
+    df["lw_c"] = df.esky_c * SIGMA * np.power(df.t_a, 4)
+
     df["e_act"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))
     df["e_act_s"] = df.lw_s / (SIGMA * np.power(df.t_a, 4))
     df["lw_err_t"] = df.lw_c_t - df.dw_ir
@@ -777,31 +782,62 @@ if __name__ == "__main__":
     # r2 = r2_score(train_y, pred_y)
     # print(rmse.round(5), r2.round(5))
 
-    tdp = np.linspace(-12, 23, 15)  # degC
-    pw = tdp2pw(tdp + 273.15)  # Pa
-    pw_hpa = pw / 100
+    # tdp = np.linspace(-12, 23, 15)  # degC
+    # pw = tdp2pw(tdp + 273.15)  # Pa
+    # pw_hpa = pw / 100
+    #
+    # li_adj = 0.585 + 0.057 * np.sqrt(pw_hpa)
+    # bermar = 0.564 + 0.059 * np.sqrt(pw_hpa)
+    # alados = 0.612 + 0.044 * np.sqrt(pw_hpa)
+    # sellers = 0.605 + 0.048 * np.sqrt(pw_hpa)
+    # li_new = 0.589 + 0.055 * np.sqrt(pw_hpa)
 
-    li_adj = 0.585 + 0.057 * np.sqrt(pw_hpa)
-    bermar = 0.564 + 0.059 * np.sqrt(pw_hpa)
-    alados = 0.612 + 0.044 * np.sqrt(pw_hpa)
-    sellers = 0.605 + 0.048 * np.sqrt(pw_hpa)
-    li_new = 0.589 + 0.055 * np.sqrt(pw_hpa)
+    # fig, ax = plt.subplots(figsize=(8, 4))
+    # ax.grid(alpha=0.1)
+    # ax.plot(tdp, li_adj, label="Li (adjusted)")
+    # ax.plot(tdp, sellers, label="Sellers, 1965")
+    # ax.plot(tdp, bermar, label="Berdahl and Martin, 1984")
+    # ax.plot(tdp, alados, label="Alados, 2012")
+    # ax.plot(tdp, li_new, ls="--", c="0.8", label="0.589 + 0.055sqrt(Pw)")
+    # ax.legend()
+    # ax.set_ylim(0.6, 0.9)
+    # ax.set_xlabel("Dew point temperature [deg C]")
+    # ax.set_ylabel("Emittance [-]")
+    # ax.set_axisbelow(True)
+    # # plt.show()
+    # filename = os.path.join("figures", "berdahl_fig1_tdp.png")
+    # fig.savefig(filename, bbox_inches="tight", dpi=300)
 
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.grid(alpha=0.1)
-    ax.plot(tdp, li_adj, label="Li (adjusted)")
-    ax.plot(tdp, sellers, label="Sellers, 1965")
-    ax.plot(tdp, bermar, label="Berdahl and Martin, 1984")
-    ax.plot(tdp, alados, label="Alados, 2012")
-    ax.plot(tdp, li_new, ls="--", c="0.8", label="0.589 + 0.055sqrt(Pw)")
-    ax.legend()
-    ax.set_ylim(0.6, 0.9)
-    ax.set_xlabel("Dew point temperature [deg C]")
-    ax.set_ylabel("Emittance [-]")
-    ax.set_axisbelow(True)
+    # 4/11/23
+    # pdf = df.loc[abs(df.t_a - 294.2) < 1].copy()
+    # fig, ax = plt.subplots()
+    # for s, group in pdf.groupby(pdf.site):
+    #     ax.hist(group.lw_err_b, bins=30, alpha=0.3, label=s)
+    #     print(s, pdf.lw_err_b.mean())
+    # ax.legend()
     # plt.show()
-    filename = os.path.join("figures", "berdahl_fig1_tdp.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    #
+    # pdf["x"] = pdf.pw_hpa - 1000
+    # pdf[["lw_err_b", "pa_hpa", "rh", "pw_hpa", "lw_c_t"]].corr()
 
+    # start_time = time.time()
+    # ir = np.linspace(100, 500, 6)
+    # tsky = np.zeros(len(ir))
+    # for i in range(len(ir)):
+    #     tsky[i] = get_tsky(273, ir[i], l1=4, l2=50)[1]
+    # print(ir, tsky)
+    # df = pd.DataFrame({"ir_meas": ir, "tsky": tsky})
+    # filename = os.path.join("data", "tsky_table_4_50.csv")
+    # df.to_csv(filename)
+    # end_time = time.time()
+    # print(end_time - start_time)
 
+    filename = os.path.join("data", "tsky_table_3_50.csv")
+    f = pd.read_csv(filename, index_col=0)
+    # filename = os.path.join("data", "tsky_table_4_50.csv")
+    # d2 = pd.read_csv(filename, index_col=0)
+    fit = np.interp(df['dw_ir'].values, f['ir_meas'].values, f['tsky'].values)
+    df['tsky2'] = fit
+    df["x"] = SIGMA * np.power(df.tsky2, 4)
+    plt.hist(df.lw_s - df.x, bins=30)  # very little variation in lw +/- 0.15
 
