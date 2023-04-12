@@ -23,21 +23,7 @@ from main import get_pw, get_esky_c, li_lw, CORR26A, compute_mbe, pw2tdp, tdp2pw
 from pcmap_data_funcs import get_asos_stations
 
 from constants import SIGMA, SURFRAD, SURF_COLS, SURF_ASOS, SURF_SITE_CODES, \
-    P_ATM
-
-
-# def pw_tdp(t_a, rh):
-#     # the function of calculating Pw(Pa) and Tdp(C)
-#     pw = 610.94 * (rh / 100) * np.exp(17.625 * (t_a - 273.15) / (t_a - 30.11))
-#     tdp = (243.04 * np.log(pw / 610.94)) / (17.625 - np.log(pw / 610.94))
-#     return pw, tdp
-
-
-def int_func(x, t):
-    c1 = 3.7418e8  # W um^4 / m^2 ~> 2*pi*h*c^2
-    c2 = 1.4389e4  # um K         ~> hc/k_B
-    out = (c1 * x ** -5) / (np.exp(c2 / (x * t)) - 1)
-    return out
+    P_ATM, E_C1, E_C2
 
 
 def tsky_table(l1, l2):
@@ -58,14 +44,16 @@ def tsky_table(l1, l2):
     ir = np.linspace(70, 500, 1000)
     tsky = np.zeros(len(ir))
     for i in range(len(ir)):
-        if ir[i] < 200:
-            t = 210
+        if ir[i] < 100:  # semi-optimize first guess to speed up process
+            t = 200
+        elif 100 <= ir[i] < 200:
+            t = 230
         elif 200 <= ir[i] < 300:
-            t = 250
+            t = 260
         elif 300 <= ir[i] < 400:
             t = 280
         else:
-            t = 295
+            t = 300
         tsky[i] = get_tsky(t, ir[i], l1=l1, l2=l2)[1]
     df = pd.DataFrame({"ir_meas": ir, "tsky": tsky})
     filename = os.path.join("data", f"tsky_table_{l1}_{l2}.csv")
@@ -75,31 +63,23 @@ def tsky_table(l1, l2):
 
 def get_tsky(t, ir_mea, l1=3, l2=50):
     # function to recursively solve for T_sky
-    # l1 = 3  # um
-    # l2 = 50  # um
-    c1 = 3.7418e8  # W um^4 / m^2 ~> 2*pi*h*c^2
-    c2 = 1.4389e4  # um K         ~> hc/k_B
-    y = lambda x: (c1 * np.power(x, -5)) / (np.exp(c2 / (x * t)) - 1)
+    y = lambda x: (E_C1 * np.power(x, -5)) / (np.exp(E_C2 / (x * t)) - 1)
     out = integrate.quad(func=y, a=l1, b=l2)
     result = out[0]  # output: result, error, infodict(?), message, ...
     delta = ir_mea - result
-
-    delta_thresh = 0.1  # SET: within 0.1 W/m^2 of measured DLW is good enough
+    delta_thresh = 0.1
+    # if delta > (delta_thresh * 100):
+    #     step = 0.1
+    # else:
+    step = 0.01
     if (delta > 0) & (np.abs(delta) > delta_thresh):
         # if delta>0 guessed Tsky should increase
-        t = t * 1.01
-        result, t = get_tsky(t, ir_mea)
+        t = t * (1 + step)
+        result, t = get_tsky(t, ir_mea, l1=l1, l2=l2)
     elif (delta < 0) & (np.abs(delta) > delta_thresh):
-        t = t * 0.99
-        result, t = get_tsky(t, ir_mea)
+        t = t * (1 - step)
+        result, t = get_tsky(t, ir_mea, l1=l1, l2=l2)
     return result, t
-
-
-def get_pw_esky(rh, t):
-    pw = 610.94 * (rh / 100) * (np.exp(17.625 * (t - 273.15) / (t - 30.11)))
-    # (22a) -- daytime clear-sky model Pw in hPa
-    esky = 0.598 + 0.057 * np.sqrt(pw / 100)
-    return esky, pw
 
 
 def import_asos_yr(yr):
@@ -320,7 +300,7 @@ def retrieve_asos_site_info(site):
     return asos_site
 
 
-def cs_metrics_1to5(obs, clr, thresholds="ghi"):
+def get_cs_metrics_1to5(obs, clr, thresholds="ghi"):
     """
     Supporting function to determine clear sky periods using thresholds set
     in Section 3.2 in Li et al. 2017
@@ -398,11 +378,11 @@ def find_clearsky(df):
         if npts_check & day_check:
             obs = sw.GHI_m.to_numpy()
             clr = sw.GHI_c.to_numpy()
-            ghi_metrics_sum = cs_metrics_1to5(obs, clr, thresholds="ghi")
+            ghi_metrics_sum = get_cs_metrics_1to5(obs, clr, thresholds="ghi")
 
             obs = sw.DNI_m.to_numpy()
             clr = sw.DNI_c.to_numpy()
-            dni_metrics_sum = cs_metrics_1to5(obs, clr, thresholds="dni")
+            dni_metrics_sum = get_cs_metrics_1to5(obs, clr, thresholds="dni")
 
             if ghi_metrics_sum + dni_metrics_sum == 10:
                 # all 10 criteria passed as true
@@ -623,11 +603,14 @@ def import_cs_compare_csv(csvname, site=None):
     filename = os.path.join("data", "cs_compare", csvname)
     df = pd.read_csv(filename, index_col=0, parse_dates=True)
     # update 4/11/23 - after lookup table change
-    filename = os.path.join("data", "tsky_table_3_50.csv")
-    f = pd.read_csv(filename, index_col=0)
-    fit = np.interp(df['dw_ir'].values, f['ir_meas'].values, f['tsky'].values)
-    df['tsky2'] = fit
-    df["lw_s2"] = SIGMA * np.power(df.tsky2, 4)
+    f3 = pd.read_csv(os.path.join("data", "tsky_table_3_50.csv"))
+    f4 = pd.read_csv(os.path.join("data", "tsky_table_4_50.csv"))
+    fit = np.interp(df['dw_ir'].values, f3['ir_meas'].values, f3['tsky'].values)
+    df['tsky3'] = fit
+    df["lw_s3"] = SIGMA * np.power(df.tsky3, 4)
+    fit = np.interp(df['dw_ir'].values, f4['ir_meas'].values, f4['tsky'].values)
+    df['tsky4'] = fit
+    df["lw_s4"] = SIGMA * np.power(df.tsky4, 4)
     # df["esky_c2"] = df.lw_s2 / (SIGMA * np.power(df.t_a, 4))
 
     df["esky_c"] = 0.6224 + 1.7108 * ((df.pw_hpa * 100) / P_ATM)
@@ -635,7 +618,8 @@ def import_cs_compare_csv(csvname, site=None):
 
     df["e_act"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))
     df["e_act_s"] = df.lw_s / (SIGMA * np.power(df.t_a, 4))
-    df["e_act_s2"] = df.lw_s2 / (SIGMA * np.power(df.t_a, 4))
+    df["e_act_s3"] = df.lw_s3 / (SIGMA * np.power(df.t_a, 4))
+    df["e_act_s4"] = df.lw_s4 / (SIGMA * np.power(df.t_a, 4))
 
     df["lw_err_t"] = df.lw_c_t - df.dw_ir
     df["lw_err_b"] = df.lw_c - df.lw_s
@@ -794,7 +778,7 @@ if __name__ == "__main__":
 
     # linear regression
     df["pp"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
-    train_y = df.e_act_s2.to_numpy()
+    train_y = df.e_act_s4.to_numpy()
     train_x = df[["pp"]].to_numpy()
     model = LinearRegression(fit_intercept=True)
     # model = SGDRegressor(fit_intercept=True)
@@ -807,22 +791,22 @@ if __name__ == "__main__":
     r2 = r2_score(train_y, pred_y)
     print(rmse.round(5), r2.round(5))
 
-    # curve fitting
-    df["pp"] = (df.pw_hpa * 100) / P_ATM
-    train_x = df.pp.to_numpy()
-    out = curve_fit(
-        f=esky_format, xdata=train_x, ydata=train_y,
-        p0=[0.5, 0.0, 0.5], bounds=(-100, 100)
-    )
-    c1, c2, c3 = out[0]
-    c1 = c1.round(4)
-    c2 = c2.round(4)
-    c3 = c3.round(4)
-    pred_y = esky_format(train_x, c1, c2, c3)
-    rmse = np.sqrt(mean_squared_error(train_y, pred_y))
-    print("(c1, c2, c3): ", c1, c2, c3)
-    r2 = r2_score(train_y, pred_y)
-    print(rmse.round(5), r2.round(5))
+    # # curve fitting
+    # df["pp"] = (df.pw_hpa * 100) / P_ATM
+    # train_x = df.pp.to_numpy()
+    # out = curve_fit(
+    #     f=esky_format, xdata=train_x, ydata=train_y,
+    #     p0=[0.5, 0.0, 0.5], bounds=(-100, 100)
+    # )
+    # c1, c2, c3 = out[0]
+    # c1 = c1.round(4)
+    # c2 = c2.round(4)
+    # c3 = c3.round(4)
+    # pred_y = esky_format(train_x, c1, c2, c3)
+    # rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+    # print("(c1, c2, c3): ", c1, c2, c3)
+    # r2 = r2_score(train_y, pred_y)
+    # print(rmse.round(5), r2.round(5))
 
     # 4/11/23
     # pdf = df.loc[abs(df.t_a - 294.2) < 1].copy()
@@ -836,10 +820,35 @@ if __name__ == "__main__":
     # pdf["x"] = pdf.pw_hpa - 1000
     # pdf[["lw_err_b", "pa_hpa", "rh", "pw_hpa", "lw_c_t"]].corr()
 
+    start_time = time.time()
+    tsky_table(3, 50)
+    tsky_table(4, 50)
+    print(time.time() - start_time)
+
     f3 = pd.read_csv(os.path.join("data", "tsky_table_3_50.csv"))
     f4 = pd.read_csv(os.path.join("data", "tsky_table_4_50.csv"))
     f3["fl"] = f3.ir_meas / (SIGMA * np.power(f3.tsky, 4))
     f4["fl"] = f4.ir_meas / (SIGMA * np.power(f4.tsky, 4))
+    f3 = f3.set_index("ir_meas")
+    f4 = f4.set_index("ir_meas")
+    df = f3.join(f4, lsuffix="_f3", rsuffix="_f4")
 
-    x = f4.fl - f3.fl
-    print(x.max())
+    df["d_tsky"] = np.abs(df.tsky_f3 - df.tsky_f4)
+    df["d_fl"] = np.abs(df.fl_f3 - df.fl_f4)
+    df["d_lw"] = np.abs((SIGMA * np.power(df.tsky_f3, 4)) -
+                        (SIGMA * np.power(df.tsky_f4, 4)))
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.grid(alpha=0.3)
+    dlw3 = SIGMA * np.power(df.tsky_f3, 4)
+    dlw4 = SIGMA * np.power(df.tsky_f4, 4)
+    # ax.plot(df.index, df.tsky_f3 - df.tsky_f4, label="3-50")
+    ax.plot(df.index, dlw3 - dlw4)
+    # ax.plot(df.index, dlw4, ls="--", label="4-50")
+    ax.set_xlim(df.index[0], df.index[-1])
+    ax.set_xlabel("IR measured [W/m$^2$]")
+    # ax.set_ylabel(r"$\Delta$ T_sky [K]")
+    ax.set_ylabel(r"$\Delta$ DLW [W/m$^2$]")
+    # ax.legend()
+    filename = os.path.join("figures", "tmp.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
