@@ -239,6 +239,7 @@ if __name__ == "__main__":
     ax.plot(x, df.total, label="LBL")
     ax.plot(x, df.pred_y, ls="--", label="regression")
     ax.set_ylim(0.5, 0.9)
+    ax.legend()
     plt.show()
 
     rmse = np.sqrt(mean_squared_error(df.total, df.pred_y))
@@ -258,7 +259,7 @@ if __name__ == "__main__":
     rmse = np.sqrt(mean_squared_error(train_y, pred_y))
     print("(c1, c2): ", c1, c2)
     r2 = r2_score(df.total, df.pred_y)
-    print(rmse, r2)
+    print(rmse.round(5), r2.round(5))
 
     train_x = df.pw.to_numpy()
     out = curve_fit(
@@ -273,6 +274,6 @@ if __name__ == "__main__":
     rmse = np.sqrt(mean_squared_error(train_y, pred_y))
     print("(c1, c2, c3): ", c1, c2, c3)
     r2 = r2_score(df.total, df.pred_y)
-    print(rmse, r2)
+    print(rmse.round(5), r2.round(5))
 
 
