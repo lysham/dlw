@@ -611,7 +611,6 @@ def import_cs_compare_csv(csvname, site=None):
     fit = np.interp(df['dw_ir'].values, f4['ir_meas'].values, f4['tsky'].values)
     df['tsky4'] = fit
     df["lw_s4"] = SIGMA * np.power(df.tsky4, 4)
-    # df["esky_c2"] = df.lw_s2 / (SIGMA * np.power(df.t_a, 4))
 
     df["esky_c"] = 0.6224 + 1.7108 * ((df.pw_hpa * 100) / P_ATM)
     df["lw_c"] = df.esky_c * SIGMA * np.power(df.t_a, 4)
@@ -706,7 +705,16 @@ def esky_format(x, c1, c2, c3):
 
 if __name__ == "__main__":
     print()
-    # process_site("GWC", yr="2013")
+    # TODO rerun all sites for 2012
+    # start_time = time.time()
+    # for yr in [2012, 2013, 2014, 2015, 2016]:
+    #     process_site("GWC", yr=str(yr))
+    #     print(yr, time.time() - start_time)
+
+    # start_time = time.time()
+    # tsky_table(3, 50)
+    # tsky_table(4, 50)
+    # print(time.time() - start_time)
 
     # # ASOS
     # # TODO create look up table for closest ASOS station
@@ -724,7 +732,7 @@ if __name__ == "__main__":
     # CREATE CS_COMPARE
     # create_cs_compare_csv(xvar="site", const="2013", xlist=SURF_SITE_CODES)
     # xlist = [2012, 2013, 2014, 2015, 2016]
-    # create_cs_compare_csv(xvar="year", const="DRA", xlist=xlist)
+    # create_cs_compare_csv(xvar="year", const="GWC", xlist=xlist)
 
     # GRAPH histograms of error by quartile of some humidity metric
     # df = import_cs_compare_csv("cs_compare_2012.csv")
@@ -736,49 +744,60 @@ if __name__ == "__main__":
     # Compare e_sky_c fits on different pressure and LW variables
     # compare_esky_fits(p="scaled", lw="", tra_yr=2012, val_yr=2013, rm_loc=None)
 
-    # # back out tsky
-    # df = df.assign(tsky=np.power(df.lw_s / SIGMA, 0.25))
-    # # add dt / t_m
-    # df["dt"] = df.t_a - df.tsky
-    # df["t_m"] = (df.t_a + df.tsky) / 2
-    # df["m"] = df.dt / df.t_m
-    #
-    # fig, ax = plt.subplots()
-    # pdf = df.sample(frac=0.1, random_state=96)
-    # ax.scatter(pdf.t_a, pdf.tsky, alpha=0.1)
-    # ax.axline((300, 300), slope=1, ls="--", c="0.5")
-    # x1, x2 = (230, 320)
-    # ax.set_xlim(x1, x2)
-    # ax.set_ylim(x1, x2)
-    # ax.set_xlabel(r"$T_a$ [K]")
-    # ax.set_ylabel(r"$T_{sky}$ [K]")
-    # filename = os.path.join("figures", "Tsky_v_Ta.png")
-    # fig.savefig(filename, bbox_inches="tight", dpi=300)
-
     # df = import_cs_compare_csv("cs_compare_2012.csv")
-    # pdf = df.sample(frac=0.1, random_state=31)
-    # pdf["lw_up"] = SIGMA*np.power(pdf.t_a, 4)
-    # pdf["lw_diff"] = pdf.lw_up - pdf.dw_ir
-    # # pdf.lw_diff.describe()
-    #
-    # fig, ax = plt.subplots()
-    # ax.scatter(pdf.dw_ir, pdf.lw_up, alpha=0.3)
-    # ax.axline((300, 300), slope=1, c="0.3")
-    # plt.show()
-
-    # df = pd.DataFrame()
-
-    df = import_cs_compare_csv("cs_compare_2012.csv")
-    # tmp = import_cs_compare_csv("cs_compare_2013.csv")
+    # df = df.sample(frac=0.25, random_state=96)
+    df = import_cs_compare_csv("cs_compare_2013.csv")
     # df = pd.concat([df, tmp])
 
+    df["pp"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
+    df["e"] = 0.6376 + (1.6026 * df.pp)  # IJHMT fit
+    # df["e"] = 0.6223 + (1.7209 * df.pp)  # 2012 no BOU fit
+    df["lw_e"] = df.e * SIGMA * np.power(df.t_a, 4)
+    df["lw_err_e"] = df.lw_e - df.lw_s3
+    elev_dict = {}
+    for i in SURFRAD:
+        elev_dict[i] = SURFRAD[i]["alt"]
+    df["elev"] = df["site"].map(elev_dict)
+    elevations = sorted(elev_dict.items(), key=lambda x: x[1])  # sort by elev
+
+    df["P_rep"] = P_ATM * np.exp(-1 * df.elev / 8500)  # Pa
+    df["de_p"] = 0.00012 * ((df.P_rep / 100) - 1000)
+    # train_x = (df[["P_rep"]].to_numpy() - 100000) / 1000  # dP in kPa
+    # df["derr"] = df.e_act_s - df.e
+    # train_y = df.derr.to_numpy()
+    # model = LinearRegression(fit_intercept=False)
+    # model.fit(train_x, train_y)
+    # c = model.coef_[0].round(4)  # honestly backed out c = 0.0012
+
+    df["e_alt"] = df.e + df.de_p
+    df["lw_e_alt"] = df.e_alt * SIGMA * np.power(df.t_a, 4)
+    df["lw_err_alt"] = df.lw_e_alt - df.lw_s3
+
+    fig, axes = plt.subplots(7, 1, figsize=(5, 8), sharex=True)
+    i = 0
+    for s, alt in elevations:
+        ax = axes[i]
+        ax.grid(axis="x", alpha=0.3)
+        pdf = df.loc[df.site == s]
+        ax.axvline(0, c="k", alpha=0.9, zorder=0)
+        ax.hist(pdf.lw_err_alt, bins=50, alpha=0.9)
+        rmse = np.sqrt(mean_squared_error(pdf.lw_s3, pdf.lw_e_alt))
+        ax.set_title(f"{s} [{alt:}m] (rmse={rmse:.2f})", loc="left")
+        i += 1
+        ax.set_axisbelow(True)
+    ax.set_xlabel("LW_pred - LW_target")
+    plt.tight_layout()
+    filename = os.path.join("figures", "cs2013_LWerr_vs_elev.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+
     # start filtering
-    df = df.loc[df.site != "BOU"]
+    # df = df.loc[df.site != "GWC"]
     # df = df.loc[abs(df.t_a - 294.2) < 1]
 
     # linear regression
     df["pp"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
-    train_y = df.e_act_s4.to_numpy()
+    # for yr, pdf in df.groupby(df.index.year):
+    train_y = df.e_act_s.to_numpy()
     train_x = df[["pp"]].to_numpy()
     model = LinearRegression(fit_intercept=True)
     # model = SGDRegressor(fit_intercept=True)
@@ -789,7 +808,16 @@ if __name__ == "__main__":
     rmse = np.sqrt(mean_squared_error(train_y, pred_y))
     print("(c1, c2): ", c1, c2)
     r2 = r2_score(train_y, pred_y)
-    print(rmse.round(5), r2.round(5))
+    print(rmse.round(5), r2.round(5), df.shape[0])
+
+    # fig, ax = plt.subplots()
+    # # for yr, group in df.groupby(df.index.year):
+    # ax.scatter(df.pp, df.e_act_s3, alpha=0.1)
+    # pp = np.linspace(0.02, 0.182, 15)
+    # y = c1 + (c2 * pp)
+    # ax.plot(pp, y, "k--")
+    # # ax.legend()
+    # plt.show()
 
     # # curve fitting
     # df["pp"] = (df.pw_hpa * 100) / P_ATM
@@ -818,37 +846,5 @@ if __name__ == "__main__":
     # plt.show()
     #
     # pdf["x"] = pdf.pw_hpa - 1000
-    # pdf[["lw_err_b", "pa_hpa", "rh", "pw_hpa", "lw_c_t"]].corr()
 
-    start_time = time.time()
-    tsky_table(3, 50)
-    tsky_table(4, 50)
-    print(time.time() - start_time)
-
-    f3 = pd.read_csv(os.path.join("data", "tsky_table_3_50.csv"))
-    f4 = pd.read_csv(os.path.join("data", "tsky_table_4_50.csv"))
-    f3["fl"] = f3.ir_meas / (SIGMA * np.power(f3.tsky, 4))
-    f4["fl"] = f4.ir_meas / (SIGMA * np.power(f4.tsky, 4))
-    f3 = f3.set_index("ir_meas")
-    f4 = f4.set_index("ir_meas")
-    df = f3.join(f4, lsuffix="_f3", rsuffix="_f4")
-
-    df["d_tsky"] = np.abs(df.tsky_f3 - df.tsky_f4)
-    df["d_fl"] = np.abs(df.fl_f3 - df.fl_f4)
-    df["d_lw"] = np.abs((SIGMA * np.power(df.tsky_f3, 4)) -
-                        (SIGMA * np.power(df.tsky_f4, 4)))
-
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.grid(alpha=0.3)
-    dlw3 = SIGMA * np.power(df.tsky_f3, 4)
-    dlw4 = SIGMA * np.power(df.tsky_f4, 4)
-    # ax.plot(df.index, df.tsky_f3 - df.tsky_f4, label="3-50")
-    ax.plot(df.index, dlw3 - dlw4)
-    # ax.plot(df.index, dlw4, ls="--", label="4-50")
-    ax.set_xlim(df.index[0], df.index[-1])
-    ax.set_xlabel("IR measured [W/m$^2$]")
-    # ax.set_ylabel(r"$\Delta$ T_sky [K]")
-    ax.set_ylabel(r"$\Delta$ DLW [W/m$^2$]")
-    # ax.legend()
-    filename = os.path.join("figures", "tmp.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    df[["lw_err_b", "pa_hpa", "rh", "lw_err_e", "elev", "P_rep"]].corr()
