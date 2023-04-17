@@ -23,7 +23,7 @@ from main import get_pw, get_esky_c, li_lw, CORR26A, compute_mbe, pw2tdp, tdp2pw
 from pcmap_data_funcs import get_asos_stations
 
 from constants import SIGMA, SURFRAD, SURF_COLS, SURF_ASOS, SURF_SITE_CODES, \
-    P_ATM, E_C1, E_C2
+    P_ATM, E_C1, E_C2, ELEV_DICT, ELEVATIONS, LON_DICT
 
 
 def tsky_table(l1, l2):
@@ -602,28 +602,36 @@ def create_cs_compare_csv(xvar, const, xlist):
 def import_cs_compare_csv(csvname, site=None):
     filename = os.path.join("data", "cs_compare", csvname)
     df = pd.read_csv(filename, index_col=0, parse_dates=True)
-    # update 4/11/23 - after lookup table change
-    f3 = pd.read_csv(os.path.join("data", "tsky_table_3_50.csv"))
-    f4 = pd.read_csv(os.path.join("data", "tsky_table_4_50.csv"))
-    fit = np.interp(df['dw_ir'].values, f3['ir_meas'].values, f3['tsky'].values)
-    df['tsky3'] = fit
-    df["lw_s3"] = SIGMA * np.power(df.tsky3, 4)
-    fit = np.interp(df['dw_ir'].values, f4['ir_meas'].values, f4['tsky'].values)
-    df['tsky4'] = fit
-    df["lw_s4"] = SIGMA * np.power(df.tsky4, 4)
+    if site is not None:
+        df = df.loc[df.site == site]
+    df["elev"] = df["site"].map(ELEV_DICT)  # Add elevation
+    # add altitude correction
+    df["P_rep"] = P_ATM * np.exp(-1 * df.elev / 8500)  # Pa
+    df["de_p"] = 0.00012 * ((df.P_rep / 100) - 1000)
 
-    df["esky_c"] = 0.6224 + 1.7108 * ((df.pw_hpa * 100) / P_ATM)
+    # add solar time correction
+    doy = df.index.dayofyear.to_numpy()
+    eq_of_time = pvlib.solarposition.equation_of_time_spencer71(doy)
+    df["lon"] = df["site"].map(LON_DICT)
+    df["dloc"] = 4 * df.lon
+    minutes = df.dloc + eq_of_time  # difference in min
+    df["dtime"] = pd.to_timedelta(minutes, unit="m")
+    df["solar_time"] = df.index + df.dtime
+    df = df.drop(columns=["dtime", "lon", "dloc"])
+    # add solar time correction
+    tmp = pd.DatetimeIndex(df.solar_time.copy())
+    t = tmp.hour + (tmp.minute / 60) + (tmp.second / 3600)
+    df["de_t"] = 0.013 * np.cos(np.pi * (t / 12))
+
+    # IJHMT fit
+    df["esky_c"] = 0.6376 + 1.6026 * np.sqrt((df.pw_hpa * 100) / P_ATM)
     df["lw_c"] = df.esky_c * SIGMA * np.power(df.t_a, 4)
 
     df["e_act"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))
     df["e_act_s"] = df.lw_s / (SIGMA * np.power(df.t_a, 4))
-    df["e_act_s3"] = df.lw_s3 / (SIGMA * np.power(df.t_a, 4))
-    df["e_act_s4"] = df.lw_s4 / (SIGMA * np.power(df.t_a, 4))
 
     df["lw_err_t"] = df.lw_c_t - df.dw_ir
     df["lw_err_b"] = df.lw_c - df.lw_s
-    if site is not None:
-        df = df.loc[df.site == site]
     return df
 
 
@@ -703,13 +711,59 @@ def esky_format(x, c1, c2, c3):
     return c1 + (c2 * np.power(x, c3))
 
 
+def reduce_to_equal_pts_per_site(df):
+    # keep equal number of points per site
+    site_pts = df.groupby(df.site).t_a.count().sort_values().to_dict()
+    min_pts = df.groupby(df.site).t_a.count().values.min()
+    new_df = pd.DataFrame()
+    for s in site_pts.keys():
+        tmp = df.loc[df.site == s].copy()
+        tmp = tmp.sample(min_pts, random_state=30)
+        new_df = pd.concat([new_df, tmp])
+    return new_df.copy()
+
+
+def e_time(n):
+    # equation of time, matches spencer71 from pvlib out to 10^-2
+    b = ((n - 1) / 365) * 2 * np.pi  # rad
+    e = 229.2 * (0.0000075 + (0.001868 * np.cos(b)) - (0.032077 * np.sin(b)) -
+                 (0.014615 * np.cos(2 * b)) - (0.04089 * np.sin(2 * b)))
+    return e
+
+
+def fit_linear(df, set_intercept=None):
+    # linear regression on esky_c data
+    df["pp"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
+    # df["y"] = df.e_act_s3 + df.de_p - 0.6376
+    train_y = df.y.to_numpy()
+    train_x = df[["pp"]].to_numpy()
+    if set_intercept is not None:  # fix c1
+        model = LinearRegression(fit_intercept=False)
+    else:
+        model = LinearRegression(fit_intercept=True)
+    model.fit(train_x, train_y)
+    c2 = model.coef_[0].round(4)
+    if set_intercept is not None:  # use given c1
+        c1 = set_intercept
+        pred_y = c2 * df.pp
+    else:  # use model-fitted c1
+        c1 = model.intercept_.round(4)
+        pred_y = c1 + (c2 * df.pp)
+    rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+    print("(c1, c2): ", c1, c2)
+    r2 = r2_score(train_y, pred_y)
+    print(f"RMSE: {rmse.round(5)} | R2: {r2.round(5)}")
+    print(f"npts={df.shape[0]:,}")
+    # curve fitting code in fig3.py
+    return None
+
+
 if __name__ == "__main__":
     print()
-    # TODO rerun all sites for 2012
     # start_time = time.time()
-    # for yr in [2012, 2013, 2014, 2015, 2016]:
-    #     process_site("GWC", yr=str(yr))
-    #     print(yr, time.time() - start_time)
+    # for s in ['BON', 'BOU', 'DRA', 'FPK', 'PSU', 'SXF']:
+    #     process_site(s, yr="2014")
+    #     print(s, time.time() - start_time)
 
     # start_time = time.time()
     # tsky_table(3, 50)
@@ -730,7 +784,7 @@ if __name__ == "__main__":
     # plot_fit(site, model.coef_, y_true, y_pred, rmse)
 
     # CREATE CS_COMPARE
-    # create_cs_compare_csv(xvar="site", const="2013", xlist=SURF_SITE_CODES)
+    # create_cs_compare_csv(xvar="site", const="2012", xlist=SURF_SITE_CODES)
     # xlist = [2012, 2013, 2014, 2015, 2016]
     # create_cs_compare_csv(xvar="year", const="GWC", xlist=xlist)
 
@@ -744,107 +798,18 @@ if __name__ == "__main__":
     # Compare e_sky_c fits on different pressure and LW variables
     # compare_esky_fits(p="scaled", lw="", tra_yr=2012, val_yr=2013, rm_loc=None)
 
-    # df = import_cs_compare_csv("cs_compare_2012.csv")
-    # df = df.sample(frac=0.25, random_state=96)
-    df = import_cs_compare_csv("cs_compare_2013.csv")
+    print()
+    df = import_cs_compare_csv("cs_compare_2012.csv")
+    # df = import_cs_compare_csv("cs_compare_2013.csv")
     # df = pd.concat([df, tmp])
+    df = df.sample(frac=0.25, random_state=96)
 
-    df["pp"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
-    df["e"] = 0.6376 + (1.6026 * df.pp)  # IJHMT fit
-    # df["e"] = 0.6223 + (1.7209 * df.pp)  # 2012 no BOU fit
-    df["lw_e"] = df.e * SIGMA * np.power(df.t_a, 4)
-    df["lw_err_e"] = df.lw_e - df.lw_s3
-    elev_dict = {}
-    for i in SURFRAD:
-        elev_dict[i] = SURFRAD[i]["alt"]
-    df["elev"] = df["site"].map(elev_dict)
-    elevations = sorted(elev_dict.items(), key=lambda x: x[1])  # sort by elev
+    df["e_dp"] = df.esky_c + df.de_p
+    df["lw_dp"] = df.e_dp * SIGMA * np.power(df.t_a, 4)
+    df["lw_err_dp"] = df.lw_dp - df.lw_s
 
-    df["P_rep"] = P_ATM * np.exp(-1 * df.elev / 8500)  # Pa
-    df["de_p"] = 0.00012 * ((df.P_rep / 100) - 1000)
-    # train_x = (df[["P_rep"]].to_numpy() - 100000) / 1000  # dP in kPa
-    # df["derr"] = df.e_act_s - df.e
-    # train_y = df.derr.to_numpy()
-    # model = LinearRegression(fit_intercept=False)
-    # model.fit(train_x, train_y)
-    # c = model.coef_[0].round(4)  # honestly backed out c = 0.0012
+    tmp = df.loc[df.site != "BOU"].copy()
+    tmp["y"] = tmp.esky_c + tmp.de_p
+    fit_linear(tmp, set_intercept=None)
 
-    df["e_alt"] = df.e + df.de_p
-    df["lw_e_alt"] = df.e_alt * SIGMA * np.power(df.t_a, 4)
-    df["lw_err_alt"] = df.lw_e_alt - df.lw_s3
-
-    fig, axes = plt.subplots(7, 1, figsize=(5, 8), sharex=True)
-    i = 0
-    for s, alt in elevations:
-        ax = axes[i]
-        ax.grid(axis="x", alpha=0.3)
-        pdf = df.loc[df.site == s]
-        ax.axvline(0, c="k", alpha=0.9, zorder=0)
-        ax.hist(pdf.lw_err_alt, bins=50, alpha=0.9)
-        rmse = np.sqrt(mean_squared_error(pdf.lw_s3, pdf.lw_e_alt))
-        ax.set_title(f"{s} [{alt:}m] (rmse={rmse:.2f})", loc="left")
-        i += 1
-        ax.set_axisbelow(True)
-    ax.set_xlabel("LW_pred - LW_target")
-    plt.tight_layout()
-    filename = os.path.join("figures", "cs2013_LWerr_vs_elev.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
-
-    # start filtering
-    # df = df.loc[df.site != "GWC"]
-    # df = df.loc[abs(df.t_a - 294.2) < 1]
-
-    # linear regression
-    df["pp"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
-    # for yr, pdf in df.groupby(df.index.year):
-    train_y = df.e_act_s.to_numpy()
-    train_x = df[["pp"]].to_numpy()
-    model = LinearRegression(fit_intercept=True)
-    # model = SGDRegressor(fit_intercept=True)
-    model.fit(train_x, train_y)
-    c2 = model.coef_[0].round(4)
-    c1 = model.intercept_.round(4)
-    pred_y = c1 + (c2 * df.pp)
-    rmse = np.sqrt(mean_squared_error(train_y, pred_y))
-    print("(c1, c2): ", c1, c2)
-    r2 = r2_score(train_y, pred_y)
-    print(rmse.round(5), r2.round(5), df.shape[0])
-
-    # fig, ax = plt.subplots()
-    # # for yr, group in df.groupby(df.index.year):
-    # ax.scatter(df.pp, df.e_act_s3, alpha=0.1)
-    # pp = np.linspace(0.02, 0.182, 15)
-    # y = c1 + (c2 * pp)
-    # ax.plot(pp, y, "k--")
-    # # ax.legend()
-    # plt.show()
-
-    # # curve fitting
-    # df["pp"] = (df.pw_hpa * 100) / P_ATM
-    # train_x = df.pp.to_numpy()
-    # out = curve_fit(
-    #     f=esky_format, xdata=train_x, ydata=train_y,
-    #     p0=[0.5, 0.0, 0.5], bounds=(-100, 100)
-    # )
-    # c1, c2, c3 = out[0]
-    # c1 = c1.round(4)
-    # c2 = c2.round(4)
-    # c3 = c3.round(4)
-    # pred_y = esky_format(train_x, c1, c2, c3)
-    # rmse = np.sqrt(mean_squared_error(train_y, pred_y))
-    # print("(c1, c2, c3): ", c1, c2, c3)
-    # r2 = r2_score(train_y, pred_y)
-    # print(rmse.round(5), r2.round(5))
-
-    # 4/11/23
-    # pdf = df.loc[abs(df.t_a - 294.2) < 1].copy()
-    # fig, ax = plt.subplots()
-    # for s, group in pdf.groupby(pdf.site):
-    #     ax.hist(group.lw_err_b, bins=30, alpha=0.3, label=s)
-    #     print(s, pdf.lw_err_b.mean())
-    # ax.legend()
-    # plt.show()
-    #
-    # pdf["x"] = pdf.pw_hpa - 1000
-
-    df[["lw_err_b", "pa_hpa", "rh", "lw_err_e", "elev", "P_rep"]].corr()
+    print(df[["lw_err_b", "rh", "t_a", "pw_hpa"]].corr())

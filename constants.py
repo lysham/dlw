@@ -23,6 +23,13 @@ SURFRAD = dict(
     SXF=dict(name="Sioux_Falls_SD", lat=43.73, lon=-96.62, alt=437),
 )
 
+ELEV_DICT = {}
+LON_DICT = {}
+for i in SURFRAD:
+    ELEV_DICT[i] = SURFRAD[i]["alt"]
+    LON_DICT[i] = SURFRAD[i]["lon"]
+ELEVATIONS = sorted(ELEV_DICT.items(), key=lambda x: x[1])  # sorted list
+
 SURF_ASOS = dict(
     BON=dict(usaf=725315, wban=94870),
     BOU=dict(usaf=720533, wban=160),

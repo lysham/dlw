@@ -2,6 +2,7 @@
 
 from main import *
 import scipy
+import pvlib
 from sklearn.metrics import mean_squared_error
 from corr26b import get_tsky, join_surfrad_asos, shakespeare, \
     shakespeare_comparison, import_cs_compare_csv
@@ -481,6 +482,95 @@ def plot_f3_f4_comparisons():
     ax.legend()
     filename = os.path.join("figures", "dlw_vs_ir.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def plot_lookuptable_350():
+    f3 = pd.read_csv(os.path.join("data", "tsky_table_3_50.csv"))
+    f4 = pd.read_csv(os.path.join("data", "tsky_table_4_50.csv"))
+    f3["fl"] = f3.ir_meas / (SIGMA * np.power(f3.tsky, 4))
+    f4["fl"] = f4.ir_meas / (SIGMA * np.power(f4.tsky, 4))
+    f3 = f3.set_index("ir_meas")
+    f4 = f4.set_index("ir_meas")
+
+    fig, ax = plt.subplots()
+    ax.plot(f3.index, f3.tsky, c="b", lw=0.5)
+    ax.plot(f4.index, f4.tsky, c="0.2", lw=0.5, ls="--", alpha=0.5)
+    ax.set_ylabel("Tsky [K]", color="b")
+    ax2 = ax.twinx()
+    ax2.plot(f3.index, f3.fl, c="r", lw=0.5)
+    ax2.plot(f4.index, f4.fl, c="0.2", lw=0.5, ls="--", alpha=0.5)
+    ax2.set_ylabel("fraction [-]", color="r")
+    ax.set_xlabel("IR measured")
+    filename = os.path.join("figures", "lookuptable_350.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    plt.show()
+    return None
+
+
+def plot_lwe_vs_tod():
+    df = import_cs_compare_csv("cs_compare_2012.csv")
+
+    df["e_eff"] = df.esky_c + df.de_p + df.de_t
+    df["lw_eff"] = df.e_eff * SIGMA * np.power(df.t_a, 4)
+    df["lw_err_eff"] = df.lw_eff - df.lw_s
+
+    df["e_dp"] = df.esky_c + df.de_p
+    df["lw_dp"] = df.e_dp * SIGMA * np.power(df.t_a, 4)
+    df["lw_err_dp"] = df.lw_dp - df.lw_s
+
+    gwc = df.loc[df.site == "GWC"].copy()
+    gwc = gwc.loc[abs(gwc.t_a - 294.2) < 1].copy()
+
+    gwc["solar_time_hour"] = pd.DatetimeIndex(gwc.solar_time.copy()).hour
+    tmp = pd.DatetimeIndex(gwc.solar_time.copy())
+    gwc["solar_tod"] = tmp.hour + (tmp.minute / 60) + (tmp.second / 3600)
+    gwc = gwc.set_index("solar_tod")
+    gwc = gwc.sample(frac=0.05, random_state=33)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.grid(alpha=0.3)
+    # s = gwc.loc[gwc.zen < 80]
+    cb = ax.scatter(gwc.index, gwc.lw_err_b, c=gwc.t_a,
+                    alpha=0.8, vmin=265, vmax=315)
+    # s = gwc.loc[gwc.zen >= 80]
+    # ax.scatter(s.index, s.lw_err_b, alpha=0.3, label="80 <= zen < 85")
+    ax.axhline(0, c="0.8", ls="--")
+    ax.set_xlabel("solar time of day")
+    ax.set_ylabel("LW error after altitude correction [W/m$^2$] ")
+    ax.set_ylim(-40, 40)
+    ax.set_title(f"GWC, downsampled (pts={gwc.shape[0]:,})")
+    fig.colorbar(cb, label="Ta [K]")
+    # ax.legend()
+    plt.show()
+    filename = os.path.join("figures", "gwc_lwe_vs_tod_Ta.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+
+    gwc = gwc.loc[gwc.zen < 80]
+    gwc["noon_err"] = abs(gwc.index - 12)
+    print(gwc[["lw_err_e", "noon_err", "pw_hpa", "pa_hpa"]].corr())
+
+    return None
+
+
+def plot_cs2013_lwerr_vs_elev(df):
+    fig, axes = plt.subplots(7, 1, figsize=(5, 8), sharex=True)
+    i = 0
+    for s, alt in ELEVATIONS:
+        ax = axes[i]
+        ax.grid(axis="x", alpha=0.3)
+        pdf = df.loc[df.site == s]
+        ax.axvline(0, c="k", alpha=0.9, zorder=0)
+        # ax.hist(pdf.lw_err_e, bins=50, alpha=0.9)
+        ax.hist(pdf.lw_err_eff, bins=50, alpha=0.9)
+        rmse = np.sqrt(mean_squared_error(pdf.lw_s3, pdf.lw_eff))
+        ax.set_title(f"{s} [{alt:}m] (rmse={rmse:.2f})", loc="left")
+        i += 1
+        ax.set_axisbelow(True)
+    ax.set_xlabel("LW_pred - LW_target")
+    plt.tight_layout()
+    # filename = os.path.join("figures", "cs2013_LWerr_vs_elev.png")
+    # fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 
 
