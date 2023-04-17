@@ -731,7 +731,26 @@ def e_time(n):
     return e
 
 
-def fit_linear(df, set_intercept=None):
+def fit_linear(df, set_intercept=None, print_out=False):
+    """Linear regression on emissivity. Output fitted coefficients.
+
+    Parameters
+    ----------
+    df : DataFrame
+        Data to fit regression. DataFrame must have columns: pw_hpa and y
+    set_intercept : double, optional
+        Pass in the value of c1.
+        Default is None. If None, the linear regression with default to
+        fitting to its own y-intercept (i.e. c1)
+    print_out : bool, optional
+        Print coefficients, RMSE, and R2 evaluated on the same data on which
+        the regression was fitted.
+
+    Returns
+    -------
+    c1, c2 : double
+        Return c1 and c2 constants rounded to 4th decimal place.
+    """
     # linear regression on esky_c data
     df["pp"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
     # df["y"] = df.e_act_s3 + df.de_p - 0.6376
@@ -749,13 +768,14 @@ def fit_linear(df, set_intercept=None):
     else:  # use model-fitted c1
         c1 = model.intercept_.round(4)
         pred_y = c1 + (c2 * df.pp)
-    rmse = np.sqrt(mean_squared_error(train_y, pred_y))
-    print("(c1, c2): ", c1, c2)
-    r2 = r2_score(train_y, pred_y)
-    print(f"RMSE: {rmse.round(5)} | R2: {r2.round(5)}")
-    print(f"npts={df.shape[0]:,}")
+    if print_out:
+        rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+        r2 = r2_score(train_y, pred_y)
+        print("(c1, c2): ", c1, c2)
+        print(f"RMSE: {rmse.round(5)} | R2: {r2.round(5)}")
+        print(f"npts={df.shape[0]:,}")
     # curve fitting code in fig3.py
-    return None
+    return c1, c2
 
 
 if __name__ == "__main__":
@@ -799,17 +819,14 @@ if __name__ == "__main__":
     # compare_esky_fits(p="scaled", lw="", tra_yr=2012, val_yr=2013, rm_loc=None)
 
     print()
-    df = import_cs_compare_csv("cs_compare_2012.csv")
+    df = import_cs_compare_csv("cs_compare_2012.csv", site="GWC")
     # df = import_cs_compare_csv("cs_compare_2013.csv")
     # df = pd.concat([df, tmp])
     df = df.sample(frac=0.25, random_state=96)
+    print(df.shape)
+    df = df.loc[df.zen < 80]
 
-    df["e_dp"] = df.esky_c + df.de_p
-    df["lw_dp"] = df.e_dp * SIGMA * np.power(df.t_a, 4)
-    df["lw_err_dp"] = df.lw_dp - df.lw_s
-
-    tmp = df.loc[df.site != "BOU"].copy()
-    tmp["y"] = tmp.esky_c + tmp.de_p
-    fit_linear(tmp, set_intercept=None)
+    df["y"] = df.e_act_s + df.de_p - 0.6376
+    c1, c2 = fit_linear(df, set_intercept=0.6376, print_out=True)
 
     print(df[["lw_err_b", "rh", "t_a", "pw_hpa"]].corr())
