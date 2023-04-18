@@ -12,6 +12,7 @@ from corr26b import shakespeare, import_cs_compare_csv
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.linear_model import LinearRegression, Ridge, SGDRegressor
 from scipy.optimize import curve_fit
+from scipy.stats import pearsonr
 
 from constants import LI_TABLE1, P_ATM, SIGMA, N_BANDS, N_SPECIES, SURFRAD
 
@@ -203,26 +204,84 @@ def esky_format(x, c1, c2, c3):
     return c1 + (c2 * np.power(x, c3))
 
 
+def plot_fig3_ondata(s, sample):
+    """Plot esky_c fits over sampled clear sky site data with altitude
+    correction applied. Colormap by solar time.
+
+    Parameters
+    ----------
+    s : str
+        SURFRAD site code
+    sample : [0.05, 0.25]
+        If larger than 10%, temperature is filtered to +/- 2K.
+
+    Returns
+    -------
+    None
+    """
+    site = import_cs_compare_csv("cs_compare_2012.csv", site=s)
+    site = site.loc[site.zen < 80].copy()
+    site["pp"] = site.pw_hpa * 100 / P_ATM
+
+    site = site.sample(frac=sample, random_state=96)
+    if sample > 0.1:  # apply filter to temperature
+        site = site.loc[abs(site.t_a - 294.2) < 2]
+        title = f"{s} 2012 {sample:.0%} sample, zen<80, +/-2K"
+    else:
+        title = f"{s} 2012 {sample:.0%} sample, zen<80"
+    tmp = pd.DatetimeIndex(site.solar_time.copy())
+    site["solar_tod"] = tmp.hour + (tmp.minute / 60) + (tmp.second / 3600)
+    de_p = site.de_p.values[0]
+
+    df = import_ijhmt_df("fig3_esky_i.csv")
+    x = df.pw.to_numpy()
+    df["total"] = df.pOverlaps
+    df["pred_y"] = 0.6376 + (1.6026 * np.sqrt(x))
+    df["best"] = 0.6376 + (1.6191 * np.sqrt(x))
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.grid(alpha=0.3)
+    c = ax.scatter(
+        site.pp, site.e_act_s, c=site.solar_tod, cmap="seismic",
+        vmin=5, vmax=19, alpha=0.8,
+    )
+    ax.plot(x, df.total + de_p, label="LBL")
+    ax.plot(x, df.pred_y + de_p, ls="--", label="(0.6376, 1.6026)")
+    ax.plot(x, df.best + de_p, ls=":", label="(0.6376, 1.6191)")
+    ax.legend()
+    fig.colorbar(c, label="solar time")
+    ax.set_ylabel("effective sky emissivity [-]")
+    ax.set_xlabel("p$_w$ [-]")
+    ax.set_xlim(0, 0.03)
+    ax.set_ylim(0.60, 1.0)
+    ax.set_axisbelow(True)
+    ax.set_title(title, loc="left")
+    filename = os.path.join("figures", "fig3_ondata.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    plt.close()
+    return None
+
+
 if __name__ == "__main__":
     print()
     # t_a = 294.2  # [K]
     # rh = 50  # %
     # pw = get_pw_norm(t_a, rh)
 
-    df = pd.DataFrame()
-    for i in range(N_BANDS):
-        tmp = import_ijhmt_df(f"fig5_esky_ij_b{i + 1}.csv")
-        tmp["CO2"] = tmp.pCO2 - tmp.H2O
-        if i == 0:
-            tmp = tmp[["pw", "H2O", "CO2"]]
-        else:
-            tmp = tmp[["H2O", "CO2"]]
-        tmp = tmp.rename(columns={"H2O": f"h2o_b{i + 1}",
-                                  "CO2": f"co2_b{i + 1}"})
-        df = pd.concat([df, tmp], axis=1)
-    pw = df.pw.to_numpy()
-    co2 = df.filter(like="co2").sum(axis=1).to_numpy()
-    h2o = df.filter(like="h2o").sum(axis=1).to_numpy()
+    # df = pd.DataFrame()
+    # for i in range(N_BANDS):
+    #     tmp = import_ijhmt_df(f"fig5_esky_ij_b{i + 1}.csv")
+    #     tmp["CO2"] = tmp.pCO2 - tmp.H2O
+    #     if i == 0:
+    #         tmp = tmp[["pw", "H2O", "CO2"]]
+    #     else:
+    #         tmp = tmp[["H2O", "CO2"]]
+    #     tmp = tmp.rename(columns={"H2O": f"h2o_b{i + 1}",
+    #                               "CO2": f"co2_b{i + 1}"})
+    #     df = pd.concat([df, tmp], axis=1)
+    # pw = df.pw.to_numpy()
+    # co2 = df.filter(like="co2").sum(axis=1).to_numpy()
+    # h2o = df.filter(like="h2o").sum(axis=1).to_numpy()
 
     # fig, ax = plt.subplots()
     # ax.plot(pw, co2)
@@ -230,61 +289,55 @@ if __name__ == "__main__":
     # ax.plot(pw, co2 + h2o)
     # plt.show()
 
-    gwc = import_cs_compare_csv("cs_compare_2012.csv", site="GWC")
-    gwc = gwc.sample(frac=0.10, random_state=96)
-    gwc = gwc.loc[gwc.zen < 80].copy()
-    gwc["pp"] = gwc.pw_hpa * 100 / P_ATM
-    gwc = gwc.loc[abs(gwc.t_a - 294.2) < 2]
+    plot_fig3_ondata("FPK", sample=0.05)
 
     df = import_ijhmt_df("fig3_esky_i.csv")
+    # df["pp"] = np.sqrt(df.pw)
     x = df.pw.to_numpy()
-    df["total"] = df.pOverlaps
+    y = df.pOverlaps.to_numpy()
+    pearsonr(x, np.log(y))
 
-    df["pred_y"] = 0.6376 + (1.6026 * np.sqrt(x))
-    df["best"] = 0.6376 + (1.6191 * np.sqrt(x))
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.scatter(gwc.pp, gwc.e_act_s, alpha=0.1, ec="0.85", fc=None, label="GWC data")
-    ax.plot(x, df.total, label="LBL")
-    ax.plot(x, df.pred_y, ls="--", label="(0.6376, 1.6026)")
-    ax.plot(x, df.best, ls=":", label="(0.6376, 1.6191)")
+    fig, ax = plt.subplots()
+    ax.plot(x, y)
+    # ax.plot(np.sqrt(x), y)
+    ax.plot(x, np.power(y, 2), label="pwr")
+    ax.plot(x, np.log(y), label="exp")
     ax.legend()
-    filename = os.path.join("figures", "fig3_ondata.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
     plt.show()
 
-    rmse = np.sqrt(mean_squared_error(df.total, df.pred_y))
-    r2 = r2_score(df.total, df.pred_y)
-    print(rmse, r2)
+    # pdf = site.loc[abs(site.t_a - 294.2) < 2].copy()
+    # x = pdf.pp.values
+    # y = pdf.e_act_s.values
+    # pearsonr(x, np.log(y))
 
-    df["pp"] = np.sqrt(df.pw)
     train_y = df.pOverlaps.to_numpy()
-    train_x = df[["pp"]].to_numpy()
+    train_x = np.power(df.pp.to_numpy(), 2)
     model = LinearRegression(fit_intercept=True)
-    # model = Ridge(fit_intercept=True, alpha=0.5)
-    # model = SGDRegressor(fit_intercept=True)
     model.fit(train_x, train_y)
     c2 = model.coef_[0].round(4)
     c1 = model.intercept_.round(4)
     pred_y = c1 + (c2 * df.pp)
     rmse = np.sqrt(mean_squared_error(train_y, pred_y))
-    print("(c1, c2): ", c1, c2)
     r2 = r2_score(df.total, df.pred_y)
+    print("(c1, c2): ", c1, c2)
     print(rmse.round(5), r2.round(5))
 
-    train_x = df.pw.to_numpy()
-    out = curve_fit(
-        f=esky_format, xdata=train_x, ydata=train_y,
-        p0=[0.5, 0.0, 0.5], bounds=(-100, 100)
-    )
-    c1, c2, c3 = out[0]
-    c1 = c1.round(4)
-    c2 = c2.round(4)
-    c3 = c3.round(4)
-    pred_y = esky_format(train_x, c1, c2, c3)
-    rmse = np.sqrt(mean_squared_error(train_y, pred_y))
-    print("(c1, c2, c3): ", c1, c2, c3)
-    r2 = r2_score(df.total, df.pred_y)
-    print(rmse.round(5), r2.round(5))
+
+
+    # # curve fit
+    # train_x = df.pw.to_numpy()
+    # out = curve_fit(
+    #     f=esky_format, xdata=train_x, ydata=train_y,
+    #     p0=[0.5, 0.0, 0.5], bounds=(-100, 100)
+    # )
+    # c1, c2, c3 = out[0]
+    # c1 = c1.round(4)
+    # c2 = c2.round(4)
+    # c3 = c3.round(4)
+    # pred_y = esky_format(train_x, c1, c2, c3)
+    # rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+    # print("(c1, c2, c3): ", c1, c2, c3)
+    # r2 = r2_score(df.total, df.pred_y)
+    # print(rmse.round(5), r2.round(5))
 
 
