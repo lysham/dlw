@@ -8,7 +8,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from main import get_pw
-from corr26b import shakespeare
+from corr26b import shakespeare, import_cs_compare_csv
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.linear_model import LinearRegression, Ridge, SGDRegressor
 from scipy.optimize import curve_fit
@@ -224,22 +224,33 @@ if __name__ == "__main__":
     co2 = df.filter(like="co2").sum(axis=1).to_numpy()
     h2o = df.filter(like="h2o").sum(axis=1).to_numpy()
 
-    fig, ax = plt.subplots()
-    ax.plot(pw, co2)
-    ax.plot(pw, h2o)
-    ax.plot(pw, co2 + h2o)
-    plt.show()
+    # fig, ax = plt.subplots()
+    # ax.plot(pw, co2)
+    # ax.plot(pw, h2o)
+    # ax.plot(pw, co2 + h2o)
+    # plt.show()
+
+    gwc = import_cs_compare_csv("cs_compare_2012.csv", site="GWC")
+    gwc = gwc.sample(frac=0.10, random_state=96)
+    gwc = gwc.loc[gwc.zen < 80].copy()
+    gwc["pp"] = gwc.pw_hpa * 100 / P_ATM
+    gwc = gwc.loc[abs(gwc.t_a - 294.2) < 2]
 
     df = import_ijhmt_df("fig3_esky_i.csv")
     x = df.pw.to_numpy()
     df["total"] = df.pOverlaps
 
-    df["pred_y"] = 0.622 + (1.711 * (np.power(x, 0.5)))
-    fig, ax = plt.subplots()
+    df["pred_y"] = 0.6376 + (1.6026 * np.sqrt(x))
+    df["best"] = 0.6376 + (1.6191 * np.sqrt(x))
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.scatter(gwc.pp, gwc.e_act_s, alpha=0.1, ec="0.85", fc=None, label="GWC data")
     ax.plot(x, df.total, label="LBL")
-    ax.plot(x, df.pred_y, ls="--", label="regression")
-    ax.set_ylim(0.5, 0.9)
+    ax.plot(x, df.pred_y, ls="--", label="(0.6376, 1.6026)")
+    ax.plot(x, df.best, ls=":", label="(0.6376, 1.6191)")
     ax.legend()
+    filename = os.path.join("figures", "fig3_ondata.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
     plt.show()
 
     rmse = np.sqrt(mean_squared_error(df.total, df.pred_y))
