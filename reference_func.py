@@ -6,7 +6,7 @@ import pvlib
 from scipy.optimize import curve_fit
 from sklearn.metrics import mean_squared_error, r2_score
 from corr26b import get_tsky, join_surfrad_asos, shakespeare, \
-    shakespeare_comparison, import_cs_compare_csv
+    shakespeare_comparison, import_cs_compare_csv, fit_linear
 from fraction import fe_lt, fi_lt
 
 from constants import *
@@ -626,6 +626,93 @@ def curve_fit(df):
     r2 = r2_score(df.total, df.pred_y)
     print(rmse.round(5), r2.round(5))
     return None
+
+
+def plot_gwc_2012_zen80_c1c2_vs_dta():
+    df = import_cs_compare_csv("cs_compare_2012.csv", site="GWC")
+    # df = import_cs_compare_csv("cs_compare_2013.csv")
+    # df = pd.concat([df, tmp])
+    # df = df.sample(frac=0.25, random_state=96)
+    df = df.loc[df.zen < 80]
+
+    df["y"] = df.e_act_s #+ df.de_p  # - 0.6376
+    df["pp"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
+    # de_p = df.de_p.values[0]
+    # x_dt = np.array([0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 8, 16])
+    x_dt = np.linspace(0.5, 20, 30)
+    y_c1 = []
+    y_c2 = []
+    y = []  # with a fixed c1
+    total_pts = df.shape[0]
+    frac_pts = []
+
+    err_full = []
+    err_ltd = []
+    err_full_c2 = []
+    err_ltd_c2 = []
+    target_y = df.lw_s.to_numpy()
+    df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
+    for x in x_dt:
+        s = df.loc[abs(df.t_a - 294.2) < x].copy()
+        frac_pts.append(s.shape[0] / total_pts)
+        # s = s.sample(1500, random_state=20)
+
+        c1, c2 = fit_linear(s, print_out=False)
+        y_c1.append(c1)
+        y_c2.append(c2)
+        pred_y = c1 + (c2 * s.pp)
+        model = pred_y * SIGMA * np.power(s.t_a, 4)
+        err_ltd.append(np.sqrt(mean_squared_error(s.lw_s.to_numpy(), model)))
+        pred_y = c1 + (c2 * df.pp)
+        model = pred_y * SIGMA * np.power(df.t_a, 4)
+        err_full.append(np.sqrt(mean_squared_error(target_y, model)))
+
+        s["y"] = s.y - 0.6376
+        c1, c2 = fit_linear(s, set_intercept=0.6376)
+        y.append(c2)
+        pred_y = c1 + (c2 * s.pp)
+        model = pred_y * SIGMA * np.power(s.t_a, 4)
+        err_ltd_c2.append(np.sqrt(mean_squared_error(s.lw_s.to_numpy(), model)))
+        pred_y = c1 + (c2 * df.pp)
+        model = pred_y * SIGMA * np.power(df.t_a, 4)
+        err_full_c2.append(np.sqrt(mean_squared_error(target_y, model)))
+
+    fig, axes = plt.subplots(2, 1, figsize=(10, 7), height_ratios=[3, 2], sharex=True)
+    ax = axes[0]
+    c1 = "tab:blue"
+    c2 = "tab:red"
+    ax.plot(x_dt, y_c1, ".-", c=c1)
+    ax.axhline(0.6326, ls=":", c=c1)
+    ax2 = ax.twinx()
+    ax2.plot(x_dt, y_c2, ".-", c=c2, lw=2)
+    ax2.axhline(1.6026, ls=":", c=c2, lw=2)
+    ax2.plot(x_dt, y, "*--", c="firebrick", alpha=0.8)
+    ax.set_ylabel("c1", color=c1)
+    ax2.set_ylabel("c2", color=c2)
+    ax.tick_params(axis="y", colors=c1)
+    ax2.tick_params(axis="y", colors=c2)
+    # fig, ax = plt.subplots()
+    ax = axes[1]
+    model = df.esky_c * SIGMA * np.power(df.t_a, 4)
+    err = np.sqrt(mean_squared_error(df.lw_s, model))
+    c1 = "#3A5743"
+    c2 = "#AF5D63"
+    ax.plot(x_dt, err_ltd, ".-", c=c1)
+    ax.plot(x_dt, err_full, ".-", c=c2)
+    ax.plot(x_dt, err_ltd_c2, "*--", c=c1)
+    ax.plot(x_dt, err_full_c2, "*--", c=c2)
+    ax.axhline(err, ls=":", c="k", alpha=0.6)
+    ax2 = ax.twinx()
+    ax2.bar(x_dt, frac_pts, color="tab:gray", alpha=0.5, width=0.2)
+    ax2.set_ylabel("Normalized size of sample [-]", color="tab:gray")
+    ax2.tick_params(axis="y", colors="tab:gray")
+    ax2.set_ylim(0, 1)
+    ax.set_xlabel(r"T$_a$ = 294.2 +/- $\Delta$ [K]")
+    ax.set_ylabel("LW err [W/m$^2$]")
+
+    # plt.show()
+    filename = os.path.join("figures", "gwc_2012_zen80_c1c2_vs_dta.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
 
 
 if __name__ == "__main__":
