@@ -3,7 +3,8 @@
 from main import *
 import scipy
 import pvlib
-from sklearn.metrics import mean_squared_error
+from scipy.optimize import curve_fit
+from sklearn.metrics import mean_squared_error, r2_score
 from corr26b import get_tsky, join_surfrad_asos, shakespeare, \
     shakespeare_comparison, import_cs_compare_csv
 from fraction import fe_lt, fi_lt
@@ -571,6 +572,59 @@ def plot_cs2013_lwerr_vs_elev(df):
     plt.tight_layout()
     # filename = os.path.join("figures", "cs2013_LWerr_vs_elev.png")
     # fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def plot_co2_h2o_lbl():
+    df = pd.DataFrame()  # create specific co2 and h20 df
+    colnames = ['pw', 'H2O', 'pCO2', 'pO3', 'pAerosols',
+                'pN2O', 'pCH4', 'pO2', 'pN2', 'pOverlaps']
+    for i in range(N_BANDS):
+        f = f"fig5_esky_ij_b{i + 1}.csv"
+        filename = os.path.join("data", "ijhmt_2019_data", f)
+        tmp = pd.read_csv(filename, names=colnames, header=0)
+        # in fig3.py can just do `tmp = import_ijhmt_df(f)`
+        tmp["CO2"] = tmp.pCO2 - tmp.H2O
+        if i == 0:
+            tmp = tmp[["pw", "H2O", "CO2"]]
+        else:
+            tmp = tmp[["H2O", "CO2"]]
+        tmp = tmp.rename(columns={"H2O": f"h2o_b{i + 1}",
+                                  "CO2": f"co2_b{i + 1}"})
+        df = pd.concat([df, tmp], axis=1)
+    pw = df.pw.to_numpy()
+    co2 = df.filter(like="co2").sum(axis=1).to_numpy()
+    h2o = df.filter(like="h2o").sum(axis=1).to_numpy()
+
+    fig, ax = plt.subplots()
+    ax.plot(pw, co2)
+    ax.plot(pw, h2o)
+    ax.plot(pw, co2 + h2o)
+    plt.show()
+    return None
+
+
+def esky_format(x, c1, c2, c3):
+    return c1 + (c2 * np.power(x, c3))
+
+
+def curve_fit(df):
+    # curve fit
+    train_y = df.pOverlaps.to_numpy()
+    train_x = df.pw.to_numpy()
+    out = curve_fit(
+        f=esky_format, xdata=train_x, ydata=train_y,
+        p0=[0.5, 0.0, 0.5], bounds=(-100, 100)
+    )
+    c1, c2, c3 = out[0]
+    c1 = c1.round(4)
+    c2 = c2.round(4)
+    c3 = c3.round(4)
+    pred_y = esky_format(train_x, c1, c2, c3)
+    rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+    print("(c1, c2, c3): ", c1, c2, c3)
+    r2 = r2_score(df.total, df.pred_y)
+    print(rmse.round(5), r2.round(5))
     return None
 
 

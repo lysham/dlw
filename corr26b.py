@@ -737,7 +737,7 @@ def fit_linear(df, set_intercept=None, print_out=False):
     Parameters
     ----------
     df : DataFrame
-        Data to fit regression. DataFrame must have columns: pw_hpa and y
+        Data to fit regression. DataFrame must have columns: x and y
     set_intercept : double, optional
         Pass in the value of c1.
         Default is None. If None, the linear regression with default to
@@ -752,10 +752,10 @@ def fit_linear(df, set_intercept=None, print_out=False):
         Return c1 and c2 constants rounded to 4th decimal place.
     """
     # linear regression on esky_c data
-    df["pp"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
+    # df["pp"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
     # df["y"] = df.e_act_s3 + df.de_p - 0.6376
+    train_x = df.x.to_numpy()
     train_y = df.y.to_numpy()
-    train_x = df[["pp"]].to_numpy()
     if set_intercept is not None:  # fix c1
         model = LinearRegression(fit_intercept=False)
     else:
@@ -764,17 +764,17 @@ def fit_linear(df, set_intercept=None, print_out=False):
     c2 = model.coef_[0].round(4)
     if set_intercept is not None:  # use given c1
         c1 = set_intercept
-        pred_y = c2 * df.pp
+        pred_y = c2 * df.x
     else:  # use model-fitted c1
         c1 = model.intercept_.round(4)
-        pred_y = c1 + (c2 * df.pp)
+        pred_y = c1 + (c2 * df.x)
     if print_out:
         rmse = np.sqrt(mean_squared_error(train_y, pred_y))
         r2 = r2_score(train_y, pred_y)
         print("(c1, c2): ", c1, c2)
         print(f"RMSE: {rmse.round(5)} | R2: {r2.round(5)}")
         print(f"npts={df.shape[0]:,}")
-    # curve fitting code in fig3.py
+    # curve fitting code in reference_func
     return c1, c2
 
 
@@ -841,6 +841,7 @@ if __name__ == "__main__":
     err_full_c2 = []
     err_ltd_c2 = []
     target_y = df.lw_s.to_numpy()
+    df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
     for x in x_dt:
         s = df.loc[abs(df.t_a - 294.2) < x].copy()
         frac_pts.append(s.shape[0] / total_pts)

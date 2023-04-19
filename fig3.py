@@ -8,11 +8,11 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from main import get_pw
-from corr26b import shakespeare, import_cs_compare_csv
+from corr26b import shakespeare, import_cs_compare_csv, fit_linear
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.linear_model import LinearRegression, Ridge, SGDRegressor
-from scipy.optimize import curve_fit
 from scipy.stats import pearsonr
+from reference_func import curve_fit
 
 from constants import LI_TABLE1, P_ATM, SIGMA, N_BANDS, N_SPECIES, SURFRAD
 
@@ -200,10 +200,6 @@ def plot_fig3():
     return None
 
 
-def esky_format(x, c1, c2, c3):
-    return c1 + (c2 * np.power(x, c3))
-
-
 def plot_fig3_ondata(s, sample):
     """Plot esky_c fits over sampled clear sky site data with altitude
     correction applied. Colormap by solar time.
@@ -262,35 +258,7 @@ def plot_fig3_ondata(s, sample):
     return None
 
 
-if __name__ == "__main__":
-    print()
-    # t_a = 294.2  # [K]
-    # rh = 50  # %
-    # pw = get_pw_norm(t_a, rh)
-
-    # df = pd.DataFrame()
-    # for i in range(N_BANDS):
-    #     tmp = import_ijhmt_df(f"fig5_esky_ij_b{i + 1}.csv")
-    #     tmp["CO2"] = tmp.pCO2 - tmp.H2O
-    #     if i == 0:
-    #         tmp = tmp[["pw", "H2O", "CO2"]]
-    #     else:
-    #         tmp = tmp[["H2O", "CO2"]]
-    #     tmp = tmp.rename(columns={"H2O": f"h2o_b{i + 1}",
-    #                               "CO2": f"co2_b{i + 1}"})
-    #     df = pd.concat([df, tmp], axis=1)
-    # pw = df.pw.to_numpy()
-    # co2 = df.filter(like="co2").sum(axis=1).to_numpy()
-    # h2o = df.filter(like="h2o").sum(axis=1).to_numpy()
-
-    # fig, ax = plt.subplots()
-    # ax.plot(pw, co2)
-    # ax.plot(pw, h2o)
-    # ax.plot(pw, co2 + h2o)
-    # plt.show()
-
-    # plot_fig3_ondata("FPK", sample=0.05)
-
+def plot_fig3_quantiles():
     site = "BON"
     s = import_cs_compare_csv("cs_compare_2012.csv", site=site)
     s = s.loc[s.zen < 80].copy()
@@ -308,7 +276,6 @@ if __name__ == "__main__":
 
     df = import_ijhmt_df("fig3_esky_i.csv")
     x = df.pw.to_numpy()
-    y = df.pOverlaps.to_numpy()
     df["total"] = df.pOverlaps
     df["pred_y"] = 0.6376 + (1.6026 * np.sqrt(x))
     df["best"] = 0.6376 + (1.6191 * np.sqrt(x))
@@ -335,49 +302,23 @@ if __name__ == "__main__":
     filename = os.path.join("figures", f"fig3_{site.lower()}_quantiles.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     plt.show()
-
-    #
-    # fig, ax = plt.subplots()
-    # ax.plot(x, y)
-    # # ax.plot(np.sqrt(x), y)
-    # ax.plot(x, np.power(y, 2), label="pwr")
-    # ax.plot(x, np.log(y), label="exp")
-    # ax.legend()
-    # plt.show()
-    #
-    # # pdf = site.loc[abs(site.t_a - 294.2) < 2].copy()
-    # # x = pdf.pp.values
-    # # y = pdf.e_act_s.values
-    # # pearsonr(x, np.log(y))
-    #
-    # train_y = df.pOverlaps.to_numpy()
-    # train_x = np.power(df.pp.to_numpy(), 2)
-    # model = LinearRegression(fit_intercept=True)
-    # model.fit(train_x, train_y)
-    # c2 = model.coef_[0].round(4)
-    # c1 = model.intercept_.round(4)
-    # pred_y = c1 + (c2 * df.pp)
-    # rmse = np.sqrt(mean_squared_error(train_y, pred_y))
-    # r2 = r2_score(df.total, df.pred_y)
-    # print("(c1, c2): ", c1, c2)
-    # print(rmse.round(5), r2.round(5))
+    return None
 
 
+if __name__ == "__main__":
+    print()
+    # t_a = 294.2  # [K]
+    # rh = 50  # %
+    # pw = get_pw_norm(t_a, rh)
 
-    # # curve fit
-    # train_x = df.pw.to_numpy()
-    # out = curve_fit(
-    #     f=esky_format, xdata=train_x, ydata=train_y,
-    #     p0=[0.5, 0.0, 0.5], bounds=(-100, 100)
-    # )
-    # c1, c2, c3 = out[0]
-    # c1 = c1.round(4)
-    # c2 = c2.round(4)
-    # c3 = c3.round(4)
-    # pred_y = esky_format(train_x, c1, c2, c3)
-    # rmse = np.sqrt(mean_squared_error(train_y, pred_y))
-    # print("(c1, c2, c3): ", c1, c2, c3)
-    # r2 = r2_score(df.total, df.pred_y)
-    # print(rmse.round(5), r2.round(5))
+    # plot_fig3_ondata("FPK", sample=0.05)
+    # plot_fig3_quantiles()
+
+    df = import_ijhmt_df("fig3_esky_i.csv")
+    df["x"] = np.sqrt(df.pw.to_numpy())
+    df["y"] = df.pOverlaps.to_numpy()
+    c1, c2 = fit_linear(df, print_out=True)
+
+
 
 
