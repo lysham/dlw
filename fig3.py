@@ -14,13 +14,19 @@ from sklearn.linear_model import LinearRegression, Ridge, SGDRegressor
 from scipy.stats import pearsonr
 from reference_func import curve_fit
 
-from constants import LI_TABLE1, P_ATM, SIGMA, N_BANDS, N_SPECIES, SURFRAD
+from constants import LI_TABLE1, P_ATM, SIGMA, N_BANDS, N_SPECIES, SURFRAD, \
+    ELEVATIONS
 
 
 def get_pw_norm(t, rh):
     # get dimensionless pw
     pw = get_pw(t, rh)  # Pa
     return pw / P_ATM
+
+
+def get_atm_p(elev):
+    # get barometric pressure (elev given in [m])
+    return P_ATM * np.exp(-1 * elev / 8500)
 
 
 def pw2rh(t, pw):
@@ -314,11 +320,62 @@ if __name__ == "__main__":
     # plot_fig3_ondata("FPK", sample=0.05)
     # plot_fig3_quantiles()
 
-    df = import_ijhmt_df("fig3_esky_i.csv")
-    df["x"] = np.sqrt(df.pw.to_numpy())
-    df["y"] = df.pOverlaps.to_numpy()
-    c1, c2 = fit_linear(df, print_out=True)
+    # df = import_ijhmt_df("fig3_esky_i.csv")
+    # df["x"] = np.sqrt(df.pw.to_numpy())
+    # df["y"] = df.pOverlaps.to_numpy()
+    # c1, c2 = fit_linear(df, print_out=True)
 
+    z = np.linspace(0, 2000, 20)
+    p = get_atm_p(z) / 100  # hPa
 
+    site_p = []
+    site_z = []
+    sites = []
+    h1_p = []
+    site_h = []
+    for s, elev in ELEVATIONS:
+        site_p.append(get_atm_p(elev) / 100)
+        site_z.append(elev)
+        sites.append(s)
 
+        lat1 = SURFRAD[s]["lat"]
+        lon1 = SURFRAD[s]["lon"]
+        h1, spline = shakespeare(lat1, lon1)
+        site_h.append(h1)
+        h1_p.append(P_ATM * np.exp(-1 * elev / h1) / 100)
 
+    site_h = np.array(site_h)
+    site_z = np.array(site_z)
+    site_he = (site_h / np.cos(40.3 * np.pi / 180)) * np.exp(-1.8 * site_z / site_h)
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 8), sharey=True)
+    ax = axes[0]
+    ax.grid(alpha=0.3)
+    ax.axvline(8500, c="0.7", lw=2, zorder=0)
+    ax.scatter(8500*np.ones(len(sites)), site_z, s=10, label="H=8500m")
+    ax.scatter(site_h, site_z, s=15, label="H(lat,lon)")
+    ax.scatter(site_he, site_z, s=15, marker="*", label=r"H$_e$(lat,lon)")
+    for i in range(len(sites)):
+        ax.text(8500 - 50, site_z[i] + 5, s=sites[i], fontsize=11, ha="right")
+    ax.set_ylabel("z [m]")
+    ax.set_xlabel("scale height [m]")
+    ax.set_xlim(left=0)
+    ax.legend()
+
+    ax = axes[1]
+    ax.grid(alpha=0.3)
+    ax.plot(p, z, c="0.7", lw=2, label="P=P0 e^(-z/H)", zorder=0)
+    p_adj = P_ATM * np.exp(-1.8 * z / 8500) / 100
+    ax.plot(p_adj, z, c="0.7", ls="--", label="P=P0 e^(-1.8z/H)", zorder=0)
+    for i in range(len(sites)):
+        ax.text(site_p[i] + 5, site_z[i] + 5, s=sites[i], fontsize=11)
+    ax.scatter(site_p, site_z, s=10, label="P=P(H=8500m)")
+    ax.scatter(h1_p, site_z, s=10, label="P=P(H(lat,lon))")
+    ax.set_ylim(0, 2000)
+    ax.set_xlim(right=1100)
+    ax.set_xlabel("pressure [hPa]")
+    ax.legend(loc="lower left")
+    plt.tight_layout()
+
+    filename = os.path.join("figures", "z_vs_HandP.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
