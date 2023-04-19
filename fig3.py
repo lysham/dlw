@@ -289,38 +289,78 @@ if __name__ == "__main__":
     # ax.plot(pw, co2 + h2o)
     # plt.show()
 
-    plot_fig3_ondata("FPK", sample=0.05)
+    # plot_fig3_ondata("FPK", sample=0.05)
+
+    site = "BON"
+    s = import_cs_compare_csv("cs_compare_2012.csv", site=site)
+    s = s.loc[s.zen < 80].copy()
+    s["pp"] = s.pw_hpa * 100 / P_ATM
+    s["quant"] = pd.qcut(s.pp, 20, labels=False)
+    de_p = s.de_p.values[0]
+
+    quantiles = [0.05, 0.1, 0.25, 0.45, 0.55, 0.75, 0.9, 0.95]
+    xq = np.zeros(20)
+    yq = np.zeros((20, len(quantiles)))
+    for i, g in s.groupby(s.quant):
+        xq[i] = g.pp.median()
+        for j in range(len(quantiles)):
+            yq[i, j] = g.e_act_s.quantile(quantiles[j])
 
     df = import_ijhmt_df("fig3_esky_i.csv")
-    # df["pp"] = np.sqrt(df.pw)
     x = df.pw.to_numpy()
     y = df.pOverlaps.to_numpy()
-    pearsonr(x, np.log(y))
+    df["total"] = df.pOverlaps
+    df["pred_y"] = 0.6376 + (1.6026 * np.sqrt(x))
+    df["best"] = 0.6376 + (1.6191 * np.sqrt(x))
 
-    fig, ax = plt.subplots()
-    ax.plot(x, y)
-    # ax.plot(np.sqrt(x), y)
-    ax.plot(x, np.power(y, 2), label="pwr")
-    ax.plot(x, np.log(y), label="exp")
-    ax.legend()
+    clrs = ["#c8d5b9", "#8fc0a9", "#68b0ab", "#4a7c59", "#41624B"]
+    labels = ["Q5-95", "Q10-90", "Q25-75", "Q45-55"]
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.grid(alpha=0.3)
+    ax.plot(x, df.total + de_p, label="LBL", c="k")
+    for i in range(int(len(quantiles) / 2)):
+        t = int(-1 * (i + 1))
+        ax.fill_between(
+            xq, yq[:, i], yq[:, t], alpha=0.3, label=labels[i],
+            fc=clrs[i], ec="0.9"
+        )
+    ax.set_ylabel("effective sky emissivity [-]")
+    ax.set_xlabel("p$_w$ [-]")
+    ax.set_xlim(0, 0.03)
+    ax.set_ylim(0.60, 1.0)
+    ax.set_axisbelow(True)
+    ax.legend(ncols=3)
+    ax.set_title(f"{site} 2012 (n={s.shape[0]:,}) zen<80", loc="left")
+    filename = os.path.join("figures", f"fig3_{site.lower()}_quantiles.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
     plt.show()
 
-    # pdf = site.loc[abs(site.t_a - 294.2) < 2].copy()
-    # x = pdf.pp.values
-    # y = pdf.e_act_s.values
-    # pearsonr(x, np.log(y))
-
-    train_y = df.pOverlaps.to_numpy()
-    train_x = np.power(df.pp.to_numpy(), 2)
-    model = LinearRegression(fit_intercept=True)
-    model.fit(train_x, train_y)
-    c2 = model.coef_[0].round(4)
-    c1 = model.intercept_.round(4)
-    pred_y = c1 + (c2 * df.pp)
-    rmse = np.sqrt(mean_squared_error(train_y, pred_y))
-    r2 = r2_score(df.total, df.pred_y)
-    print("(c1, c2): ", c1, c2)
-    print(rmse.round(5), r2.round(5))
+    #
+    # fig, ax = plt.subplots()
+    # ax.plot(x, y)
+    # # ax.plot(np.sqrt(x), y)
+    # ax.plot(x, np.power(y, 2), label="pwr")
+    # ax.plot(x, np.log(y), label="exp")
+    # ax.legend()
+    # plt.show()
+    #
+    # # pdf = site.loc[abs(site.t_a - 294.2) < 2].copy()
+    # # x = pdf.pp.values
+    # # y = pdf.e_act_s.values
+    # # pearsonr(x, np.log(y))
+    #
+    # train_y = df.pOverlaps.to_numpy()
+    # train_x = np.power(df.pp.to_numpy(), 2)
+    # model = LinearRegression(fit_intercept=True)
+    # model.fit(train_x, train_y)
+    # c2 = model.coef_[0].round(4)
+    # c1 = model.intercept_.round(4)
+    # pred_y = c1 + (c2 * df.pp)
+    # rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+    # r2 = r2_score(df.total, df.pred_y)
+    # print("(c1, c2): ", c1, c2)
+    # print(rmse.round(5), r2.round(5))
 
 
 
