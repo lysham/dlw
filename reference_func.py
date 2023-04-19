@@ -147,14 +147,16 @@ def plot_gridded_H():
     # Figure of gridded H
     filename = os.path.join("data", "shakespeare", "data.mat")
     f = scipy.io.loadmat(filename)
-    # Get scale height H
-    lon_pts = f["lon"]
-    lat_pts = np.flip(f["lat"])  # must be in ascending order for interp
     h = np.flip(f["H"], axis=1)
     xx = np.rot90(h)
-    plt.imshow(xx, norm="log")
-    plt.colorbar()
-    plt.show()
+
+    fig, ax = plt.subplots(figsize=(15, 5))
+    c = ax.imshow(xx, norm="log", vmin=1000, vmax=25000)
+    fig.colorbar(c, label="H [m]")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    filename = os.path.join("figures", "gridded_H.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 
 
