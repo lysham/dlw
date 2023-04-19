@@ -754,8 +754,8 @@ def fit_linear(df, set_intercept=None, print_out=False):
     # linear regression on esky_c data
     # df["pp"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
     # df["y"] = df.e_act_s3 + df.de_p - 0.6376
-    train_x = df.x.to_numpy()
-    train_y = df.y.to_numpy()
+    train_x = df.x.to_numpy().reshape(-1, 1)
+    train_y = df.y.to_numpy().reshape(-1, 1)
     if set_intercept is not None:  # fix c1
         model = LinearRegression(fit_intercept=False)
     else:
