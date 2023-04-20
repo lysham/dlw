@@ -776,5 +776,18 @@ def plot_z_vs_HandP():
     return None
 
 
+def generate_scale_heights_dict():
+    height_dict = {}
+    i = 0
+    for site in SURF_SITE_CODES:
+        lat1 = SURFRAD[site]["lat"]
+        lon1 = SURFRAD[site]["lon"]
+        h1, spline = shakespeare(lat1, lon1)
+        height_dict[site] = h1
+        i += 1
+    print(height_dict)
+    return None
+
+
 if __name__ == "__main__":
     print()
