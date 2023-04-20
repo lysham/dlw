@@ -23,7 +23,7 @@ from main import get_pw, get_esky_c, li_lw, CORR26A, compute_mbe, pw2tdp, tdp2pw
 from pcmap_data_funcs import get_asos_stations
 
 from constants import SIGMA, SURFRAD, SURF_COLS, SURF_ASOS, SURF_SITE_CODES, \
-    P_ATM, E_C1, E_C2, ELEV_DICT, ELEVATIONS, LON_DICT
+    P_ATM, E_C1, E_C2, ELEV_DICT, ELEVATIONS, LON_DICT, SITE_H_DICT
 
 
 def tsky_table(l1, l2):
@@ -600,10 +600,13 @@ def create_cs_compare_csv(xvar, const, xlist):
 
 
 def import_cs_compare_csv(csvname, site=None):
+    # csvname has to end with either _{year}.csv or _{site}.csv
     filename = os.path.join("data", "cs_compare", csvname)
     df = pd.read_csv(filename, index_col=0, parse_dates=True)
-    if site is not None:
+    if isinstance(site, str):  # if a site is specified for filtering
         df = df.loc[df.site == site]
+    elif csvname[:-4].split("_")[-1] in SURF_SITE_CODES:
+        df["site"] = csvname[:-4].split("_")[-1]
     df["elev"] = df["site"].map(ELEV_DICT)  # Add elevation
     # add altitude correction
     df["P_rep"] = P_ATM * np.exp(-1 * df.elev / 8500)  # Pa
@@ -632,6 +635,14 @@ def import_cs_compare_csv(csvname, site=None):
 
     df["lw_err_t"] = df.lw_c_t - df.dw_ir
     df["lw_err_b"] = df.lw_c - df.lw_s
+
+    # shakespeare variable
+    df["w"] = 0.62198 * df.pw_hpa / (df.pa_hpa - df.pw_hpa)
+    df["q"] = df.w / (1 + df.w)
+    df["h"] = df["site"].map(SITE_H_DICT)
+    df["p_ratio"] = df.P_rep / P_ATM
+    df["he"] = (df.h / np.cos(40.3 * np.pi / 180)) * (df.p_ratio ** 1.8)
+    df = df.drop(columns=["p_ratio", "w"])
     return df
 
 
@@ -820,4 +831,42 @@ if __name__ == "__main__":
 
     # print(df[["lw_err_b", "rh", "t_a", "pw_hpa"]].corr())
 
+    x = np.linspace(0.001, 0.03, 10)
+    y = 0.62 + 1.7 * np.sqrt(x)
+    y2 = 0.62 + 1.9 * np.sqrt(x)
+    fig, ax = plt.subplots()
+    ax.grid()
+    ax.plot(x, y)
+    ax.plot(x, y2, "--")
+    ax.set_ylim(0.6, 1)
+    plt.show()
+
+    filename = os.path.join("data", "shakespeare", "data.mat")
+    f = loadmat(filename)
+    tau_spline = interpolate.RectBivariateSpline(
+        f["q"], f["Heff"], f["tau_eff_400"]
+    )
+    site = "BON"
+    lat1 = SURFRAD[site]["lat"]
+    lon1 = SURFRAD[site]["lon"]
+    h1, spline = shakespeare(lat1, lon1)
+
+    # he = np.linspace(0, 2000, 20)
+    site_elev = np.linspace(0, 2000, 20)  # y
+    pw = np.linspace(0.1, 2.3, 20)  # x
+
+    pa = P_ATM * np.exp(-1 * SURFRAD[site]["alt"] / 8500)
+    tau = np.zeros((len(pw), len(site_elev)))
+    for i in range(len(pw)):
+        for j in range(len(site_elev)):
+            pw1 = pw[i] * P_ATM
+            w = 0.62198 * (pw1 / pa - pw1)
+            q1 = w / (1 + w)
+
+            he1 = (h1 / np.cos(40.3 * np.pi / 180)) * ((pa / P_ATM) ** 1.8)
+            tau[i, j] = spline.ev(q1, he1).item()
+
+    # fig, axes = plt.subplots(2, 1, figsize=(10, 5)) # not functional yet
+    # ax = axes[0]
+    # c = ax.imshow(tau, norm="log")
 

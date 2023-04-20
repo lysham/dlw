@@ -263,13 +263,30 @@ def plot_fig3_ondata(s, sample):
     return None
 
 
-def plot_fig3_quantiles():
-    site = "BON"
-    s = import_cs_compare_csv("cs_compare_2012.csv", site=site)
+def plot_fig3_quantiles(site=None, yr=None, all_sites=False, tau=False,
+                        temperature=False, shk=False):
+    # plot from cs_compare files, either "_{year}.csv" or "_{site}.csv"
+    if isinstance(yr, int) & all_sites:
+        s = import_cs_compare_csv(f"cs_compare_{yr}.csv")
+        de_p = 0
+    elif isinstance(yr, int) & ~all_sites:
+        s = import_cs_compare_csv(f"cs_compare_{yr}.csv", site=site)
+        de_p = s.de_p.values[0]
+    else:
+        s = import_cs_compare_csv(f"cs_compare_{site}.csv")
+        de_p = s.de_p.values[0]
+
     s = s.loc[s.zen < 80].copy()
+    if temperature:
+        s = s.loc[abs(s.t_a - 294.2) < 2].copy()
     s["pp"] = s.pw_hpa * 100 / P_ATM
     s["quant"] = pd.qcut(s.pp, 20, labels=False)
-    de_p = s.de_p.values[0]
+    s["e_eff"] = s.e_act if shk else s.e_act_s
+    if tau:
+        s["transmissivity"] = 1 - s.e_eff
+        s["y"] = -1 * np.log(s.transmissivity)
+    else:
+        s["y"] = s.e_eff
 
     quantiles = [0.05, 0.1, 0.25, 0.45, 0.55, 0.75, 0.9, 0.95]
     xq = np.zeros(20)
@@ -277,36 +294,80 @@ def plot_fig3_quantiles():
     for i, g in s.groupby(s.quant):
         xq[i] = g.pp.median()
         for j in range(len(quantiles)):
-            yq[i, j] = g.e_act_s.quantile(quantiles[j])
+            yq[i, j] = g.y.quantile(quantiles[j])
 
     df = import_ijhmt_df("fig3_esky_i.csv")
     x = df.pw.to_numpy()
     df["total"] = df.pOverlaps
-    df["pred_y"] = 0.6376 + (1.6026 * np.sqrt(x))
-    df["best"] = 0.6376 + (1.6191 * np.sqrt(x))
+    # df["total"] = df.pN2
+    # df["pred_y"] = 0.6376 + (1.6026 * np.sqrt(x))
+    # df["best"] = 0.6376 + (1.6191 * np.sqrt(x))
+    if tau:
+        esky = df.total + de_p
+        y = -1 * np.log(1 - esky)
+    else:
+        y = df.total + de_p
+
+    if shk:  # if using only one site, apply shakespeare model
+        pw = (x * P_ATM) / 100  # convert back to partial pressure [hPa]
+        pa_hpa = s.P_rep.values[0] / 100
+        w = 0.62198 * pw / (pa_hpa - pw)
+        q_values = w / (1 + w)
+        he = s.he.values[0]
+
+        lat1 = SURFRAD[site]["lat"]
+        lon1 = SURFRAD[site]["lon"]
+        h1, spline = shakespeare(lat1, lon1)
+
+        tau_shakespeare = []
+        for q1 in q_values:
+            tau_shakespeare.append(spline.ev(q1, he).item())
+        # don't need to make any altitude adjustments in shakespeare
+        if tau:  # optical depth
+            y_sp = np.array(tau_shakespeare)
+        else:  # emissivity
+            y_sp = (1 - np.exp(-1 * np.array(tau_shakespeare)))
 
     clrs = ["#c8d5b9", "#8fc0a9", "#68b0ab", "#4a7c59", "#41624B"]
     labels = ["Q5-95", "Q10-90", "Q25-75", "Q45-55"]
 
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.grid(alpha=0.3)
-    ax.plot(x, df.total + de_p, label="LBL", c="k")
+    ax.plot(x, y, label="LBL", c="k")
+    if shk:
+        ax.plot(x, y_sp, label="Shakespeare", c="0.2", ls=":")
     for i in range(int(len(quantiles) / 2)):
         t = int(-1 * (i + 1))
         ax.fill_between(
             xq, yq[:, i], yq[:, t], alpha=0.3, label=labels[i],
             fc=clrs[i], ec="0.9"
         )
-    ax.set_ylabel("effective sky emissivity [-]")
     ax.set_xlabel("p$_w$ [-]")
     ax.set_xlim(0, 0.03)
-    ax.set_ylim(0.60, 1.0)
+    if tau:
+        ax.set_ylabel("optical depth [-]")
+        ax.set_ylim(0.8, 3.0)
+    else:
+        ax.set_ylabel("effective sky emissivity [-]")
+        ax.set_ylim(0.60, 1.0)
+    ax.legend(ncols=3, loc="upper left")
     ax.set_axisbelow(True)
-    ax.legend(ncols=3)
-    ax.set_title(f"{site} 2012 (n={s.shape[0]:,}) zen<80", loc="left")
-    filename = os.path.join("figures", f"fig3_{site.lower()}_quantiles.png")
+
+    # set title and filename
+    suffix = "_tau" if tau else ""
+    suffix += "_ta" if temperature else ""
+    title_suffix = r", T=294.2$\pm$2K" if temperature else ""
+    if isinstance(yr, int) & all_sites:
+        filename = os.path.join("figures", f"fig3_{yr}_q{suffix}.png")
+        title = f"{yr} (n={s.shape[0]:,}) zen<80" + title_suffix
+    elif isinstance(yr, int) & ~all_sites:
+        filename = os.path.join("figures", f"fig3_{site}_q{suffix}.png")
+        title = f"{site} {yr} (n={s.shape[0]:,}) zen<80" + title_suffix
+    else:
+        filename = os.path.join("figures", f"fig3_{site}_q5yr{suffix}.png")
+        title = f"{site} 2012-2016 (n={s.shape[0]:,}) zen<80" + title_suffix
+    ax.set_title(title, loc="left")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
-    plt.show()
     return None
 
 
@@ -317,32 +378,34 @@ if __name__ == "__main__":
     # pw = get_pw_norm(t_a, rh)
 
     # plot_fig3_ondata("FPK", sample=0.05)
-    # plot_fig3_quantiles()
+    plot_fig3_quantiles(site="GWC", yr=None, tau=False, temperature=False, shk=True)
+    # plot_fig3_quantiles(site="PSU", yr=None, tau=True, temperature=False)
+    # plot_fig3_quantiles(site="PSU", yr=None, tau=True)
 
-    site = import_cs_compare_csv("cs_compare_2014.csv")
-    site["pp"] = site.pw_hpa * 100 / P_ATM
-    site = site.loc[(site.zen < 80) & (abs(site.t_a - 294.2 < 2))].copy()
-    site = site.sample(frac=0.25, random_state=96)
-    site["esky"] = site.e_act_s - site.de_p
-    site["transmissivity"] = 1 - site.esky
-    site["tau"] = -1 * np.log(site.transmissivity)
-
-    site["x"] = site.pp.to_numpy()
-    site["y"] = site.tau.to_numpy()
-    c1, c2 = fit_linear(site, print_out=True)
-
-    site["x"] = np.sqrt(site.pp.to_numpy())
-    site["y"] = site.esky.to_numpy()
-    c1, c2 = fit_linear(site, print_out=True)
-
-    df = import_ijhmt_df("fig3_esky_i.csv")
-    df["transmissivity"] = 1 - df.pOverlaps
-    df["tau"] = -1 * np.log(df.transmissivity)
-    df["x"] = df.pw.to_numpy()
-    df["y"] = df.tau.to_numpy()
-    c1, c2 = fit_linear(df, print_out=True)
-
-    fig, ax = plt.subplots()
-    ax.scatter(site.pp, site.tau, alpha=0.01)
-    ax.plot(df.x, df.tau)
-    plt.show()
+    # site = import_cs_compare_csv("cs_compare_2012.csv")
+    # site["pp"] = site.pw_hpa * 100 / P_ATM
+    # site = site.loc[(site.zen < 80) & (abs(site.t_a - 294.2 < 2))].copy()
+    # site = site.sample(frac=0.25, random_state=96)
+    # site["esky_2fit"] = site.e_act_s - site.de_p
+    # site["transmissivity"] = 1 - site.esky_2fit
+    # site["tau"] = -1 * np.log(site.transmissivity)
+    #
+    # site["x"] = site.pp.to_numpy()
+    # site["y"] = site.tau.to_numpy()
+    # c1, c2 = fit_linear(site, print_out=True)
+    #
+    # site["x"] = np.sqrt(site.pp.to_numpy())
+    # site["y"] = site.esky.to_numpy()
+    # c1, c2 = fit_linear(site, print_out=True)
+    #
+    # df = import_ijhmt_df("fig3_esky_i.csv")
+    # df["transmissivity"] = 1 - df.pOverlaps
+    # df["tau"] = -1 * np.log(df.transmissivity)
+    # df["x"] = df.pw.to_numpy()
+    # df["y"] = df.tau.to_numpy()
+    # c1, c2 = fit_linear(df, print_out=True)
+    #
+    # fig, ax = plt.subplots()
+    # ax.scatter(site.pp, site.tau, alpha=0.01)
+    # ax.plot(df.x, df.tau)
+    # plt.show()
