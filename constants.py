@@ -30,6 +30,15 @@ for i in SURFRAD:
     LON_DICT[i] = SURFRAD[i]["lon"]
 ELEVATIONS = sorted(ELEV_DICT.items(), key=lambda x: x[1])  # sorted list
 
+# Generate from integrating shakespeare data (function in ref_func)
+SITE_H_DICT = {
+    'BON': 2283.261266476327, 'BOU': 2036.589702450849,
+    'DRA': 2772.565558794065, 'FPK': 2504.2325580970546,
+    'GWC': 2253.5745262708365, 'PSU': 2284.1533602287977,
+    'SXF': 2306.1676698118363
+}
+
+
 SURF_ASOS = dict(
     BON=dict(usaf=725315, wban=94870),
     BOU=dict(usaf=720533, wban=160),
