@@ -781,8 +781,8 @@ def fit_linear(df, set_intercept=None, print_out=False):
 if __name__ == "__main__":
     print()
     # start_time = time.time()
-    # for s in ['BON', 'BOU', 'DRA', 'FPK', 'PSU', 'SXF']:
-    #     process_site(s, yr="2014")
+    # for s in ['BON', 'BOU', 'DRA', 'FPK', 'PSU', 'SXF', 'GWC']:
+    #     process_site(s, yr="2017")
     #     print(s, time.time() - start_time)
 
     # start_time = time.time()
