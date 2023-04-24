@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from scipy import integrate, interpolate
 from sklearn.linear_model import LinearRegression, SGDRegressor
 from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.model_selection import train_test_split
 from copy import deepcopy
 from scipy.io import loadmat
 from scipy.optimize import curve_fit
@@ -718,10 +719,6 @@ def compare_esky_fits(p="hpa", lw="s", tra_yr=2012, val_yr=2013, rm_loc=None):
     return None
 
 
-def esky_format(x, c1, c2, c3):
-    return c1 + (c2 * np.power(x, c3))
-
-
 def reduce_to_equal_pts_per_site(df):
     # keep equal number of points per site
     site_pts = df.groupby(df.site).t_a.count().sort_values().to_dict()
@@ -831,42 +828,5 @@ if __name__ == "__main__":
 
     # print(df[["lw_err_b", "rh", "t_a", "pw_hpa"]].corr())
 
-    x = np.linspace(0.001, 0.03, 10)
-    y = 0.62 + 1.7 * np.sqrt(x)
-    y2 = 0.62 + 1.9 * np.sqrt(x)
-    fig, ax = plt.subplots()
-    ax.grid()
-    ax.plot(x, y)
-    ax.plot(x, y2, "--")
-    ax.set_ylim(0.6, 1)
-    plt.show()
 
-    filename = os.path.join("data", "shakespeare", "data.mat")
-    f = loadmat(filename)
-    tau_spline = interpolate.RectBivariateSpline(
-        f["q"], f["Heff"], f["tau_eff_400"]
-    )
-    site = "BON"
-    lat1 = SURFRAD[site]["lat"]
-    lon1 = SURFRAD[site]["lon"]
-    h1, spline = shakespeare(lat1, lon1)
-
-    # he = np.linspace(0, 2000, 20)
-    site_elev = np.linspace(0, 2000, 20)  # y
-    pw = np.linspace(0.1, 2.3, 20)  # x
-
-    pa = P_ATM * np.exp(-1 * SURFRAD[site]["alt"] / 8500)
-    tau = np.zeros((len(pw), len(site_elev)))
-    for i in range(len(pw)):
-        for j in range(len(site_elev)):
-            pw1 = pw[i] * P_ATM
-            w = 0.62198 * (pw1 / pa - pw1)
-            q1 = w / (1 + w)
-
-            he1 = (h1 / np.cos(40.3 * np.pi / 180)) * ((pa / P_ATM) ** 1.8)
-            tau[i, j] = spline.ev(q1, he1).item()
-
-    # fig, axes = plt.subplots(2, 1, figsize=(10, 5)) # not functional yet
-    # ax = axes[0]
-    # c = ax.imshow(tau, norm="log")
 

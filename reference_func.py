@@ -5,6 +5,8 @@ import scipy
 import pvlib
 from scipy.optimize import curve_fit
 from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
 from corr26b import get_tsky, join_surfrad_asos, shakespeare, \
     shakespeare_comparison, import_cs_compare_csv, fit_linear
 from fraction import fe_lt, fi_lt
@@ -786,6 +788,154 @@ def generate_scale_heights_dict():
         height_dict[site] = h1
         i += 1
     print(height_dict)
+    return None
+
+
+def test_altitude_correction():
+    """Compare Berdahl correction with H=8500m vs H=H(lat,lon)"""
+    df = import_cs_compare_csv("cs_compare_2012.csv")
+    df = df.sample(1000)
+    df["pp"] = 1.01325 * (np.exp(-1 * df.elev / 8500))
+    df["e_err"] = df.e_act_s - df.esky_c
+    plt.scatter(df.pp, df.e_err, alpha=0.5)
+
+    y = df.e_err.to_numpy().reshape(-1, 1)
+
+    # c1 * p0 * (exp(-z/H) - 1)
+    X8 = 1.01325 * (np.exp(-1 * df.elev / 8500) - 1).to_numpy().reshape(-1, 1)
+    Xh = 1.01325 * (np.exp(-1 * df.elev / df.h) - 1).to_numpy().reshape(-1, 1)
+
+    # c1 * (p0 exp(-z/H) - 100)
+    # df["P_h"] = P_ATM * np.exp(-1 * df.elev / df.h)
+    # X8 = ((df.P_rep.to_numpy() / 100) - 1000).reshape(-1, 1)
+    # Xh = ((df.P_h.to_numpy() / 100) - 1000).reshape(-1, 1)
+
+    for X in [X8, Xh]:
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.33, random_state=42)
+        model = LinearRegression(fit_intercept=False)
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+        mbe = compute_mbe(y_test, y_pred)[0]
+        r2 = r2_score(y_test, y_pred)
+        print(f"\nc1: {model.coef_[0][0]:.6f}")
+        print(f"RMSE: {rmse:.8f}")
+        print(f"MBE: {mbe:.8f}")
+        print(f"R2: {r2:.8f}")
+    print(f"\ntrain: {X_train.shape[0]:,}, test: {X_test.shape[0]:,}")
+    return None
+
+
+def esky_format_exp(x, c1, c2):
+    return c1 * np.exp(-1 * c2 * x)
+
+
+def compare_exp_fit():
+    """
+    Compare fits for emissivity
+    e=c1+c2sqrt(pw), t=c1+c2pw, 1-e=c1exp(-c2pw)
+    """
+    df = import_cs_compare_csv("cs_compare_2012.csv")
+    df["pp"] = np.sqrt(df.pw_hpa / df.pa_hpa)
+    df["e_eff"] = df.e_act_s + df.de_p
+    X_lin = np.sqrt(df.pp.to_numpy().reshape(-1, 1))
+    X_tau = df.pp.to_numpy().reshape(-1, 1)
+    X_exp = df.pp.to_numpy().reshape(-1, 1)
+    y = df.e_eff.to_numpy().reshape(-1, 1)
+
+    # emissivity
+    X_specific = X_lin
+    y_specific = y
+    # linear tau
+    X_specific = X_tau
+    y_specific = -1 * np.log(1 - y)
+    # exponential tau
+    X_specific = X_exp
+    y_specific = 1 - y
+
+    # copy/paste with linear tau or emissivity
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_specific, y_specific, test_size=0.33, random_state=42)
+    model = LinearRegression(fit_intercept=True)
+    model.fit(X_train, y_train)
+    c2 = model.coef_[0][0].round(4)
+    c1 = model.intercept_[0].round(4)
+    print(c1, c2)
+    # Evaluate on training
+    y_pred = c1 + (c2 * X_train)
+    rmse = np.sqrt(mean_squared_error(y_train, y_pred))
+    r2 = r2_score(y_train, y_pred)
+    print(f"RMSE: {rmse:.4f}")
+    print(f"R2: {r2:.4f}")
+    # Evaluate on test
+    y_pred = c1 + (c2 * X_test)
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    r2 = r2_score(y_test, y_pred)
+    print(f"Test RMSE: {rmse:.4f}")
+    print(f"Test R2: {r2:.4f}")
+
+    # copy/paste with exp_fit X
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_specific.reshape(-1), y_specific.reshape(-1),
+        test_size=0.33, random_state=42)
+    out = curve_fit(
+        f=esky_format_exp, xdata=X_train, ydata=y_train,
+        p0=[0.3, 7], bounds=(-100, 100)
+    )
+    c1 = out[0][0].round(4)
+    c2 = out[0][1].round(4)
+    print(c1, c2)
+    y_pred = esky_format_exp(X_train, c1, c2)
+    rmse = np.sqrt(mean_squared_error(y_train, y_pred))
+    r2 = r2_score(y_train, y_pred)
+    print(f"RMSE: {rmse:.4f}")
+    print(f"R2: {r2:.4f}")
+    y_pred = esky_format_exp(X_test, c1, c2)
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    r2 = r2_score(y_test, y_pred)
+    print(f"Test RMSE: {rmse:.4f}")
+    print(f"Test R2: {r2:.4f}")
+    # ---------------
+    # IJHMT data (same structure as cs_compare file)
+    filename = os.path.join("data", "ijhmt_2019_data", "fig3_esky_i.csv")
+    colnames = ['pw', 'H2O', 'pCO2', 'pO3', 'pAerosols',
+                'pN2O', 'pCH4', 'pO2', 'pN2', 'pOverlaps']
+    df = pd.read_csv(filename, names=colnames, header=0)
+    # emissivity
+    X_train = np.sqrt(df.pw.to_numpy().reshape(-1, 1))
+    y_train = df.pOverlaps.to_numpy().reshape(-1, 1)
+    # linear tau
+    X_train = df.pw.to_numpy().reshape(-1, 1)
+    y_train = -1 * np.log(1 - y_train)
+
+    model = LinearRegression(fit_intercept=True)
+    model.fit(X_train, y_train)
+    c2 = model.coef_[0][0].round(4)
+    c1 = model.intercept_[0].round(4)
+    y_pred = c1 + (c2 * X_train)
+    print(c1, c2)
+    # Evaluate
+    rmse = np.sqrt(mean_squared_error(y_train, y_pred))
+    r2 = r2_score(y_train, y_pred)
+    print(f"RMSE: {rmse:.4f}")
+    print(f"R2: {r2:.4f}")
+
+    # exponential tau
+    X_train = df.pw.to_numpy().reshape(-1)
+    y_train = 1 - df.pOverlaps.to_numpy().reshape(-1)
+
+    out = curve_fit(
+        f=esky_format_exp, xdata=X_train, ydata=y_train,
+        p0=[0.0, 0.5], bounds=(-100, 100)
+    )
+    c1 = out[0][0].round(4)
+    c2 = out[0][1].round(4)
+    y_pred = esky_format_exp(X_train, c1, c2)
+    rmse = np.sqrt(mean_squared_error(y_train, y_pred))
+    r2 = r2_score(y_train, y_pred)
+    print(f"RMSE: {rmse:.4f}")
+    print(f"R2: {r2:.4f}")
     return None
 
 
