@@ -130,7 +130,10 @@ def process_site(site, yr="2012"):
     # all_years = os.listdir(directory)
     keep_cols = [
         'zen', 'dw_solar', 'qc1', 'direct_n', 'qc3', 'diffuse', 'qc4',
-        'dw_ir', 'qc5', 'temp', 'qc16', 'rh', 'qc17', 'pressure', 'qc20'
+        'dw_ir', 'qc5', 'temp', 'qc16', 'rh', 'qc17', 'pressure', 'qc20',
+        'dw_casetemp', 'dw_dometemp', 'uw_ir',
+        'uw_castemp', 'uw_dometemp', 'uvb', 'par',
+        'windspd', 'winddir'
     ]  # narrow down columns from SURF_COLNAMES
     # if yr in all_years:
     folder = os.path.join(directory, yr)
@@ -170,9 +173,7 @@ def process_site(site, yr="2012"):
         (df.qc16 == 0) & (df.qc17 == 0) &
         (df.qc20 == 0)
     ]
-    df = df[
-        ['zen', 'direct_n', 'diffuse', 'dw_ir', 'dw_solar', 'temp',
-         'rh', 'pressure']]  # reduce data columns
+    df = df[df.columns.drop(list(df.filter(regex='qc')))]  # drop qc cols
     df['t_a'] = df.temp + 273.15  # convert celsius to kelvin
 
     # remove negative GHI and DNI values
@@ -440,10 +441,10 @@ def shakespeare_comparison(site, year="2012"):
     df = pd.read_csv(filename, index_col=0, parse_dates=True)
     df.sort_index(inplace=True)
     df = df.tz_localize("UTC")
-    df = df[[
-        "rh", "pressure", "t_a", "dw_ir", "lw_s",
-        "zen", "cs_period"
-    ]]
+    # df = df[[
+    #     "rh", "pressure", "t_a", "dw_ir", "lw_s",
+    #     "zen", "cs_period"
+    # ]]
     df["pw_hpa"] = get_pw(df.t_a, df.rh) / 100  # hPa
     df["esky_c"] = get_esky_c(df.pw_hpa)
     df["lw_c"] = df.esky_c * SIGMA * np.power(df.t_a, 4)
@@ -594,7 +595,6 @@ def create_cs_compare_csv(xvar, const, xlist):
             tmp = tmp.loc[tmp.cs_period]  # keep only clear skies
             tmp["site"] = x
         df = pd.concat([df, tmp])
-    # print(df.shape)
     filename = os.path.join("data", "cs_compare", f"cs_compare_{const}.csv")
     df.to_csv(filename)
     return None
@@ -776,6 +776,11 @@ def fit_linear(df, set_intercept=None, print_out=False):
     else:  # use model-fitted c1
         c1 = model.intercept_.round(4)
         pred_y = c1 + (c2 * df.x)
+    if isinstance(c1, np.ndarray):
+        c1 = c1[0]
+    if isinstance(c2, np.ndarray):
+        c2 = c2[0]
+
     if print_out:
         rmse = np.sqrt(mean_squared_error(train_y, pred_y))
         r2 = r2_score(train_y, pred_y)
@@ -789,8 +794,8 @@ def fit_linear(df, set_intercept=None, print_out=False):
 if __name__ == "__main__":
     print()
     # start_time = time.time()
-    # for s in ['BON', 'BOU', 'DRA', 'FPK', 'PSU', 'SXF', 'GWC']:
-    #     process_site(s, yr="2017")
+    # for s in ['BON', 'BOU', 'GWC']:
+    #     process_site(s, yr="2012")
     #     print(s, time.time() - start_time)
 
     # start_time = time.time()
@@ -812,9 +817,9 @@ if __name__ == "__main__":
     # plot_fit(site, model.coef_, y_true, y_pred, rmse)
 
     # CREATE CS_COMPARE
-    # create_cs_compare_csv(xvar="site", const="2012", xlist=SURF_SITE_CODES)
+    # create_cs_compare_csv(xvar="site", const="2015", xlist=SURF_SITE_CODES)
     # xlist = [2012, 2013, 2014, 2015, 2016]
-    # create_cs_compare_csv(xvar="year", const="GWC", xlist=xlist)
+    # create_cs_compare_csv(xvar="year", const="GWC", xlist=[2012])
 
     # GRAPH histograms of error by quartile of some humidity metric
     # df = import_cs_compare_csv("cs_compare_2012.csv")
@@ -827,6 +832,91 @@ if __name__ == "__main__":
     # compare_esky_fits(p="scaled", lw="", tra_yr=2012, val_yr=2013, rm_loc=None)
 
     # print(df[["lw_err_b", "rh", "t_a", "pw_hpa"]].corr())
+
+    # df = import_cs_compare_csv("cs_compare_2015.csv")
+    # df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
+    # df["y"] = df.e_act - df.de_p  # bring emissivity to sea level
+    # df = df.loc[abs(df.t_a - 294.2 < 2)].copy()
+    # c1, c2 = fit_linear(df, print_out=True)
+
+    # LW ERROR plots vs TOD
+    # s = "GWC"
+    # df = import_cs_compare_csv("cs_compare_GWC.csv")
+    # tmp = np.log(df.pw_hpa * 100 / 610.94)
+    # df["tdp"] = 273.15 + ((243.04 * tmp) / (17.625 - tmp))
+    # df["dtdp"] = df.t_a - df.tdp
+    #
+    # gwc = df.copy()
+    # gwc = gwc.loc[abs(gwc.t_a - 294.2) < 1].copy()
+    #
+    # gwc["solar_time_hour"] = pd.DatetimeIndex(gwc.solar_time.copy()).hour
+    # tmp = pd.DatetimeIndex(gwc.solar_time.copy())
+    # gwc["solar_tod"] = tmp.hour + (tmp.minute / 60) + (tmp.second / 3600)
+    # gwc = gwc.set_index("solar_tod")
+    # gwc = gwc.sample(frac=0.25, random_state=33)
+    #
+    # # gwc = gwc.loc[gwc.dtdp < 2].copy()
+    # fig, ax = plt.subplots(figsize=(8, 5))
+    # ax.grid(alpha=0.3)
+    # # lw_err_b uses IJHMT fit
+    # # cb = ax.scatter(
+    # #     gwc.index, gwc.lw_err_b, c=gwc.rh, alpha=0.8, marker=".",
+    # #     vmin=0, vmax=100
+    # # )
+    # cb = ax.scatter(
+    #     gwc.index, gwc.lw_err_b, c=gwc.windspd, alpha=0.8, marker=".",
+    #     vmin=0, vmax=5
+    # )
+    # ax.axhline(0, c="0.8", ls="--")
+    # ax.set_xlabel("solar time of day")
+    # ax.set_ylabel("LW error w/o altitude correction [W/m$^2$] ")
+    # ax.set_ylim(-40, 40)
+    # ax.set_title(f"{s} (pts={gwc.shape[0]:,})")
+    # ax.set_title(f"{s} (pts={gwc.shape[0]:,}), T=294.2$\pm$1K")
+    # # fig.colorbar(cb, label=r"T$_a$ - T$_{dp}$ [K]", extend="max")
+    # fig.colorbar(cb, label="wind speed [m/s]", extend="max")
+    # # fig.colorbar(cb, label="RH [%]")
+    # # fig.colorbar(cb, label=r"T$_{dp}$ [K]")
+    # plt.show()
+    # # filename = os.path.join("figures", f"{s.lower()}_lwe_vs_tod_rh.png")
+    # # filename = os.path.join("figures", f"{s.lower()}_lwe_vs_tod.png")
+    # filename = os.path.join("figures", f"{s.lower()}_lwe_vs_tod_ws.png")
+    # fig.savefig(filename, bbox_inches="tight", dpi=300)
+
+
+    # df = import_cs_compare_csv("cs_compare_2012.csv")
+    # tmp = np.log(df.pw_hpa * 100 / 610.94)
+    # df["tdp"] = 273.15 + ((243.04 * tmp) / (17.625 - tmp))
+    # df["dtdp"] = df.t_a - df.tdp
+    # df = df.loc[df.dtdp >= 2].copy()
+    # df["pp"] = np.sqrt(df.pw_hpa / df.pa_hpa)
+    # df["e_eff"] = df.e_act_s + df.de_p
+    # X_lin = np.sqrt(df.pp.to_numpy().reshape(-1, 1))
+    # y = df.e_eff.to_numpy().reshape(-1, 1)
+    # # emissivity
+    # X_specific = X_lin
+    # y_specific = y
+    #
+    # # copy/paste with linear tau or emissivity
+    # X_train, X_test, y_train, y_test = train_test_split(
+    #     X_specific, y_specific, test_size=0.33, random_state=42)
+    # model = LinearRegression(fit_intercept=True)
+    # model.fit(X_train, y_train)
+    # c2 = model.coef_[0][0].round(4)
+    # c1 = model.intercept_[0].round(4)
+    # print(c1, c2)
+    # # Evaluate on training
+    # y_pred = c1 + (c2 * X_train)
+    # rmse = np.sqrt(mean_squared_error(y_train, y_pred))
+    # r2 = r2_score(y_train, y_pred)
+    # print(f"RMSE: {rmse:.4f}")
+    # print(f"R2: {r2:.4f}")
+    # # Evaluate on test
+    # y_pred = c1 + (c2 * X_test)
+    # rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    # r2 = r2_score(y_test, y_pred)
+    # print(f"Test RMSE: {rmse:.4f}")
+    # print(f"Test R2: {r2:.4f}")
 
 
 
