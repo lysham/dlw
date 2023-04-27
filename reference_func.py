@@ -836,21 +836,22 @@ def compare_exp_fit():
     Compare fits for emissivity
     e=c1+c2sqrt(pw), t=c1+c2pw, 1-e=c1exp(-c2pw)
     """
-    df = import_cs_compare_csv("cs_compare_2012.csv")
-    df["pp"] = np.sqrt(df.pw_hpa / df.pa_hpa)
-    df["e_eff"] = df.e_act_s + df.de_p
+    df = import_cs_compare_csv("cs_compare_2013.csv")
+    df = df.loc[abs(df.t_a - 294.2 < 2)].copy()
+    df["pp"] = df.pw_hpa * 100 / P_ATM
+    df["e_eff"] = df.e_act - df.de_p  # bring to sea level
     X_lin = np.sqrt(df.pp.to_numpy().reshape(-1, 1))
     X_tau = df.pp.to_numpy().reshape(-1, 1)
     X_exp = df.pp.to_numpy().reshape(-1, 1)
     y = df.e_eff.to_numpy().reshape(-1, 1)
 
-    # emissivity
+    # EMISSIVITY
     X_specific = X_lin
     y_specific = y
-    # linear tau
+    # LINEAR TAU
     X_specific = X_tau
     y_specific = -1 * np.log(1 - y)
-    # exponential tau
+    # EXPONENTIAL TAU - need to have esky_format_exp() function
     X_specific = X_exp
     y_specific = 1 - y
 
@@ -874,6 +875,7 @@ def compare_exp_fit():
     r2 = r2_score(y_test, y_pred)
     print(f"Test RMSE: {rmse:.4f}")
     print(f"Test R2: {r2:.4f}")
+    print(X_train.shape, X_test.shape)
 
     # copy/paste with exp_fit X
     X_train, X_test, y_train, y_test = train_test_split(
@@ -896,6 +898,7 @@ def compare_exp_fit():
     r2 = r2_score(y_test, y_pred)
     print(f"Test RMSE: {rmse:.4f}")
     print(f"Test R2: {r2:.4f}")
+
     # ---------------
     # IJHMT data (same structure as cs_compare file)
     filename = os.path.join("data", "ijhmt_2019_data", "fig3_esky_i.csv")
