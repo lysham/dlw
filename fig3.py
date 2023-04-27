@@ -378,7 +378,7 @@ if __name__ == "__main__":
     # pw = get_pw_norm(t_a, rh)
 
     # plot_fig3_ondata("FPK", sample=0.05)
-    plot_fig3_quantiles(site="GWC", yr=None, tau=False, temperature=False, shk=True)
+    # plot_fig3_quantiles(site="GWC", yr=None, tau=False, temperature=False, shk=True)
     # plot_fig3_quantiles(site="PSU", yr=None, tau=True, temperature=False)
     # plot_fig3_quantiles(site="PSU", yr=None, tau=True)
 
@@ -409,3 +409,57 @@ if __name__ == "__main__":
     # ax.scatter(site.pp, site.tau, alpha=0.01)
     # ax.plot(df.x, df.tau)
     # plt.show()
+
+    # plot multiple years on non-corrected data
+    clrs_g = ["#c8d5b9", "#8fc0a9", "#68b0ab", "#4a7c59", "#41624B"]
+    labels = ["Q05-95", "Q25-75", "Q40-60"]
+    quantiles = [0.05, 0.25, 0.4, 0.6, 0.75, 0.95]
+    clrs_p = ["#C9A6B7", "#995C7A", "#804D67", "663D52", "#4D2E3E"]
+
+    df = import_ijhmt_df("fig3_esky_i.csv")
+    x = df.pw.to_numpy()
+    df["total"] = df.pOverlaps
+    y = df.total  # no altitude correction
+
+    s = import_cs_compare_csv(f"cs_compare_2012.csv")
+    s = s.loc[abs(s.t_a - 294.2) < 2].copy()
+    s = s.set_index("solar_time")
+    s = s.loc[s.index.hour > 8]  # remove data before 8am solar
+    pressure_bins = 10
+    s["pp"] = s.pw_hpa * 100 / P_ATM
+    s["quant"] = pd.qcut(s.pp, pressure_bins, labels=False)
+    s["x"] = np.sqrt(s.pp)
+    s["y"] = s.e_act - s.de_p  # bring to sea level
+    xq = np.zeros(pressure_bins)
+    yq = np.zeros((pressure_bins, len(quantiles)))
+    for i, g in s.groupby(s.quant):
+        xq[i] = g.pp.median()
+        for j in range(len(quantiles)):
+            yq[i, j] = g.y.quantile(quantiles[j])
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.grid(alpha=0.3)
+    ax.plot(x, y, label="LBL (0.6376+1.6026x)", c="k")
+    c1, c2 = fit_linear(s, print_out=False)
+    y2 = c1 + c2 * np.sqrt(x)
+    ax.plot(x, y2, label=f"{c1}+{c2}x", ls=":", lw=2, c="g")
+    for i in range(int(len(quantiles) / 2)):
+        t = int(-1 * (i + 1))
+        ax.fill_between(
+            xq, yq[:, i], yq[:, t], alpha=0.3, label=labels[i],
+            fc=clrs_g[i], ec="0.9", step="mid"
+        )
+    ax.set_xlabel("p$_w$ [-]")
+    ax.set_xlim(0, 0.03)
+    ax.set_ylabel("effective sky emissivity [-]")
+    ax.set_ylim(0.60, 1.0)
+    ax.legend(ncols=3, loc="upper left")
+    ax.set_axisbelow(True)
+    plt.show()
+
+    # set title and filename
+    filename = os.path.join(
+        "figures", f"fig3_allsites_dwir_{pressure_bins}.png")
+    title = f"SURFRAD, altitude-adjusted, T=294.2$\pm$2K, Solar time > 0800"
+    ax.set_title(title, loc="left")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
