@@ -126,7 +126,8 @@ def process_site(site, yr="2012"):
     lat = SURFRAD[site]["lat"]
     lon = SURFRAD[site]["lon"]
     alt = SURFRAD[site]["alt"]  # m
-    directory = os.path.join("/Volumes", "LMM_drive", "SURFRAD", site_name)
+    # directory = os.path.join("/Volumes", "LMM_drive", "SURFRAD", site_name)
+    directory = os.path.join("data", "SURFRAD_raw", site_name)
     # all_years = os.listdir(directory)
     keep_cols = [
         'zen', 'dw_solar', 'qc1', 'direct_n', 'qc3', 'diffuse', 'qc4',
@@ -793,10 +794,11 @@ def fit_linear(df, set_intercept=None, print_out=False):
 
 if __name__ == "__main__":
     print()
-    # start_time = time.time()
-    # for s in ['BON', 'BOU', 'GWC']:
-    #     process_site(s, yr="2012")
-    #     print(s, time.time() - start_time)
+    start_time = time.time()
+    for s in ['BON', 'BOU', 'GWC', 'DRA', 'FPK', 'SXF', 'PSU']:
+        process_site(s, yr="2015")
+        process_site(s, yr="2016")
+        print(s, time.time() - start_time)
 
     # start_time = time.time()
     # tsky_table(3, 50)
