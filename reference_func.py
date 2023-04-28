@@ -942,5 +942,255 @@ def compare_exp_fit():
     return None
 
 
+def plot_lwerr_bin(df, mod, x, nbins=4, site=None, save_fig=False):
+    if mod == "t":
+        y_mod = "lw_c_t"
+        y_true = "dw_ir"
+        err = "lw_err_t"
+        xlabel = r"$\Delta LW = LW_{\tau} - LW$ [W/m$^2$]"
+    elif mod == "b":
+        y_mod = "lw_c"
+        y_true = "lw_s"
+        err = "lw_err_b"
+        xlabel = r"$\Delta LW = LW_{B} - LW_{s}$ [W/m$^2$]"
+    if site is not None:
+        df = df.loc[df.site == site].copy()
+    if x == "pw":
+        df["w_bin"] = pd.qcut(df.pw_hpa, nbins, labels=False)
+    elif x == "rh":
+        df["w_bin"] = pd.qcut(df.rh, nbins, labels=False)
+    elif x == "tk":
+        df["w_bin"] = pd.qcut(df.t_a, nbins, labels=False)
+    elif x == "pa":
+        df["w_bin"] = pd.qcut(df.pa_hpa, nbins, labels=False)
+    # FIGURE
+    fig, axes = plt.subplots(
+        nbins, 1, figsize=(8, 10), sharex=True, sharey=True)
+    for i in range(nbins):
+        ax = axes[i]
+        ax.grid(axis="x")
+        q = df.loc[df.w_bin == i].copy()
+        ax.hist(q[[err]], bins=30)
+        ax.set_xlim(-30, 30)
+        if x == "pw":
+            title = f"Q{i+1}: p$_w$ [{q.pw_hpa.min():.2f}-{q.pw_hpa.max():.2f}]"
+        elif x == "rh":
+            title = f"Q{i + 1}: RH [{q.rh.min():.2f}-{q.rh.max():.2f}]"
+        elif x == "tk":
+            title = f"Q{i + 1}: T [{q.t_a.min():.2f}-{q.t_a.max():.2f}]"
+        elif x == "pa":
+            title = f"Q{i + 1}: P [{q.pa_hpa.min():.2f}-{q.pa_hpa.max():.2f}]"
+        # ax.set_title(title, loc="left")
+        ax.text(
+            0.02, 0.8, s=title, backgroundcolor="1.0", size="medium",
+            transform=ax.transAxes
+        )
+        ax.set_axisbelow(True)
+        rmse = np.sqrt(mean_squared_error(q[[y_true]], q[[y_mod]]))
+        mbe = compute_mbe(q[[y_true]].values, q[[y_mod]].values)[0]
+        err_str = f"RMSE={rmse:.2f} W/m$^2$ \n MBE={mbe:.2f} W/m$^2$"
+        ax.text(
+            0.02, 0.3, s=err_str, backgroundcolor="1.0",
+            transform=ax.transAxes
+        )
+    ax.set_xlabel(xlabel)
+    plt.tight_layout()
+    if save_fig:
+        if site is None:
+            f = f"LWerr_{x}_bin={nbins}_{mod}.png"
+        else:
+            f = f"LWerr_{x}_bin={nbins}_{mod}_{site}.png"
+        filename = os.path.join("figures", f)
+        fig.savefig(filename, bbox_inches="tight", dpi=300)
+    else:
+        plt.show()
+    return None
+
+
+def plot_lwerr_bin_main():
+    # GRAPH histograms of error by quartile of some humidity metric
+    df = import_cs_compare_csv("cs_compare_2012.csv")
+    nbins = 8
+    xvar = "pw"  # ["pw", "rh", "tk", "pa"]
+    # mod = "t"  # ["t", "b"] model type (tau or Brunt)
+    plot_lwerr_bin(df, "b", xvar, nbins=nbins, save_fig=1)
+    return None
+
+
+def compare_esky_fits(p="hpa", lw="s", tra_yr=2012, val_yr=2013, rm_loc=None):
+    """Train and evaluate the Brunt model fit (22a) for daytime clear sky
+    samples with variations for the input parameter (p), the LW measurement
+    used to determine sky emissivity (lw), the training and validation years,
+    and the number of sites to incorporate in training and validation.
+
+    Parameters
+    ----------
+    p : ["hpa", "scaled"], optional
+        Use an input value of p_w in hPa ("hpa") or a normalzed value of
+        p_w (p_w / p_0) ("scaled") as the input parameter for the Brunt
+        emissivity regression.
+    lw : "s" or None, optional
+        If "s" then used emissivity determined from corrected LW measurements (LW_s)
+    tra_yr : int, optional
+        Data year to use on training.
+    val_yr : int, optional
+        Data year to use on evaluating fit.
+    rm_loc : str or list, optional
+        The defualt value means that no locations are removed and all data
+        from the cs_compare csv will be used in training and validation.
+        User can input a string corresponding to the SURFRAD site code or a
+        list of site codes to indicate that the location(s) be removed from
+        both training and validation sets.
+
+    Returns
+    -------
+    None
+    """
+    # Compare e_sky_c fits on different pressure and LW variables
+    # compare_esky_fits(p="scaled", lw="", tra_yr=2012, val_yr=2013, rm_loc=None)
+
+    tra = import_cs_compare_csv(f"cs_compare_{tra_yr}.csv")
+    val = import_cs_compare_csv(f"cs_compare_{val_yr}.csv")
+    if rm_loc is not None:
+        if isinstance(rm_loc, list):
+            for s in rm_loc:  # remove multiple loc
+                tra = tra.loc[tra.site != s]
+                val = val.loc[val.site != s]
+        elif isinstance(rm_loc, str):
+            tra = tra.loc[tra.site != rm_loc]  # remove single loc
+            val = val.loc[val.site != rm_loc]
+    print(f"TRA samples: {tra.shape[0]:,}")
+    print(f"VAL samples: {val.shape[0]:,}\n")
+
+    if p == "hpa":
+        tra["pp"] = np.sqrt(tra.pw_hpa)
+        val["pp"] = np.sqrt(val.pw_hpa)
+    elif p == "scaled":
+        tra["pp"] = np.sqrt((tra.pw_hpa * 100) / P_ATM)
+        val["pp"] = np.sqrt((val.pw_hpa * 100) / P_ATM)
+
+    if lw == "s":  # corrected to LW_s
+        train_y = tra.e_act_s.to_numpy()
+        val_y = val.e_act_s.to_numpy()
+    else:
+        train_y = tra.e_act.to_numpy()
+        val_y = val.e_act.to_numpy()
+
+    train_x = tra[["pp"]].to_numpy()
+    model = LinearRegression(fit_intercept=True)
+    model.fit(train_x, train_y)
+    c2 = model.coef_[0].round(4)
+    c1 = model.intercept_.round(4)
+    pred_y = c1 + (c2 * tra.pp)
+    rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+    mbe = compute_mbe(train_y, pred_y)
+    print("(c1, c2): ", c1, c2)
+    print(f"Training RMSE:{rmse:.4f} and MBE:{mbe:.4f}\n")
+    pred_y = c1 + (c2 * val.pp)
+    rmse = np.sqrt(mean_squared_error(val_y, pred_y))
+    print(f"Validation RMSE:{rmse:.4f}")
+    return None
+
+
+def iterative_alt_corrections():
+    # check iterative solve of c1, c2, and altitude correction const
+    niter = 6  # number of times to fit c1, c2, c3
+    constants = np.zeros((3, 1 + niter * 2))
+    rmses = []
+
+    # Form training and validation sets
+    tra = pd.DataFrame()
+    val = pd.DataFrame()
+    # rs 11, 90 for first trial
+    # rs = 323 for second
+    for yr in [2011, 2012, 2013]:
+        tmp = import_cs_compare_csv(f"cs_compare_{yr}.csv")
+        tmp = tmp[["pw_hpa", "elev", "e_act"]].copy()
+        tmp = tmp.sample(frac=0.2, random_state=323)  # reduce sample
+
+        # Split DataFrame into 70% and 30%
+        tmp_70 = tmp.sample(frac=0.7, random_state=323)
+        tmp_30 = tmp.drop(tmp_70.index)
+
+        tra = pd.concat([tra, tmp_70])
+        val = pd.concat([val, tmp_30])
+
+    tra["pp"] = np.sqrt(tra.pw_hpa * 100 / P_ATM)
+    val["pp"] = np.sqrt(val.pw_hpa * 100 / P_ATM)
+    train_x = tra.pp.to_numpy().reshape(-1, 1)
+    P_ATM_bar = P_ATM / 100000
+
+    # initial fit a linear model
+    model = LinearRegression(fit_intercept=True)
+    model.fit(train_x, tra.e_act.to_numpy().reshape(-1, 1))
+    c2 = model.coef_[0].round(4)[0]
+    c1 = model.intercept_.round(4)[0]
+    pred_y = c1 + (c2 * val.pp)
+    rmse = np.sqrt(mean_squared_error(val.e_act.to_numpy(), pred_y))
+    print(c1, c2, f"(RMSE: {rmse:.4f})")
+    i = 0
+    constants[0, i] = c1
+    constants[1, i] = c2
+    c3 = 0
+    constants[2, i] = 0  # no correction at first
+    rmses.append(rmse.round(5))
+    i += 1
+
+    for counter in range(niter):
+        # now fit an altitude correction
+        model = LinearRegression(fit_intercept=False)
+        de_p = c3 * P_ATM_bar * (np.exp(-1 * tra.elev.to_numpy() / 8500) - 1)
+        y = (c1 + (c2 * tra.pp.to_numpy())) + de_p
+        y_err = y - tra.e_act.to_numpy()
+        x = P_ATM_bar * (np.exp(-1 * tra.elev.to_numpy() / 8500) - 1)
+        model.fit(x.reshape(-1, 1), -1 * y_err.reshape(-1, 1))
+        c3 = model.coef_[0].round(4)[0]
+        de_p = c3 * P_ATM_bar * (np.exp(-1 * val.elev.to_numpy() / 8500) - 1)
+        pred_y = (c1 + (c2 * val.pp)) + de_p
+        rmse = np.sqrt(mean_squared_error(val.e_act.to_numpy(), pred_y))
+        print(c3, f"(RMSE: {rmse:.4f})")
+        constants[0, i] = c1
+        constants[1, i] = c2
+        constants[2, i] = c3
+        rmses.append(rmse.round(5))
+        i += 1
+
+        # fit linear model with altitude correction
+        model2 = LinearRegression(fit_intercept=True)
+        de_p = c3 * P_ATM_bar * (np.exp(-1 * tra.elev.to_numpy() / 8500) - 1)
+        y = tra.e_act.to_numpy() - de_p  # bring to sea level for fit
+        model2.fit(train_x, y.reshape(-1, 1))
+        c2 = model2.coef_[0].round(4)[0]
+        c1 = model2.intercept_.round(4)[0]
+        de_p = c3 * P_ATM_bar * (np.exp(-1 * val.elev.to_numpy() / 8500) - 1)
+        pred_y = c1 + (c2 * val.pp) + de_p
+        rmse = np.sqrt(mean_squared_error(val.e_act.to_numpy(), pred_y))
+        print(c1, c2, f"(RMSE: {rmse:.4f})")
+        constants[0, i] = c1
+        constants[1, i] = c2
+        constants[2, i] = c3
+        rmses.append(rmse.round(5))
+        i += 1
+
+    x = np.arange(len(rmses))
+    rmses = np.array(rmses)
+
+    fig, axes = plt.subplots(4, 1, figsize=(10, 6), height_ratios=[2, 1, 1, 1], sharex=True)
+    axes[0].plot(x, rmses, ".-")
+    axes[1].plot(x, constants[0, :], ".-")
+    axes[2].plot(x, constants[1, :], ".-")
+    axes[3].plot(x, constants[2, :], ".-")
+    axes[0].set_ylabel("RMSE on VAL")
+    axes[1].set_ylabel("c1")
+    axes[2].set_ylabel("c2")
+    axes[3].set_ylabel("c3")
+    axes[3].set_xticks(x)
+    axes[2].yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter('%.4f'))
+    axes[3].yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter('%.3f'))
+    filename = os.path.join("figures", "iterative_alt_corrections2.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
 if __name__ == "__main__":
     print()
