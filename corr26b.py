@@ -442,98 +442,33 @@ def shakespeare_comparison(site, year="2012"):
     df = pd.read_csv(filename, index_col=0, parse_dates=True)
     df.sort_index(inplace=True)
     df = df.tz_localize("UTC")
-    # df = df[[
-    #     "rh", "pressure", "t_a", "dw_ir", "lw_s",
-    #     "zen", "cs_period"
-    # ]]
-    df["pw_hpa"] = get_pw(df.t_a, df.rh) / 100  # hPa
-    df["esky_c"] = get_esky_c(df.pw_hpa)
-    df["lw_c"] = df.esky_c * SIGMA * np.power(df.t_a, 4)
     # drop rows with missing values in parameter columns
-    df.dropna(subset=["t_a", "rh", "lw_c", "lw_s"], inplace=True)
+    df.dropna(subset=["t_a", "rh", "lw_s"], inplace=True)
 
     df = df.rename(columns={"pressure": "pa_hpa"})
+    df["pw_hpa"] = get_pw(df.t_a, df.rh) / 100  # hPa
+    tmp = np.log(df.pw_hpa * 100 / 610.94)
+    df["tdp"] = 273.15 + ((243.04 * tmp) / (17.625 - tmp))
+    # df["esky_c"] = get_esky_c(df.pw_hpa)
+    # df["lw_c"] = df.esky_c * SIGMA * np.power(df.t_a, 4)
+
+    # add elevation and altitude correction
+    df["elev"] = ELEV_DICT[site]  # Add elevation
+    df["P_rep"] = P_ATM * np.exp(-1 * df.elev / 8500)  # Pa
+    df["de_p"] = 0.00012 * ((df.P_rep / 100) - 1000)  # TODO
+
+    # shakespeare variables
     df["w"] = 0.62198 * df.pw_hpa / (df.pa_hpa - df.pw_hpa)
     df["q"] = df.w / (1 + df.w)
-    p0 = 101325  # Pa
-    df["p_ratio"] = (df.pa_hpa * 100) / p0
-    df["he"] = (h1 / np.cos(40.3 * np.pi / 180)) * (df.p_ratio ** 1.8)
-    df = df.drop(columns=["p_ratio"])
-    # solve for tau at each q and he
-    tau = []
-    for q1, he1 in zip(df.q.values, df.he.values):
-        tau.append(spline.ev(q1, he1).item())
-    df["tau"] = tau
+    df["p_ratio"] = (df.pa_hpa * 100) / P_ATM
+    df["he"] = (h1 / np.cos(40.3 * np.pi / 180)) * np.power(df.p_ratio, 1.8)
+    df["tau"] = spline.ev(df.q.to_numpy(), df.he.to_numpy())
+    df = df.drop(columns=["p_ratio", "w"])
 
     # calc emissivity
     df["esky_t"] = 1 - np.exp(-1 * df.tau)
     df["lw_c_t"] = df.esky_t * SIGMA * np.power(df.t_a, 4)
     return df
-
-
-def plot_lwerr_bin(df, mod, x, nbins=4, site=None, save_fig=False):
-    if mod == "t":
-        y_mod = "lw_c_t"
-        y_true = "dw_ir"
-        err = "lw_err_t"
-        xlabel = r"$\Delta LW = LW_{\tau} - LW$ [W/m$^2$]"
-    elif mod == "b":
-        y_mod = "lw_c"
-        y_true = "lw_s"
-        err = "lw_err_b"
-        xlabel = r"$\Delta LW = LW_{B} - LW_{s}$ [W/m$^2$]"
-    if site is not None:
-        df = df.loc[df.site == site].copy()
-    if x == "pw":
-        df["w_bin"] = pd.qcut(df.pw_hpa, nbins, labels=False)
-    elif x == "rh":
-        df["w_bin"] = pd.qcut(df.rh, nbins, labels=False)
-    elif x == "tk":
-        df["w_bin"] = pd.qcut(df.t_a, nbins, labels=False)
-    elif x == "pa":
-        df["w_bin"] = pd.qcut(df.pa_hpa, nbins, labels=False)
-    # FIGURE
-    fig, axes = plt.subplots(
-        nbins, 1, figsize=(8, 10), sharex=True, sharey=True)
-    for i in range(nbins):
-        ax = axes[i]
-        ax.grid(axis="x")
-        q = df.loc[df.w_bin == i].copy()
-        ax.hist(q[[err]], bins=30)
-        ax.set_xlim(-30, 30)
-        if x == "pw":
-            title = f"Q{i+1}: p$_w$ [{q.pw_hpa.min():.2f}-{q.pw_hpa.max():.2f}]"
-        elif x == "rh":
-            title = f"Q{i + 1}: RH [{q.rh.min():.2f}-{q.rh.max():.2f}]"
-        elif x == "tk":
-            title = f"Q{i + 1}: T [{q.t_a.min():.2f}-{q.t_a.max():.2f}]"
-        elif x == "pa":
-            title = f"Q{i + 1}: P [{q.pa_hpa.min():.2f}-{q.pa_hpa.max():.2f}]"
-        # ax.set_title(title, loc="left")
-        ax.text(
-            0.02, 0.8, s=title, backgroundcolor="1.0", size="medium",
-            transform=ax.transAxes
-        )
-        ax.set_axisbelow(True)
-        rmse = np.sqrt(mean_squared_error(q[[y_true]], q[[y_mod]]))
-        mbe = compute_mbe(q[[y_true]].values, q[[y_mod]].values)[0]
-        err_str = f"RMSE={rmse:.2f} W/m$^2$ \n MBE={mbe:.2f} W/m$^2$"
-        ax.text(
-            0.02, 0.3, s=err_str, backgroundcolor="1.0",
-            transform=ax.transAxes
-        )
-    ax.set_xlabel(xlabel)
-    plt.tight_layout()
-    if save_fig:
-        if site is None:
-            f = f"LWerr_{x}_bin={nbins}_{mod}.png"
-        else:
-            f = f"LWerr_{x}_bin={nbins}_{mod}_{site}.png"
-        filename = os.path.join("figures", f)
-        fig.savefig(filename, bbox_inches="tight", dpi=300)
-    else:
-        plt.show()
-    return None
 
 
 def plot_lwerr_TvPw():
@@ -605,14 +540,6 @@ def import_cs_compare_csv(csvname, site=None):
     # csvname has to end with either _{year}.csv or _{site}.csv
     filename = os.path.join("data", "cs_compare", csvname)
     df = pd.read_csv(filename, index_col=0, parse_dates=True)
-    if isinstance(site, str):  # if a site is specified for filtering
-        df = df.loc[df.site == site]
-    elif csvname[:-4].split("_")[-1] in SURF_SITE_CODES:
-        df["site"] = csvname[:-4].split("_")[-1]
-    df["elev"] = df["site"].map(ELEV_DICT)  # Add elevation
-    # add altitude correction
-    df["P_rep"] = P_ATM * np.exp(-1 * df.elev / 8500)  # Pa
-    df["de_p"] = 0.00012 * ((df.P_rep / 100) - 1000)
 
     # add solar time correction
     doy = df.index.dayofyear.to_numpy()
@@ -623,101 +550,17 @@ def import_cs_compare_csv(csvname, site=None):
     df["dtime"] = pd.to_timedelta(minutes, unit="m")
     df["solar_time"] = df.index + df.dtime
     df = df.drop(columns=["dtime", "lon", "dloc"])
-    # add solar time correction
-    tmp = pd.DatetimeIndex(df.solar_time.copy())
-    t = tmp.hour + (tmp.minute / 60) + (tmp.second / 3600)
-    df["de_t"] = 0.013 * np.cos(np.pi * (t / 12))
+    # # add solar time correction
+    # tmp = pd.DatetimeIndex(df.solar_time.copy())
+    # t = tmp.hour + (tmp.minute / 60) + (tmp.second / 3600)
+    # df["de_t"] = 0.013 * np.cos(np.pi * (t / 12))
 
     # IJHMT fit
     df["esky_c"] = 0.6376 + 1.6026 * np.sqrt((df.pw_hpa * 100) / P_ATM)
     df["lw_c"] = df.esky_c * SIGMA * np.power(df.t_a, 4)
 
     df["e_act"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))
-    df["e_act_s"] = df.lw_s / (SIGMA * np.power(df.t_a, 4))
-
-    df["lw_err_t"] = df.lw_c_t - df.dw_ir
-    df["lw_err_b"] = df.lw_c - df.lw_s
-
-    # shakespeare variable
-    df["w"] = 0.62198 * df.pw_hpa / (df.pa_hpa - df.pw_hpa)
-    df["q"] = df.w / (1 + df.w)
-    df["h"] = df["site"].map(SITE_H_DICT)
-    df["p_ratio"] = df.P_rep / P_ATM
-    df["he"] = (df.h / np.cos(40.3 * np.pi / 180)) * (df.p_ratio ** 1.8)
-    df = df.drop(columns=["p_ratio", "w"])
     return df
-
-
-def compare_esky_fits(p="hpa", lw="s", tra_yr=2012, val_yr=2013, rm_loc=None):
-    """Train and evaluate the Brunt model fit (22a) for daytime clear sky
-    samples with variations for the input parameter (p), the LW measurement
-    used to determine sky emissivity (lw), the training and validation years,
-    and the number of sites to incorporate in training and validation.
-
-    Parameters
-    ----------
-    p : ["hpa", "scaled"], optional
-        Use an input value of p_w in hPa ("hpa") or a normalzed value of
-        p_w (p_w / p_0) ("scaled") as the input parameter for the Brunt
-        emissivity regression.
-    lw : "s" or None, optional
-        If "s" then used emissivity determined from corrected LW measurements (LW_s)
-    tra_yr : int, optional
-        Data year to use on training.
-    val_yr : int, optional
-        Data year to use on evaluating fit.
-    rm_loc : str or list, optional
-        The defualt value means that no locations are removed and all data
-        from the cs_compare csv will be used in training and validation.
-        User can input a string corresponding to the SURFRAD site code or a
-        list of site codes to indicate that the location(s) be removed from
-        both training and validation sets.
-
-    Returns
-    -------
-    None
-    """
-    tra = import_cs_compare_csv(f"cs_compare_{tra_yr}.csv")
-    val = import_cs_compare_csv(f"cs_compare_{val_yr}.csv")
-    if rm_loc is not None:
-        if isinstance(rm_loc, list):
-            for s in rm_loc:  # remove multiple loc
-                tra = tra.loc[tra.site != s]
-                val = val.loc[val.site != s]
-        elif isinstance(rm_loc, str):
-            tra = tra.loc[tra.site != rm_loc]  # remove single loc
-            val = val.loc[val.site != rm_loc]
-    print(f"TRA samples: {tra.shape[0]:,}")
-    print(f"VAL samples: {val.shape[0]:,}\n")
-
-    if p == "hpa":
-        tra["pp"] = np.sqrt(tra.pw_hpa)
-        val["pp"] = np.sqrt(val.pw_hpa)
-    elif p == "scaled":
-        tra["pp"] = np.sqrt((tra.pw_hpa * 100) / P_ATM)
-        val["pp"] = np.sqrt((val.pw_hpa * 100) / P_ATM)
-
-    if lw == "s":  # corrected to LW_s
-        train_y = tra.e_act_s.to_numpy()
-        val_y = val.e_act_s.to_numpy()
-    else:
-        train_y = tra.e_act.to_numpy()
-        val_y = val.e_act.to_numpy()
-
-    train_x = tra[["pp"]].to_numpy()
-    model = LinearRegression(fit_intercept=True)
-    model.fit(train_x, train_y)
-    c2 = model.coef_[0].round(4)
-    c1 = model.intercept_.round(4)
-    pred_y = c1 + (c2 * tra.pp)
-    rmse = np.sqrt(mean_squared_error(train_y, pred_y))
-    mbe = compute_mbe(train_y, pred_y)
-    print("(c1, c2): ", c1, c2)
-    print(f"Training RMSE:{rmse:.4f} and MBE:{mbe:.4f}\n")
-    pred_y = c1 + (c2 * val.pp)
-    rmse = np.sqrt(mean_squared_error(val_y, pred_y))
-    print(f"Validation RMSE:{rmse:.4f}")
-    return None
 
 
 def reduce_to_equal_pts_per_site(df):
@@ -794,16 +637,14 @@ def fit_linear(df, set_intercept=None, print_out=False):
 
 if __name__ == "__main__":
     print()
-    start_time = time.time()
-    for s in ['BON', 'BOU', 'GWC', 'DRA', 'FPK', 'SXF', 'PSU']:
-        process_site(s, yr="2015")
-        process_site(s, yr="2016")
-        print(s, time.time() - start_time)
-
     # start_time = time.time()
+    # for s in ['BON', 'BOU', 'GWC', 'DRA', 'FPK', 'SXF', 'PSU']:
+    #     process_site(s, yr="2015")
+    #     process_site(s, yr="2016")
+    #     print(s, time.time() - start_time)
+
     # tsky_table(3, 50)
     # tsky_table(4, 50)
-    # print(time.time() - start_time)
 
     # # ASOS
     # # TODO create look up table for closest ASOS station
@@ -819,19 +660,9 @@ if __name__ == "__main__":
     # plot_fit(site, model.coef_, y_true, y_pred, rmse)
 
     # CREATE CS_COMPARE
-    # create_cs_compare_csv(xvar="site", const="2015", xlist=SURF_SITE_CODES)
+    # create_cs_compare_csv(xvar="site", const="2012", xlist=SURF_SITE_CODES)
     # xlist = [2012, 2013, 2014, 2015, 2016]
     # create_cs_compare_csv(xvar="year", const="GWC", xlist=[2012])
-
-    # GRAPH histograms of error by quartile of some humidity metric
-    # df = import_cs_compare_csv("cs_compare_2012.csv")
-    # nbins = 8
-    # xvar = "pw"  # ["pw", "rh", "tk", "pa"]
-    # # mod = "t"  # ["t", "b"] model type (tau or Brunt)
-    # plot_lwerr_bin(df, "b", xvar, nbins=nbins, save_fig=1)
-
-    # Compare e_sky_c fits on different pressure and LW variables
-    # compare_esky_fits(p="scaled", lw="", tra_yr=2012, val_yr=2013, rm_loc=None)
 
     # print(df[["lw_err_b", "rh", "t_a", "pw_hpa"]].corr())
 
@@ -885,7 +716,6 @@ if __name__ == "__main__":
     # filename = os.path.join("figures", f"{s.lower()}_lwe_vs_tod_ws.png")
     # fig.savefig(filename, bbox_inches="tight", dpi=300)
 
-
     # df = import_cs_compare_csv("cs_compare_2012.csv")
     # tmp = np.log(df.pw_hpa * 100 / 610.94)
     # df["tdp"] = 273.15 + ((243.04 * tmp) / (17.625 - tmp))
@@ -919,6 +749,5 @@ if __name__ == "__main__":
     # r2 = r2_score(y_test, y_pred)
     # print(f"Test RMSE: {rmse:.4f}")
     # print(f"Test R2: {r2:.4f}")
-
 
 
