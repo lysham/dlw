@@ -1105,6 +1105,9 @@ def iterative_alt_corrections():
     # rs = 323 for second
     for yr in [2011, 2012, 2013]:
         tmp = import_cs_compare_csv(f"cs_compare_{yr}.csv")
+        tmp = tmp.loc[abs(tmp.t_a - 294.2) < 2].copy()
+        tmp = tmp.set_index("solar_time")
+        tmp = tmp.loc[tmp.index.hour > 8]  # solar time > 8am
         tmp = tmp[["pw_hpa", "elev", "e_act"]].copy()
         tmp = tmp.sample(frac=0.2, random_state=323)  # reduce sample
 
@@ -1187,7 +1190,7 @@ def iterative_alt_corrections():
     axes[3].set_xticks(x)
     axes[2].yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter('%.4f'))
     axes[3].yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter('%.3f'))
-    filename = os.path.join("figures", "iterative_alt_corrections2.png")
+    filename = os.path.join("figures", "iterative_alt_corrections3_filter.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 
