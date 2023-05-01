@@ -1,6 +1,7 @@
 """Keep functions not in use but helpful for referencing"""
 
 from main import *
+import time
 import scipy
 import pvlib
 from scipy.optimize import curve_fit
@@ -8,7 +9,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from corr26b import get_tsky, join_surfrad_asos, shakespeare, \
-    shakespeare_comparison, import_cs_compare_csv, fit_linear
+    shakespeare_comparison, import_cs_compare_csv, fit_linear, three_c_fit
 from fraction import fe_lt, fi_lt
 
 from constants import *
@@ -1191,6 +1192,91 @@ def iterative_alt_corrections():
     axes[2].yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter('%.4f'))
     axes[3].yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter('%.3f'))
     filename = os.path.join("figures", "iterative_alt_corrections3_filter.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def plot_convergence():
+    start_time = time.time()
+
+    filename = os.path.join("data", "afgl_midlatitude_summer.csv")
+    afgl = pd.read_csv(filename)
+
+    df = pd.DataFrame()
+    for yr in [2010, 2011, 2012, 2013]:
+        tmp = import_cs_compare_csv(f"cs_compare_{yr}.csv")
+        tmp = tmp.set_index("solar_time")
+        # tmp = tmp.loc[(abs(tmp.t_a - 294.2) < 2) & (tmp.index.hour > 8)]
+        tmp["afgl_t0"] = np.interp(tmp.elev.values / 1000, afgl.alt_km.values,
+                                   afgl.temp_k.values)
+        tmp = tmp.loc[(abs(tmp.t_a - tmp.afgl_t0) < 2) & (tmp.index.hour > 8)]
+        tmp = tmp[["pw_hpa", "elev", "dw_ir", "t_a", "e_act"]].copy()
+        df = pd.concat([df, tmp])
+
+    # fig_name = "convergence.png"
+    # fig_name = "convergence_nofilter.png"
+    fig_name = "convergence_afgl.png"
+
+    # How does filtering affect convergence?
+    df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
+    df["y"] = df.e_act
+    test = df.loc[df.index.year == 2013].copy()  # make test set
+    df = df.loc[df.index.year != 2013].copy()
+    print("Finished building train and test", time.time() - start_time)
+
+    sizes = np.geomspace(100, 100000, 10)
+    n_iter = 10  # per sample size
+    c1_vals = np.zeros((len(sizes), n_iter))
+    c2_vals = np.zeros((len(sizes), n_iter))
+    c3_vals = np.zeros((len(sizes), n_iter))
+    rmses = np.zeros((len(sizes), n_iter))
+    for i in range(len(sizes)):
+        for j in range(n_iter):
+            train = df.sample(n=int(sizes[i]))
+            c1, c2, c3 = three_c_fit(train)
+            c1_vals[i, j] = c1
+            c2_vals[i, j] = c2
+            c3_vals[i, j] = c3
+
+            # evaluate on test
+            de_p = c3 * (P_ATM / 100000) * (np.exp(-1 * test.elev / 8500) - 1)
+            pred_e = c1 + (c2 * test.x) + de_p
+            pred_y = SIGMA * np.power(test.t_a, 4) * pred_e
+            rmse = np.sqrt(mean_squared_error(
+                test.dw_ir.to_numpy(), pred_y.to_numpy()))
+            rmses[i, j] = rmse
+
+    fig, axes = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
+    ax = axes[0]
+    ax.set_xscale("log")
+    ax.fill_between(sizes, c1_vals.min(axis=1), c1_vals.max(axis=1), alpha=0.5)
+    ax.plot(sizes, c1_vals.mean(axis=1))
+    ax.set_ylabel("c1")
+    ax.set_ylim(0.54, 0.66)
+    ax.grid(True, alpha=0.2)
+    ax.set_axisbelow(True)
+
+    ax = axes[1]
+    ax.set_xscale("log")
+    ax.fill_between(sizes, c2_vals.min(axis=1), c2_vals.max(axis=1), alpha=0.5)
+    ax.plot(sizes, c2_vals.mean(axis=1))
+    ax.set_ylabel("c2")
+    ax.set_ylim(1.2, 1.8)
+    ax.grid(True, alpha=0.2)
+    ax.set_axisbelow(True)
+
+    ax = axes[2]
+    ax.set_xscale("log")
+    ax.fill_between(sizes, rmses.min(axis=1), rmses.max(axis=1), alpha=0.5)
+    ax.plot(sizes, rmses.mean(axis=1))
+    ax.set_xlabel("Number of samples")
+    ax.set_ylabel("RMSE [W/m$^2$]")
+    ax.set_ylim(0, 20)
+    ax.grid(True, alpha=0.2)
+    ax.set_axisbelow(True)
+    ax.set_xlim(sizes[0], sizes[-1])
+
+    filename = os.path.join("figures", fig_name)
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 

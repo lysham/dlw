@@ -664,6 +664,19 @@ def three_step_fit(df):
     return c1, c2, c3
 
 
+def three_c_fit(df):
+    # simultaneously fit model (c1, c2) and altitude correction (c3)
+    # df must have columns: x, y, elev
+    df['correction'] = (P_ATM / 100000) * (np.exp(-1 * df.elev / 8500) - 1)
+    x = df[['x', 'correction']]
+    y = df['y']
+    model = LinearRegression(fit_intercept=True)
+    model.fit(x, y)
+    c2, c3 = model.coef_.round(4)
+    c1 = model.intercept_.round(4)
+    return c1, c2, c3
+
+
 if __name__ == "__main__":
     print()
     # start_time = time.time()
@@ -779,62 +792,3 @@ if __name__ == "__main__":
     # print(f"Test RMSE: {rmse:.4f}")
     # print(f"Test R2: {r2:.4f}")
 
-    start_time = time.time()
-    df = pd.DataFrame()
-    for yr in [2010, 2011, 2012, 2013]:
-        tmp = import_cs_compare_csv(f"cs_compare_{yr}.csv")
-        tmp = tmp.set_index("solar_time")
-        # tmp = tmp.loc[(abs(tmp.t_a - 294.2) < 2) & (tmp.index.hour > 8)]
-        tmp = tmp[["pw_hpa", "elev", "dw_ir", "t_a", "e_act"]].copy()
-        df = pd.concat([df, tmp])
-
-    # How does filtering affect convergence?
-    df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
-    df["y"] = df.e_act
-    test = df.loc[df.index.year == 2013].copy()  # make test set
-    df = df.loc[df.index.year != 2013].copy()
-    print("Finished building train and test", time.time() - start_time)
-
-    sizes = np.geomspace(100, 100000, 10)
-    n_iter = 10  # per sample size
-    c1_vals = np.zeros((len(sizes), n_iter))
-    c2_vals = np.zeros((len(sizes), n_iter))
-    c3_vals = np.zeros((len(sizes), n_iter))
-    rmses = np.zeros((len(sizes), n_iter))
-    for i in range(len(sizes)):
-        for j in range(n_iter):
-            train = df.sample(n=int(sizes[i]))
-            c1, c2, c3 = three_step_fit(train)
-            c1_vals[i, j] = c1
-            c2_vals[i, j] = c2
-            c3_vals[i, j] = c3
-
-            # evaluate on test
-            de_p = c3 * (P_ATM / 100000) * (np.exp(-1 * test.elev / 8500) - 1)
-            pred_y = c1 + (c2 * test.x) + de_p
-            rmse = np.sqrt(mean_squared_error(
-                test.e_act.to_numpy(), pred_y.to_numpy()))
-            rmses[i, j] = rmse
-
-    fig, axes = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
-    ax = axes[0]
-    ax.set_xscale("log")
-    ax.fill_between(sizes, c1_vals.min(axis=1), c1_vals.max(axis=1), alpha=0.5)
-    ax.plot(sizes, c1_vals.mean(axis=1))
-    ax.set_ylabel("c1")
-
-    ax = axes[1]
-    ax.set_xscale("log")
-    ax.fill_between(sizes, c2_vals.min(axis=1), c2_vals.max(axis=1), alpha=0.5)
-    ax.plot(sizes, c2_vals.mean(axis=1))
-    ax.set_ylabel("c2")
-
-    ax = axes[2]
-    ax.set_xscale("log")
-    ax.fill_between(sizes, rmses.min(axis=1), rmses.max(axis=1), alpha=0.5)
-    ax.plot(sizes, rmses.mean(axis=1))
-    ax.set_xlabel("Number of samples")
-    ax.set_ylabel("RMSE")
-
-    filename = os.path.join("figures", "convergence_nofilter.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
