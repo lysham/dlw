@@ -30,6 +30,9 @@ for i in SURFRAD:
     LON_DICT[i] = SURFRAD[i]["lon"]
 ELEVATIONS = sorted(ELEV_DICT.items(), key=lambda x: x[1])  # sorted list
 
+SEVEN_COLORS = ["#156064", "#00C49A", "#F8E16C", "#FFC2B4",
+                "#FB8F67", "#437C90", "#7E2E84"]
+
 # Generate from integrating shakespeare data (function in ref_func)
 SITE_H_DICT = {
     'BON': 2283.261266476327, 'BOU': 2036.589702450849,

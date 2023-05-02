@@ -1281,5 +1281,50 @@ def plot_convergence():
     return None
 
 
+def plot_t0_p0_per_site():
+    # import afgl data
+    filename = os.path.join("data", "afgl_midlatitude_summer.csv")
+    afgl = pd.read_csv(filename)
+    afgl_alt = afgl.alt_km.values * 1000  # m
+    afgl_temp = afgl.temp_k.values
+    afgl_pa = afgl.pres_mb.values
+
+    df = import_cs_compare_csv("cs_compare_2011.csv")
+    tmp = import_cs_compare_csv("cs_compare_2012.csv")
+    df = pd.concat([df, tmp])
+    df["afgl_t0"] = np.interp(df.elev.values, afgl_alt, afgl_temp)
+    df["afgl_p0"] = np.interp(df.elev.values, afgl_alt, afgl_pa)
+
+    df1 = df.loc[abs(df.t_a - df.afgl_t0) <= 2].copy()
+    # df2 = df1.loc[abs(df1.pa_hpa - df1.afgl_p0) <= 50].copy()
+    pdf = df1.sample(2000, random_state=22)
+
+    fig, ax = plt.subplots()
+    ax.grid(True, alpha=0.3)
+    i = 0
+    for site in ELEVATIONS:  # plot in sorted order
+        s = site[0]
+        group = pdf.loc[pdf.site == s]
+        afgl_t = np.interp(site[1], afgl_alt, afgl_temp)
+        afgl_p = np.interp(site[1], afgl_alt, afgl_pa)
+
+        x = np.linspace(group.t_a.min(), group.t_a.max(), 10)
+        ax.fill_between(x, afgl_p - 50, afgl_p + 50, fc=SEVEN_COLORS[i],
+                        alpha=0.1, zorder=0)
+        ax.axhline(afgl_p, c=SEVEN_COLORS[i], label=s, zorder=1)
+        ax.axvline(afgl_t, c=SEVEN_COLORS[i], zorder=1)
+        ax.scatter(group.t_a, group.pa_hpa, marker=".", alpha=0.8,
+                   c=SEVEN_COLORS[i], ec="0.5", zorder=10)
+        i += 1
+    ax.legend(bbox_to_anchor=(1.0, 1.0), loc="upper left")
+    ax.set_xlabel("T$_a$ [K]")
+    ax.set_ylabel("P [mb]")
+    plt.tight_layout()
+    filename = os.path.join("figures", "t0_p0_per_site.png")
+    # filename = os.path.join("figures", "t0_p0_per_site_filter_t.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
 if __name__ == "__main__":
     print()
