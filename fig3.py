@@ -8,7 +8,8 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from main import get_pw
-from corr26b import shakespeare, import_cs_compare_csv, fit_linear, compute_mbe
+from corr26b import shakespeare, import_cs_compare_csv, fit_linear, \
+    compute_mbe, three_c_fit
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.linear_model import LinearRegression, Ridge, SGDRegressor
 from scipy.stats import pearsonr
@@ -421,14 +422,34 @@ if __name__ == "__main__":
     df["total"] = df.pOverlaps
     y = df.total  # no altitude correction
 
+    filename = os.path.join("data", "afgl_midlatitude_summer.csv")
+    afgl = pd.read_csv(filename)
+    afgl_alt = afgl.alt_km.values * 1000  # m
+    afgl_temp = afgl.temp_k.values
+    afgl_pa = afgl.pres_mb.values
+
     s = import_cs_compare_csv(f"cs_compare_2012.csv")
-    s = s.loc[abs(s.t_a - 294.2) < 2].copy()
+    s["afgl_t0"] = np.interp(s.elev.values / 1000, afgl_alt, afgl_temp)
+    s["afgl_p"] = np.interp(s.elev.values / 1000, afgl_alt, afgl_pa)
+    # s = s.loc[abs(s.t_a - 294.2) < 2].copy()
+    print(s.shape)
+    s = s.loc[abs(s.t_a - s.afgl_t0) <= 2].copy()
+    print(s.pa_hpa.describe())
+    s = s.loc[abs(s.pa_hpa - s.afgl_p) <= 100].copy()
+    print(s.shape)
     s = s.set_index("solar_time")
     s = s.loc[s.index.hour > 8]  # remove data before 8am solar
-    pressure_bins = 10
+    pressure_bins = 12
     s["pp"] = s.pw_hpa * 100 / P_ATM
     s["quant"] = pd.qcut(s.pp, pressure_bins, labels=False)
+
     s["x"] = np.sqrt(s.pp)
+    s["y"] = s.e_act
+    c1, c2, c3 = three_c_fit(s)
+    print(c1, c2, c3)
+
+    y2 = c1 + c2 * np.sqrt(x)
+    s["de_p"] = c3 * (P_ATM / 100000) * (np.exp(-1 * s.elev / 8500) - 1)
     s["y"] = s.e_act - s.de_p  # bring to sea level
     xq = np.zeros(pressure_bins)
     yq = np.zeros((pressure_bins, len(quantiles)))
@@ -440,8 +461,6 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.grid(alpha=0.3)
     ax.plot(x, y, label="LBL (0.6376+1.6026x)", c="k")
-    c1, c2 = fit_linear(s, print_out=False)
-    y2 = c1 + c2 * np.sqrt(x)
     ax.plot(x, y2, label=f"{c1}+{c2}x", ls=":", lw=2, c="g")
     for i in range(int(len(quantiles) / 2)):
         t = int(-1 * (i + 1))
@@ -460,6 +479,7 @@ if __name__ == "__main__":
     # set title and filename
     filename = os.path.join(
         "figures", f"fig3_allsites_dwir_{pressure_bins}.png")
-    title = f"SURFRAD, altitude-adjusted, T=294.2$\pm$2K, Solar time > 0800"
+    # title = f"SURFRAD, altitude-adjusted, T=294.2$\pm$2K, Solar time > 0800"
+    title = f"altitude-adjusted, solar time > 0800, T,P ~ T$_0$,P$_0$"
     ax.set_title(title, loc="left")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
