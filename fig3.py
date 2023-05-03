@@ -281,6 +281,11 @@ def plot_fig3_quantiles(site=None, yr=None, all_sites=False, tau=False,
         s = import_cs_compare_csv(f"cs_compare_{yr}.csv")
     elif isinstance(yr, int) & ~all_sites:
         s = import_cs_compare_csv(f"cs_compare_{yr}.csv", site=site)
+    elif isinstance(yr, list) & all_sites:
+        s = pd.DataFrame()
+        for y in yr:
+            tmp = import_cs_compare_csv(f"cs_compare_{y}.csv")
+            s = pd.concat([s, tmp])
     else:
         s = import_cs_compare_csv(f"cs_compare_{site}.csv")
     s = s.set_index("solar_time")
@@ -390,6 +395,12 @@ def plot_fig3_quantiles(site=None, yr=None, all_sites=False, tau=False,
     elif isinstance(yr, int) & ~all_sites:
         filename = os.path.join("figures", f"fig3_{site}_q{suffix}.png")
         title = f"{site} {yr} (n={s.shape[0]:,}) ST>0800" + title_suffix
+    elif isinstance(yr, list):
+        name = ""
+        for y in yr:
+            name = name + "_" + str(y)
+        filename = os.path.join("figures", f"fig3{name}.png")
+        title = f"(n={s.shape[0]:,}) ST>0800" + title_suffix
     else:
         filename = os.path.join("figures", f"fig3_{site}_q5yr{suffix}.png")
         title = f"{site} 2012-2016 (n={s.shape[0]:,}) ST>0800" + title_suffix
@@ -406,5 +417,6 @@ if __name__ == "__main__":
 
     # plot_fig3_ondata("FPK", sample=0.05)
     plot_fig3_quantiles(
-        yr=2012, all_sites=True, tau=False, temperature=True, pressure=True
+        yr=[2010, 2011, 2012, 2013], all_sites=True, tau=False,
+        temperature=True, pressure=True
     )
