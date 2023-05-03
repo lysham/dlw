@@ -1,5 +1,6 @@
 SIGMA = 5.6697e-8  # W/m^2 K^4
 P_ATM = 101325  # Pa
+P_ATM_BAR = P_ATM / 100000
 
 # radiative constants
 E_C1 = 3.7418e8  # W um^4 / m^2 ~> 2*pi*h*c^2

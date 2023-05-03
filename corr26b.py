@@ -24,7 +24,7 @@ from main import get_pw, get_esky_c, li_lw, CORR26A, compute_mbe, pw2tdp, tdp2pw
 from pcmap_data_funcs import get_asos_stations
 
 from constants import SIGMA, SURFRAD, SURF_COLS, SURF_ASOS, SURF_SITE_CODES, \
-    P_ATM, E_C1, E_C2, ELEV_DICT, ELEVATIONS, LON_DICT, SEVEN_COLORS
+    P_ATM, E_C1, E_C2, ELEV_DICT, ELEVATIONS, LON_DICT, SEVEN_COLORS, P_ATM_BAR
 
 
 def tsky_table(l1, l2):
@@ -669,15 +669,19 @@ def three_step_fit(df):
 
 def three_c_fit(df):
     # simultaneously fit model (c1, c2) and altitude correction (c3)
-    # df must have columns: x, y, elev
-    df['correction'] = (P_ATM / 100000) * (np.exp(-1 * df.elev / 8500) - 1)
-    x = df[['x', 'correction']]
-    # x = df[['x']]
-    y = df['y']
-    model = LinearRegression(fit_intercept=True)
-    model.fit(x, y)
-    c2, c3 = model.coef_.round(4)
-    c1 = model.intercept_.round(4)
+    # df must have columns: x, y, elev, site
+    # check if mult-location or not
+    if len(np.unique(df.site.to_numpy())) == 1:
+        c1, c2 = fit_linear(df)
+        c3 = 0
+    else:
+        df['correction'] = P_ATM_BAR * (np.exp(-1 * df.elev / 8500) - 1)
+        x = df[['x', 'correction']]
+        y = df['y']
+        model = LinearRegression(fit_intercept=True)
+        model.fit(x, y)
+        c2, c3 = model.coef_.round(4)
+        c1 = model.intercept_.round(4)
     return c1, c2, c3
 
 
@@ -713,7 +717,7 @@ if __name__ == "__main__":
     # print(df[["lw_err_b", "rh", "t_a", "pw_hpa"]].corr())
 
     # LW ERROR plots vs TOD
-    s = "PSU"
+    s = "DRA"
 
     # import afgl data
     filename = os.path.join("data", "afgl_midlatitude_summer.csv")
@@ -744,8 +748,8 @@ if __name__ == "__main__":
     df["y"] = df.e_act
     c1, c2, c3 = three_c_fit(df)
     print(c1, c2, c3)
-    df["de_p"] = c3 * (P_ATM / 100000) * (np.exp(-1 * df.elev / 8500) - 1)
-    df["y"] = (c1 + c2 * df.x) #- df.de_p  # bring to sea level
+    df["de_p"] = c3 * P_ATM_BAR * (np.exp(-1 * df.elev / 8500) - 1)
+    df["y"] = (c1 + c2 * df.x)  # - df.de_p  # bring to sea level
 
     df["ir_pred"] = SIGMA * np.power(df.t_a, 4) * df.y
     df["lw_err"] = df.ir_pred - df.dw_ir
@@ -771,7 +775,9 @@ if __name__ == "__main__":
     ax.set_ylabel("LW error w/o altitude correction [W/m$^2$] ")
     ax.set_ylim(-40, 40)
     # ax.set_title(f"{s} (pts={df.shape[0]:,})")
-    ax.set_title(f"{s} (pts={pdf.shape[0]:,}), T~T$_0$, P~P$_0$")
+    title = f"{s} (pts={pdf.shape[0]:,}), ST>8, T~T$_0$, P~P$_0$"
+    title += f", [{c1}, {c2}]"
+    ax.set_title(title)
     # fig.colorbar(cb, label=r"T$_a$ - T$_{dp}$ [K]", extend="max")
     # fig.colorbar(cb, label="wind speed [m/s]", extend="max")
     fig.colorbar(cb, label="RH [%]")
