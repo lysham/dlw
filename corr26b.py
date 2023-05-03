@@ -24,7 +24,7 @@ from main import get_pw, get_esky_c, li_lw, CORR26A, compute_mbe, pw2tdp, tdp2pw
 from pcmap_data_funcs import get_asos_stations
 
 from constants import SIGMA, SURFRAD, SURF_COLS, SURF_ASOS, SURF_SITE_CODES, \
-    P_ATM, E_C1, E_C2, ELEV_DICT, ELEVATIONS, LON_DICT, SITE_H_DICT
+    P_ATM, E_C1, E_C2, ELEV_DICT, ELEVATIONS, LON_DICT, SEVEN_COLORS
 
 
 def tsky_table(l1, l2):
@@ -541,6 +541,9 @@ def import_cs_compare_csv(csvname, site=None):
     filename = os.path.join("data", "cs_compare", csvname)
     df = pd.read_csv(filename, index_col=0, parse_dates=True)
 
+    if site is not None:
+        df = df.loc[df.site == site]
+
     # add solar time correction
     doy = df.index.dayofyear.to_numpy()
     eq_of_time = pvlib.solarposition.equation_of_time_spencer71(doy)
@@ -669,6 +672,7 @@ def three_c_fit(df):
     # df must have columns: x, y, elev
     df['correction'] = (P_ATM / 100000) * (np.exp(-1 * df.elev / 8500) - 1)
     x = df[['x', 'correction']]
+    # x = df[['x']]
     y = df['y']
     model = LinearRegression(fit_intercept=True)
     model.fit(x, y)
@@ -708,87 +712,74 @@ if __name__ == "__main__":
 
     # print(df[["lw_err_b", "rh", "t_a", "pw_hpa"]].corr())
 
-    # df = import_cs_compare_csv("cs_compare_2015.csv")
-    # df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
-    # df["y"] = df.e_act - df.de_p  # bring emissivity to sea level
-    # df = df.loc[abs(df.t_a - 294.2 < 2)].copy()
-    # c1, c2 = fit_linear(df, print_out=True)
-
     # LW ERROR plots vs TOD
-    # s = "GWC"
-    # df = import_cs_compare_csv("cs_compare_GWC.csv")
-    # tmp = np.log(df.pw_hpa * 100 / 610.94)
-    # df["tdp"] = 273.15 + ((243.04 * tmp) / (17.625 - tmp))
-    # df["dtdp"] = df.t_a - df.tdp
-    #
-    # gwc = df.copy()
-    # gwc = gwc.loc[abs(gwc.t_a - 294.2) < 1].copy()
-    #
-    # gwc["solar_time_hour"] = pd.DatetimeIndex(gwc.solar_time.copy()).hour
-    # tmp = pd.DatetimeIndex(gwc.solar_time.copy())
-    # gwc["solar_tod"] = tmp.hour + (tmp.minute / 60) + (tmp.second / 3600)
-    # gwc = gwc.set_index("solar_tod")
-    # gwc = gwc.sample(frac=0.25, random_state=33)
-    #
-    # # gwc = gwc.loc[gwc.dtdp < 2].copy()
-    # fig, ax = plt.subplots(figsize=(8, 5))
-    # ax.grid(alpha=0.3)
-    # # lw_err_b uses IJHMT fit
-    # # cb = ax.scatter(
-    # #     gwc.index, gwc.lw_err_b, c=gwc.rh, alpha=0.8, marker=".",
-    # #     vmin=0, vmax=100
-    # # )
-    # cb = ax.scatter(
-    #     gwc.index, gwc.lw_err_b, c=gwc.windspd, alpha=0.8, marker=".",
-    #     vmin=0, vmax=5
-    # )
-    # ax.axhline(0, c="0.8", ls="--")
-    # ax.set_xlabel("solar time of day")
-    # ax.set_ylabel("LW error w/o altitude correction [W/m$^2$] ")
-    # ax.set_ylim(-40, 40)
-    # ax.set_title(f"{s} (pts={gwc.shape[0]:,})")
-    # ax.set_title(f"{s} (pts={gwc.shape[0]:,}), T=294.2$\pm$1K")
-    # # fig.colorbar(cb, label=r"T$_a$ - T$_{dp}$ [K]", extend="max")
-    # fig.colorbar(cb, label="wind speed [m/s]", extend="max")
-    # # fig.colorbar(cb, label="RH [%]")
-    # # fig.colorbar(cb, label=r"T$_{dp}$ [K]")
-    # plt.show()
-    # # filename = os.path.join("figures", f"{s.lower()}_lwe_vs_tod_rh.png")
-    # # filename = os.path.join("figures", f"{s.lower()}_lwe_vs_tod.png")
-    # filename = os.path.join("figures", f"{s.lower()}_lwe_vs_tod_ws.png")
-    # fig.savefig(filename, bbox_inches="tight", dpi=300)
+    s = "PSU"
 
-    # df = import_cs_compare_csv("cs_compare_2012.csv")
-    # tmp = np.log(df.pw_hpa * 100 / 610.94)
-    # df["tdp"] = 273.15 + ((243.04 * tmp) / (17.625 - tmp))
-    # df["dtdp"] = df.t_a - df.tdp
-    # df = df.loc[df.dtdp >= 2].copy()
-    # df["pp"] = np.sqrt(df.pw_hpa / df.pa_hpa)
-    # df["e_eff"] = df.e_act_s + df.de_p
-    # X_lin = np.sqrt(df.pp.to_numpy().reshape(-1, 1))
-    # y = df.e_eff.to_numpy().reshape(-1, 1)
-    # # emissivity
-    # X_specific = X_lin
-    # y_specific = y
-    #
-    # # copy/paste with linear tau or emissivity
-    # X_train, X_test, y_train, y_test = train_test_split(
-    #     X_specific, y_specific, test_size=0.33, random_state=42)
-    # model = LinearRegression(fit_intercept=True)
-    # model.fit(X_train, y_train)
-    # c2 = model.coef_[0][0].round(4)
-    # c1 = model.intercept_[0].round(4)
-    # print(c1, c2)
-    # # Evaluate on training
-    # y_pred = c1 + (c2 * X_train)
-    # rmse = np.sqrt(mean_squared_error(y_train, y_pred))
-    # r2 = r2_score(y_train, y_pred)
-    # print(f"RMSE: {rmse:.4f}")
-    # print(f"R2: {r2:.4f}")
-    # # Evaluate on test
-    # y_pred = c1 + (c2 * X_test)
-    # rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-    # r2 = r2_score(y_test, y_pred)
-    # print(f"Test RMSE: {rmse:.4f}")
-    # print(f"Test R2: {r2:.4f}")
+    # import afgl data
+    filename = os.path.join("data", "afgl_midlatitude_summer.csv")
+    afgl = pd.read_csv(filename)
+    afgl_alt = afgl.alt_km.values * 1000  # m
+    afgl_temp = afgl.temp_k.values
+    afgl_pa = afgl.pres_mb.values
+
+    df = import_cs_compare_csv("cs_compare_2012.csv", site=s)
+    df = df.set_index("solar_time")
+    df = df.loc[df.index.hour > 8].copy()  # remove data before 8am solar
+    df["afgl_t0"] = np.interp(df.elev.values, afgl_alt, afgl_temp)
+    df["afgl_p0"] = np.interp(df.elev.values, afgl_alt, afgl_pa)
+
+    tmp = np.log(df.pw_hpa * 100 / 610.94)
+    df["tdp"] = 273.15 + ((243.04 * tmp) / (17.625 - tmp))
+    df["dtdp"] = df.t_a - df.tdp
+
+    print(df.shape)  # this filter is causing issuess
+    # df = df.loc[(abs(df.t_a - df.afgl_t0) <= 2) &
+    #             (abs(df.pa_hpa - df.afgl_p0) <= 50)].copy()
+    df = df.loc[abs(df.t_a - df.afgl_t0) <= 5].copy()
+    # df = df.loc[abs(df.t_a - 294.2) <= 2]
+    print(df.shape)
+
+    # find linear fit
+    df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
+    df["y"] = df.e_act
+    c1, c2, c3 = three_c_fit(df)
+    print(c1, c2, c3)
+    df["de_p"] = c3 * (P_ATM / 100000) * (np.exp(-1 * df.elev / 8500) - 1)
+    df["y"] = (c1 + c2 * df.x) #- df.de_p  # bring to sea level
+
+    df["ir_pred"] = SIGMA * np.power(df.t_a, 4) * df.y
+    df["lw_err"] = df.ir_pred - df.dw_ir
+
+    df["solar_tod"] = \
+        df.index.hour + (df.index.minute / 60) + (df.index.second / 3600)
+    df = df.set_index("solar_tod")
+    # df = df.sample(frac=0.25, random_state=33)
+
+    if df.shape[0] > 10000:
+        pdf = df.sample(5000, random_state=23)
+    else:
+        pdf = df.copy()
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.grid(alpha=0.3)
+    cb = ax.scatter(
+        pdf.index, pdf.lw_err, c=pdf.rh, alpha=0.8, marker=".",
+        vmin=0, vmax=100
+    )
+    ax.axhline(0, c="0.8", ls="--")
+    ax.set_xlabel("solar time of day")
+    ax.set_ylabel("LW error w/o altitude correction [W/m$^2$] ")
+    ax.set_ylim(-40, 40)
+    # ax.set_title(f"{s} (pts={df.shape[0]:,})")
+    ax.set_title(f"{s} (pts={pdf.shape[0]:,}), T~T$_0$, P~P$_0$")
+    # fig.colorbar(cb, label=r"T$_a$ - T$_{dp}$ [K]", extend="max")
+    # fig.colorbar(cb, label="wind speed [m/s]", extend="max")
+    fig.colorbar(cb, label="RH [%]")
+    plt.show()
+    filename = os.path.join("figures", f"{s.lower()}_lwe_vs_tod_rh.png")
+    # filename = os.path.join("figures", f"{s.lower()}_lwe_vs_tod.png")
+    # filename = os.path.join("figures", f"{s.lower()}_lwe_vs_tod_ws.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+
+
 
