@@ -1346,6 +1346,82 @@ def rh_boxplot():
     return None
 
 
+def lwe_vs_tod_rh():
+    s = "GWC"
+    collapse_tod = True  # True: all data by TOD, False: data by datetime
+
+    # import afgl data
+    filename = os.path.join("data", "afgl_midlatitude_summer.csv")
+    afgl = pd.read_csv(filename)
+    afgl_alt = afgl.alt_km.values * 1000  # m
+    afgl_temp = afgl.temp_k.values
+    afgl_pa = afgl.pres_mb.values
+
+    df = import_cs_compare_csv("cs_compare_2012.csv", site=s)
+    df["standard_time"] = df.index.to_numpy()
+    df = df.set_index("solar_time")
+    df = df.loc[df.index.hour > 8].copy()  # remove data before 8am solar
+    df["afgl_t0"] = np.interp(df.elev.values, afgl_alt, afgl_temp)
+    df["afgl_p0"] = np.interp(df.elev.values, afgl_alt, afgl_pa)
+
+    tmp = np.log(df.pw_hpa * 100 / 610.94)
+    df["tdp"] = 273.15 + ((243.04 * tmp) / (17.625 - tmp))
+    df["dtdp"] = df.t_a - df.tdp
+
+    print(df.shape)  # this filter is causing issuess
+    df = df.loc[(abs(df.t_a - df.afgl_t0) <= 2) &
+                (abs(df.pa_hpa - df.afgl_p0) <= 50)].copy()
+    # df = df.loc[abs(df.t_a - df.afgl_t0) <= 2].copy()
+    # df = df.loc[abs(df.t_a - 294.2) <= 2]
+    print(df.shape)
+
+    # find linear fit
+    df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
+    df["y"] = df.e_act
+    c1, c2, c3 = three_c_fit(df)
+    print(c1, c2, c3)
+    df["de_p"] = c3 * P_ATM_BAR * (np.exp(-1 * df.elev / 8500) - 1)
+    df["y"] = (c1 + c2 * df.x)  # - df.de_p  # bring to sea level
+
+    df["ir_pred"] = SIGMA * np.power(df.t_a, 4) * df.y
+    df["lw_err"] = df.ir_pred - df.dw_ir
+    df["abs_lw_err"] = abs(df.ir_pred - df.dw_ir)
+
+    if df.shape[0] > 10000:
+        pdf = df.sample(5000, random_state=23)
+    else:
+        pdf = df.copy()
+
+    # Changes index to solar time of day
+    if collapse_tod:
+        pdf["solar_tod"] = \
+            pdf.index.hour + (pdf.index.minute / 60) + (pdf.index.second / 3600)
+        pdf = pdf.set_index("solar_tod")
+    # df = df.sample(frac=0.25, random_state=33)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.grid(alpha=0.3)
+    cb = ax.scatter(
+        pdf.index, pdf.lw_err, c=pdf.rh, alpha=0.8, marker=".",
+        vmin=0, vmax=100
+    )
+    ax.axhline(0, c="0.8", ls="--")
+    ax.set_xlabel("solar time of day")
+    ax.set_ylabel("LW error [W/m$^2$] ")
+    ax.set_ylim(-40, 40)
+    title = f"{s} (pts={pdf.shape[0]:,}), ST>8, T~T$_0$, P~P$_0$"
+    title += f", [{c1}, {c2}]"
+    ax.set_title(title, loc="left")
+    fig.colorbar(cb, label="RH [%]")
+    plt.show()
+    if collapse_tod:
+        filename = os.path.join("figures", f"{s.lower()}_lwe_vs_tod_rh.png")
+    else:
+        filename = os.path.join("figures", f"{s.lower()}_2012_day_error.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
 def day_site_date_plot():
     # EXPLORE SINGLE DAY
     s = "BOU"  # site
