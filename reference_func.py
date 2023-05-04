@@ -11,7 +11,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from corr26b import get_tsky, join_surfrad_asos, shakespeare, \
     shakespeare_comparison, import_cs_compare_csv, fit_linear, three_c_fit, \
-    add_solar_time
+    add_solar_time, add_afgl_t0_p0
 from fraction import fe_lt, fi_lt
 
 from constants import *
@@ -1355,19 +1355,11 @@ def lwe_vs_tod_rh():
     s = "GWC"
     collapse_tod = True  # True: all data by TOD, False: data by datetime
 
-    # import afgl data
-    filename = os.path.join("data", "afgl_midlatitude_summer.csv")
-    afgl = pd.read_csv(filename)
-    afgl_alt = afgl.alt_km.values * 1000  # m
-    afgl_temp = afgl.temp_k.values
-    afgl_pa = afgl.pres_mb.values
-
     df = import_cs_compare_csv("cs_compare_2012.csv", site=s)
     df["standard_time"] = df.index.to_numpy()
     df = df.set_index("solar_time")
     df = df.loc[df.index.hour > 8].copy()  # remove data before 8am solar
-    df["afgl_t0"] = np.interp(df.elev.values, afgl_alt, afgl_temp)
-    df["afgl_p0"] = np.interp(df.elev.values, afgl_alt, afgl_pa)
+    df = add_afgl_t0_p0(df)
 
     tmp = np.log(df.pw_hpa * 100 / 610.94)
     df["tdp"] = 273.15 + ((243.04 * tmp) / (17.625 - tmp))
@@ -1479,6 +1471,66 @@ def day_site_date_plot():
     filename = os.path.join("figures", f"day_{s}_{date_str}.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
+
+
+def lw_err_per_day():
+    # EXPLORE stricter CS period filter
+    s = "PSU"
+    # c1, c2 = 0.6271, 1.3963  # constants for GWC
+    # c1, c2 = 0.5478, 1.9195  # constants for BOU
+    c1, c2 = 0.5861, 1.6461  # constants for PSU
+    df = shakespeare_comparison(s, 2012)
+    df["site"] = s
+    df = add_solar_time(df)
+    df = df.set_index("solar_time")
+    df["y"] = c1 + c2 * np.sqrt(df.pw_hpa * 100 / P_ATM)
+    df["lw_pred"] = df.y * SIGMA * np.power(df.t_a, 4)
+
+    df = df[["cs_period", "dw_ir", "t_a", "lw_pred"]].copy()
+    df["lw_err"] = df.lw_pred - df.dw_ir
+    pdf = df.resample("D")["cs_period", "lw_err"].mean()
+
+    fig, ax = plt.subplots()
+    ax.grid(True, alpha=0.7)
+    ax.scatter(pdf.cs_period, pdf.lw_err, marker=".")
+    ax.set_xlim(0, 1)
+    ax.set_xlabel("daily clear sky fraction")
+    ax.set_ylabel("mean daily LW error")
+    title = f"{s} 2012 (ndays={pdf.shape[0]}) [{c1}, {c2}]"
+    ax.set_title(title, loc="left")
+    filename = os.path.join("figures", f"{s}_lw_err_per_day.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def three_step_fit(df):
+    # DEPRECATED
+    # run a linear regression, then altitude correction, then final regression
+    # df must have columns: x, y, elev
+    train_x = df.x.to_numpy().reshape(-1, 1)
+    train_y = df.y.to_numpy().reshape(-1, 1)
+    model = LinearRegression(fit_intercept=True)
+    model.fit(train_x, train_y)
+    c1 = model.intercept_.round(4)[0]
+    c2 = model.coef_[0].round(4)[0]
+    pred_y = c1 + (c2 * train_x)
+
+    model2 = LinearRegression(fit_intercept=False)
+    elev = df.elev.to_numpy().reshape(-1, 1)
+    train_x = (P_ATM / 100000) * (np.exp(-1 * elev / 8500) - 1)
+    train_y = pred_y - train_y  # model - actual
+    model2.fit(train_x, train_y)
+    c3 = model2.coef_[0].round(4)[0]
+
+    # now linear fit one more time
+    de_p = c3 * (P_ATM / 100000) * (np.exp(-1 * elev / 8500) - 1)
+    train_x = df.x.to_numpy().reshape(-1, 1)
+    train_y = df.y.to_numpy().reshape(-1, 1) + de_p
+    model.fit(train_x, train_y)
+    c1 = model.intercept_.round(4)[0]
+    c2 = model.coef_[0].round(4)[0]
+
+    return c1, c2, c3
 
 
 if __name__ == "__main__":

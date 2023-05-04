@@ -644,35 +644,6 @@ def fit_linear(df, set_intercept=None, print_out=False):
     return c1, c2
 
 
-def three_step_fit(df):
-    # run a linear regression, then altitude correction, then final regression
-    # df must have columns: x, y, elev
-    train_x = df.x.to_numpy().reshape(-1, 1)
-    train_y = df.y.to_numpy().reshape(-1, 1)
-    model = LinearRegression(fit_intercept=True)
-    model.fit(train_x, train_y)
-    c1 = model.intercept_.round(4)[0]
-    c2 = model.coef_[0].round(4)[0]
-    pred_y = c1 + (c2 * train_x)
-
-    model2 = LinearRegression(fit_intercept=False)
-    elev = df.elev.to_numpy().reshape(-1, 1)
-    train_x = (P_ATM / 100000) * (np.exp(-1 * elev / 8500) - 1)
-    train_y = pred_y - train_y  # model - actual
-    model2.fit(train_x, train_y)
-    c3 = model2.coef_[0].round(4)[0]
-
-    # now linear fit one more time
-    de_p = c3 * (P_ATM / 100000) * (np.exp(-1 * elev / 8500) - 1)
-    train_x = df.x.to_numpy().reshape(-1, 1)
-    train_y = df.y.to_numpy().reshape(-1, 1) + de_p
-    model.fit(train_x, train_y)
-    c1 = model.intercept_.round(4)[0]
-    c2 = model.coef_[0].round(4)[0]
-
-    return c1, c2, c3
-
-
 def three_c_fit(df):
     # simultaneously fit model (c1, c2) and altitude correction (c3)
     # df must have columns: x, y, elev, site
@@ -689,6 +660,18 @@ def three_c_fit(df):
         c2, c3 = model.coef_.round(4)
         c1 = model.intercept_.round(4)
     return c1, c2, c3
+
+
+def add_afgl_t0_p0(df):
+    # df must have column "elev"
+    filename = os.path.join("data", "afgl_midlatitude_summer.csv")
+    afgl = pd.read_csv(filename)
+    afgl_alt = afgl.alt_km.values * 1000  # m
+    afgl_temp = afgl.temp_k.values
+    afgl_pa = afgl.pres_mb.values
+    df["afgl_t0"] = np.interp(df.elev.values, afgl_alt, afgl_temp)
+    df["afgl_p0"] = np.interp(df.elev.values, afgl_alt, afgl_pa)
+    return df
 
 
 if __name__ == "__main__":
@@ -720,7 +703,30 @@ if __name__ == "__main__":
     # xlist = [2012, 2013, 2014, 2015, 2016]
     # create_cs_compare_csv(xvar="year", const="GWC", xlist=[2012])
 
-    # EXPLORE stricter CS period filter
+    print()
+    tmp = pd.DataFrame()
+    for s in SURF_SITE_CODES:
+        df = shakespeare_comparison(s, 2012)
+        df["site"] = s
+        df = add_solar_time(df)
+        df = df.set_index("solar_time")
+        # add column for average clearness of the day
+        df["pct_clr"] = df["cs_period"].resample(
+            "D").mean().reindex(df.index, method="ffill")
+        df = df.loc[df.index.hour > 8].copy()  # remove data before 8am solar
+        df = df.loc[(abs(df.t_a - df.afgl_t0) <= 2) &
+                    (abs(df.pa_hpa - df.afgl_p0) <= 50)].copy()
+        tmp = pd.concat([tmp, df])
 
+    ref = tmp.copy()
+    df = ref.loc[ref.pct_clr >= 0.3].copy()
+    print(df.shape, ref.shape)
 
+    df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
+    df["y"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))
+    c1, c2, c3 = three_c_fit(df)
+    print(c1, c2, c3)
 
+    df["y"] = df.y - 0.6376
+    c1, c2 = fit_linear(df, set_intercept=0.6376)
+    print(c1, c2)
