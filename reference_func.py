@@ -4,12 +4,14 @@ from main import *
 import time
 import scipy
 import pvlib
+import datetime as dt
 from scipy.optimize import curve_fit
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from corr26b import get_tsky, join_surfrad_asos, shakespeare, \
-    shakespeare_comparison, import_cs_compare_csv, fit_linear, three_c_fit
+    shakespeare_comparison, import_cs_compare_csv, fit_linear, three_c_fit, \
+    add_solar_time
 from fraction import fe_lt, fi_lt
 
 from constants import *
@@ -1340,6 +1342,60 @@ def rh_boxplot():
     )
     plt.show()
     filename = os.path.join("figures", "rh_boxplot.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def day_site_date_plot():
+    # EXPLORE SINGLE DAY
+    s = "BOU"  # site
+    c1, c2 = 0.5478, 1.9195  # constants for BOU
+    # c1, c2 = 0.5861, 1.6461  # constants for PSU
+    # c1, c2 = 0.6271, 1.3963  # constants for GWC
+    plot_date = dt.date(2012, 11, 19)  # date to plot
+
+    df = shakespeare_comparison(s, plot_date.year)
+    df["site"] = s
+    df = add_solar_time(df)
+    df = df.set_index("solar_time")
+
+    df = df.loc[df.index.date == plot_date].copy()
+    df["y"] = c1 + c2 * np.sqrt(df.pw_hpa * 100 / P_ATM)
+    df["lw_pred"] = df.y * SIGMA * np.power(df.t_a, 4)
+
+    # FIGURE
+    fig, axes = plt.subplots(3, 1, sharex=True, figsize=(10, 8))
+    plt.subplots_adjust(hspace=0.05)
+    ax = axes[0]
+    ax.scatter(df.index, df.dw_ir, marker=".", label="measured LW")
+    ax.scatter(df.index, df.lw_pred, marker=".", c="0.6", label="modeled LW")
+    ax.legend(loc="lower right")
+    date_str = plot_date.strftime("%m-%d-%Y")
+    title = f"{s} {date_str}"
+    ax.set_title(title, loc="left")
+
+    ax = axes[1]
+    ax.plot(df.index, df.DNI_m, label="DNI")
+    ax.plot(df.index, df.GHI_m, label="GHI")
+    ax.fill_between(
+        df.index, 0, df.GHI_m, where=df.cs_period, fc="0.7", alpha=0.4,
+        label="CS"
+    )
+    ax.set_ylim(0, 1200)
+    ax.legend()
+
+    ax = axes[2]
+    ax2 = ax.twinx()
+    ln1 = ax.plot(df.index, df.t_a, marker=".", label="T [K]")
+    ln2 = ax2.plot(df.index, df.rh, marker=".", c="k", label="RH [%]")
+    ax2.set_ylim(0, 100)
+    lns = ln1 + ln2
+    labels = [x.get_label() for x in lns]
+    ax.legend(lns, labels, framealpha=0.95, loc="upper right")
+    plt.show()
+
+    date_str = plot_date.strftime("%Y%m%d")
+    filename = os.path.join("figures", f"day_{s}_{date_str}.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 
