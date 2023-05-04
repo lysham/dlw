@@ -361,12 +361,12 @@ def get_cs_metrics_1to5(obs, clr, thresholds="ghi"):
     return metrics_sum
 
 
-def find_clearsky(df):
+def find_clearsky(df, window=10, min_sample=5):
     # only applies for daytime values
     df["day"] = df.zen < 85
 
     starts = df.index.values
-    ends = df.index + dt.timedelta(minutes=10)  # ten-minute sliding window
+    ends = df.index + dt.timedelta(minutes=window)  # ten-minute sliding window
     # note that sliding window may preferentially treat shoulders of days
     # since windows will have fewer points
 
@@ -377,7 +377,7 @@ def find_clearsky(df):
         # select for sliding window
         sw = df[(df.index < window_end) & (df.index >= window_start)]
         day_check = sw.day.sum() == len(sw)  # all pts are labelled day
-        npts_check = len(sw) > 5  # at least 5min of data
+        npts_check = len(sw) > min_sample  # at least X min of data
         if npts_check & day_check:
             obs = sw.GHI_m.to_numpy()
             clr = sw.GHI_c.to_numpy()
@@ -545,14 +545,7 @@ def import_cs_compare_csv(csvname, site=None):
         df = df.loc[df.site == site]
 
     # add solar time correction
-    doy = df.index.dayofyear.to_numpy()
-    eq_of_time = pvlib.solarposition.equation_of_time_spencer71(doy)
-    df["lon"] = df["site"].map(LON_DICT)
-    df["dloc"] = 4 * df.lon
-    minutes = df.dloc + eq_of_time  # difference in min
-    df["dtime"] = pd.to_timedelta(minutes, unit="m")
-    df["solar_time"] = df.index + df.dtime
-    df = df.drop(columns=["dtime", "lon", "dloc"])
+    df = add_solar_time(df)
     # # add solar time correction
     # tmp = pd.DatetimeIndex(df.solar_time.copy())
     # t = tmp.hour + (tmp.minute / 60) + (tmp.second / 3600)
@@ -584,6 +577,19 @@ def e_time(n):
     e = 229.2 * (0.0000075 + (0.001868 * np.cos(b)) - (0.032077 * np.sin(b)) -
                  (0.014615 * np.cos(2 * b)) - (0.04089 * np.sin(2 * b)))
     return e
+
+
+def add_solar_time(df):
+    # index should be in UTC, df must include site
+    doy = df.index.dayofyear.to_numpy()
+    eq_of_time = pvlib.solarposition.equation_of_time_spencer71(doy)
+    df["lon"] = df["site"].map(LON_DICT)
+    df["dloc"] = 4 * df.lon
+    minutes = df.dloc + eq_of_time  # difference in min
+    df["dtime"] = pd.to_timedelta(minutes, unit="m")
+    df["solar_time"] = df.index + df.dtime
+    df = df.drop(columns=["dtime", "lon", "dloc"])
+    return df
 
 
 def fit_linear(df, set_intercept=None, print_out=False):
@@ -714,78 +720,7 @@ if __name__ == "__main__":
     # xlist = [2012, 2013, 2014, 2015, 2016]
     # create_cs_compare_csv(xvar="year", const="GWC", xlist=[2012])
 
-    # print(df[["lw_err_b", "rh", "t_a", "pw_hpa"]].corr())
-
-    # LW ERROR plots vs TOD
-    s = "DRA"
-
-    # import afgl data
-    filename = os.path.join("data", "afgl_midlatitude_summer.csv")
-    afgl = pd.read_csv(filename)
-    afgl_alt = afgl.alt_km.values * 1000  # m
-    afgl_temp = afgl.temp_k.values
-    afgl_pa = afgl.pres_mb.values
-
-    df = import_cs_compare_csv("cs_compare_2012.csv", site=s)
-    df = df.set_index("solar_time")
-    df = df.loc[df.index.hour > 8].copy()  # remove data before 8am solar
-    df["afgl_t0"] = np.interp(df.elev.values, afgl_alt, afgl_temp)
-    df["afgl_p0"] = np.interp(df.elev.values, afgl_alt, afgl_pa)
-
-    tmp = np.log(df.pw_hpa * 100 / 610.94)
-    df["tdp"] = 273.15 + ((243.04 * tmp) / (17.625 - tmp))
-    df["dtdp"] = df.t_a - df.tdp
-
-    print(df.shape)  # this filter is causing issuess
-    # df = df.loc[(abs(df.t_a - df.afgl_t0) <= 2) &
-    #             (abs(df.pa_hpa - df.afgl_p0) <= 50)].copy()
-    df = df.loc[abs(df.t_a - df.afgl_t0) <= 5].copy()
-    # df = df.loc[abs(df.t_a - 294.2) <= 2]
-    print(df.shape)
-
-    # find linear fit
-    df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
-    df["y"] = df.e_act
-    c1, c2, c3 = three_c_fit(df)
-    print(c1, c2, c3)
-    df["de_p"] = c3 * P_ATM_BAR * (np.exp(-1 * df.elev / 8500) - 1)
-    df["y"] = (c1 + c2 * df.x)  # - df.de_p  # bring to sea level
-
-    df["ir_pred"] = SIGMA * np.power(df.t_a, 4) * df.y
-    df["lw_err"] = df.ir_pred - df.dw_ir
-
-    df["solar_tod"] = \
-        df.index.hour + (df.index.minute / 60) + (df.index.second / 3600)
-    df = df.set_index("solar_tod")
-    # df = df.sample(frac=0.25, random_state=33)
-
-    if df.shape[0] > 10000:
-        pdf = df.sample(5000, random_state=23)
-    else:
-        pdf = df.copy()
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.grid(alpha=0.3)
-    cb = ax.scatter(
-        pdf.index, pdf.lw_err, c=pdf.rh, alpha=0.8, marker=".",
-        vmin=0, vmax=100
-    )
-    ax.axhline(0, c="0.8", ls="--")
-    ax.set_xlabel("solar time of day")
-    ax.set_ylabel("LW error w/o altitude correction [W/m$^2$] ")
-    ax.set_ylim(-40, 40)
-    # ax.set_title(f"{s} (pts={df.shape[0]:,})")
-    title = f"{s} (pts={pdf.shape[0]:,}), ST>8, T~T$_0$, P~P$_0$"
-    title += f", [{c1}, {c2}]"
-    ax.set_title(title)
-    # fig.colorbar(cb, label=r"T$_a$ - T$_{dp}$ [K]", extend="max")
-    # fig.colorbar(cb, label="wind speed [m/s]", extend="max")
-    fig.colorbar(cb, label="RH [%]")
-    plt.show()
-    filename = os.path.join("figures", f"{s.lower()}_lwe_vs_tod_rh.png")
-    # filename = os.path.join("figures", f"{s.lower()}_lwe_vs_tod.png")
-    # filename = os.path.join("figures", f"{s.lower()}_lwe_vs_tod_ws.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    # EXPLORE stricter CS period filter
 
 
 
