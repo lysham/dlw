@@ -1326,5 +1326,23 @@ def plot_t0_p0_per_site():
     return None
 
 
+def rh_boxplot():
+    df = import_cs_compare_csv("cs_compare_2012.csv")
+    data = []
+    for s in SURF_SITE_CODES:
+        data.append(df.loc[df.site == s, "rh"].to_numpy())
+
+    fig, ax = plt.subplots()
+    ax.boxplot(
+        data, labels=SURF_SITE_CODES, patch_artist=True,
+        boxprops={'fill': True, 'facecolor': 'white'},
+        medianprops={'color': 'steelblue'},
+    )
+    plt.show()
+    filename = os.path.join("figures", "rh_boxplot.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
 if __name__ == "__main__":
     print()
