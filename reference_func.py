@@ -1347,6 +1347,11 @@ def rh_boxplot():
 
 
 def lwe_vs_tod_rh():
+    """
+    Can be modified to show error over datetime. Colormap can be changed to
+    values other than RH but labels should be changed accordingly.
+    """
+    # LW ERROR plots vs TOD
     s = "GWC"
     collapse_tod = True  # True: all data by TOD, False: data by datetime
 
