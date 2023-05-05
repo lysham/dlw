@@ -714,8 +714,8 @@ def create_training_set(year=[2012, 2013], all_sites=True, site=None,
     # filter solar time
     df = df.loc[df.index.hour > 8].copy()
 
+    df = add_afgl_t0_p0(df)  # add t0 and p0 values
     if temperature:
-        df = add_afgl_t0_p0(df)
         df = df.loc[(abs(df.t_a - df.afgl_t0) <= 2)].copy()
 
     if cs_only:
@@ -757,34 +757,3 @@ if __name__ == "__main__":
     # create_cs_compare_csv(xvar="year", const="GWC", xlist=[2012])
 
     print()
-    tmp = pd.DataFrame()
-    for s in SURF_SITE_CODES:
-        df = shakespeare_comparison(s, 2012)
-        df["site"] = s
-        df = add_solar_time(df)
-        df = df.set_index("solar_time")
-        # add column for average clearness of the day
-        df["pct_clr"] = df["cs_period"].resample(
-            "D").mean().reindex(df.index, method="ffill")
-        df = df.loc[df.index.hour > 8].copy()  # remove data before 8am solar
-        tmp = pd.concat([tmp, df])
-
-    df = add_afgl_t0_p0(df)
-    df = df.loc[(abs(df.t_a - df.afgl_t0) <= 2) &
-                (abs(df.pa_hpa - df.afgl_p0) <= 50)].copy()
-
-    ref = tmp.copy()
-    df = ref.loc[ref.pct_clr >= 0.3].copy()
-    print(df.shape, ref.shape)
-
-    df = df.loc[df.cs_period].copy()  # reduce to only clear skies
-    print(df.shape)
-
-    df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
-    df["y"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))
-    c1, c2, c3 = three_c_fit(df)
-    print(c1, c2, c3)
-
-    # df["y"] = df.y - 0.6376
-    # c1, c2 = fit_linear(df, set_intercept=0.6376)
-    # print(c1, c2)
