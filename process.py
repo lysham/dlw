@@ -146,25 +146,28 @@ def process_site(site, folder, yr="2012"):
     for f in lst:  # import data by day and concatenate to `tmp`
         filename = os.path.join(folder, f)
         try:
-            df = pd.DataFrame(
-                np.loadtxt(filename, skiprows=2), columns=SURF_COLS
-            )
-            if len(df.columns) == expected_columns:
-                df['TS'] = pd.to_datetime(
-                    {'year': df.yr, 'month': df.month, 'day': df.day,
-                     'hour': df.hr, 'minute': df.minute}
-                )
-                df = df.set_index('TS')
-                df = df[keep_cols]
-                tmp = pd.concat([tmp, df])
+            data = np.loadtxt(filename, skiprows=2)
+            # Check number of columns is correct and number of rows > 1
+            if len(data.shape) > 1:
+                df = pd.DataFrame(data, columns=SURF_COLS)
+                if len(df.columns) == expected_columns:
+                    df['TS'] = pd.to_datetime(
+                        {'year': df.yr, 'month': df.month, 'day': df.day,
+                         'hour': df.hr, 'minute': df.minute}
+                    )
+                    df = df.set_index('TS')
+                    df = df[keep_cols]
+                    tmp = pd.concat([tmp, df])
+                else:
+                    print(
+                        f"{filename} does not have expected number of columns."
+                    )
             else:
-                print(
-                    f"{filename} does not have expected number of columns."
-                )
+                print(f"{filename} does not have rows.")
         except pd.errors.ParserError as e:
             print(f"Error: {e}")
     df = tmp.copy()  # switch back to df
-    print("Data collected.", time.time() - start_time)
+    # print("Data collected.", time.time() - start_time)
 
     # Do some clean-up
     df = df[
@@ -188,12 +191,12 @@ def process_site(site, folder, yr="2012"):
     }
     df = df.merge(cs_out, how='outer', left_index=True, right_index=True)
     df = df.rename(columns=col_rename)
-    print("QC and clear sky applied.", time.time() - start_time)
+    # print("QC and clear sky applied.", time.time() - start_time)
 
     # Apply clear sky period filter
     df = find_clearsky(df)
     # need to apply clear sky filter before data is sampled
-    print("Clear sky filter applied.", time.time() - start_time)
+    # print("Clear sky filter applied.", time.time() - start_time)
 
     # # Reduce sample size TODO remove later(?) (orig 1%)
     # df = df.sample(frac=0.05, random_state=96)
@@ -211,9 +214,10 @@ def process_site(site, folder, yr="2012"):
 
     filename = os.path.join("data", "SURFRAD", f"{site}_{yr}.csv")
     df.to_csv(filename)
+    print(df.shape)
 
     dt = time.time() - start_time
-    print(f"Completed {site} in {dt:.0f}s")
+    print(f"Completed {site} {yr} in {dt:.0f}s")
     return None
 
 
@@ -224,8 +228,9 @@ if __name__ == "__main__":
 
     start_time = time.time()
     for s in SURF_SITE_CODES:
-        process_site(s, yr="2009")
-        print(s, time.time() - start_time)
+        if s != "SXF":
+            process_site(s, folder=folder, yr="2000")
+            print(s, time.time() - start_time)
 
     # 2020 data is incomplete
 
