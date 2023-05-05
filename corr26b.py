@@ -644,21 +644,30 @@ def fit_linear(df, set_intercept=None, print_out=False):
     return c1, c2
 
 
-def three_c_fit(df):
+def three_c_fit(df, c1=None):
     # simultaneously fit model (c1, c2) and altitude correction (c3)
     # df must have columns: x, y, elev, site
     # check if mult-location or not
     if len(np.unique(df.site.to_numpy())) == 1:
-        c1, c2 = fit_linear(df)
+        if c1 is not None:
+            c1, c2 = fit_linear(df, set_intercept=c1)
+        else:
+            c1, c2 = fit_linear(df)
         c3 = 0
     else:
-        df['correction'] = P_ATM_BAR * (np.exp(-1 * df.elev / 8500) - 1)
+        df['correction'] = np.exp(-1 * df.elev / 8500) - 1
         x = df[['x', 'correction']]
-        y = df['y']
-        model = LinearRegression(fit_intercept=True)
-        model.fit(x, y)
-        c2, c3 = model.coef_.round(4)
-        c1 = model.intercept_.round(4)
+        if c1 is not None:
+            y = df['y'] - c1
+            model = LinearRegression(fit_intercept=False)
+            model.fit(x, y)
+            c2, c3 = model.coef_.round(4)
+        else:
+            y = df['y']
+            model = LinearRegression(fit_intercept=True)
+            model.fit(x, y)
+            c2, c3 = model.coef_.round(4)
+            c1 = model.intercept_.round(4)
     return c1, c2, c3
 
 
@@ -671,6 +680,50 @@ def add_afgl_t0_p0(df):
     afgl_pa = afgl.pres_mb.values
     df["afgl_t0"] = np.interp(df.elev.values, afgl_alt, afgl_temp)
     df["afgl_p0"] = np.interp(df.elev.values, afgl_alt, afgl_pa)
+    return df
+
+
+def create_training_set(year=[2012, 2013], all_sites=True, site=None,
+                        temperature=False, cs_only=True, pct_clr_min=0.3):
+    # start broad then filter
+    keep_cols = [
+        "zen", "GHI_m", "DNI_m", "diffuse", "dw_ir", "t_a", "rh",
+        "pa_hpa", "pw_hpa", "cs_period", "elev", "P_rep", "tdp", "q", "he"
+    ]
+
+    if all_sites:
+        site_codes = SURF_SITE_CODES
+    else:
+        site_codes = [site]
+
+    df = pd.DataFrame()
+    for s in site_codes:
+        for yr in year:
+            tmp = shakespeare_comparison(s, yr)
+            tmp = tmp[keep_cols]
+            tmp["site"] = s
+            tmp = add_solar_time(tmp)
+            tmp = tmp.set_index("solar_time")
+            if pct_clr_min is not None:
+                tmp_clr = tmp["cs_period"].resample("D").mean()
+                tmp["daily_clr"] = tmp_clr.reindex(tmp.index, method="ffill")
+                tmp = tmp.loc[tmp.daily_clr >= pct_clr_min].copy()
+
+            df = pd.concat([df, tmp])
+
+    # filter solar time
+    df = df.loc[df.index.hour > 8].copy()
+
+    if temperature:
+        df = add_afgl_t0_p0(df)
+        df = df.loc[(abs(df.t_a - df.afgl_t0) <= 2)].copy()
+
+    if cs_only:
+        df = df.loc[df.cs_period].copy()  # reduce to only clear skies
+
+    df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
+    df["y"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))
+
     return df
 
 
