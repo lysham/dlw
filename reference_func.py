@@ -11,7 +11,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from corr26b import get_tsky, join_surfrad_asos, shakespeare, \
     shakespeare_comparison, import_cs_compare_csv, fit_linear, three_c_fit, \
-    add_solar_time, add_afgl_t0_p0
+    add_solar_time, add_afgl_t0_p0, create_training_set
 from fraction import fe_lt, fi_lt
 
 from constants import *
@@ -347,11 +347,11 @@ def print_lw_clr_err_by_site():
 
 
 def afgl_from_longwave_github():
-    filename = os.path.join("data", "raw.csv")
+    filename = os.path.join("data", "profiles", "AFGL_midlatitude_winter.csv")
     colnames = ["alt_km", "pres_mb", "temp_k", "density_cm-3", "h2o_ppmv",
                 "o3_ppmv", "n2o_ppmv", "co_ppmv", "ch4_ppmv"]
     df = pd.read_csv(filename, names=colnames, index_col=False)
-    filename = os.path.join("data", "afgl_midlatitude_summer.csv")
+    filename = os.path.join("data", "afgl_midlatitude_winter.csv")
     df.to_csv(filename, index=False)
     return None
 
@@ -1199,35 +1199,15 @@ def iterative_alt_corrections():
 
 
 def plot_convergence():
-    start_time = time.time()
-
-    filename = os.path.join("data", "afgl_midlatitude_summer.csv")
-    afgl = pd.read_csv(filename)
-
-    df = pd.DataFrame()
-    for yr in [2010, 2011, 2012, 2013]:
-        tmp = import_cs_compare_csv(f"cs_compare_{yr}.csv")
-        tmp = tmp.set_index("solar_time")
-        # tmp = tmp.loc[(abs(tmp.t_a - 294.2) < 2) & (tmp.index.hour > 8)]
-        tmp["afgl_t0"] = np.interp(tmp.elev.values / 1000, afgl.alt_km.values,
-                                   afgl.temp_k.values)
-        tmp = tmp.loc[(abs(tmp.t_a - tmp.afgl_t0) < 2) & (tmp.index.hour > 8)]
-        tmp = tmp[["pw_hpa", "elev", "dw_ir", "t_a", "e_act"]].copy()
-        df = pd.concat([df, tmp])
-
-    # fig_name = "convergence.png"
-    # fig_name = "convergence_nofilter.png"
-    fig_name = "convergence_afgl.png"
-
-    # How does filtering affect convergence?
-    df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
-    df["y"] = df.e_act
+    df = create_training_set(
+        year=[2010, 2011, 2012, 2013], all_sites=True, site=None,
+        temperature=False, cs_only=True, pct_clr_min=0.0
+    )
     test = df.loc[df.index.year == 2013].copy()  # make test set
     df = df.loc[df.index.year != 2013].copy()
-    print("Finished building train and test", time.time() - start_time)
 
-    sizes = np.geomspace(100, 100000, 10)
-    n_iter = 10  # per sample size
+    sizes = np.geomspace(100, 100000, 20)
+    n_iter = 50  # per sample size
     c1_vals = np.zeros((len(sizes), n_iter))
     c2_vals = np.zeros((len(sizes), n_iter))
     c3_vals = np.zeros((len(sizes), n_iter))
@@ -1241,7 +1221,7 @@ def plot_convergence():
             c3_vals[i, j] = c3
 
             # evaluate on test
-            de_p = c3 * (P_ATM / 100000) * (np.exp(-1 * test.elev / 8500) - 1)
+            de_p = c3 * (np.exp(-1 * test.elev / 8500) - 1)
             pred_e = c1 + (c2 * test.x) + de_p
             pred_y = SIGMA * np.power(test.t_a, 4) * pred_e
             rmse = np.sqrt(mean_squared_error(
@@ -1254,7 +1234,7 @@ def plot_convergence():
     ax.fill_between(sizes, c1_vals.min(axis=1), c1_vals.max(axis=1), alpha=0.5)
     ax.plot(sizes, c1_vals.mean(axis=1))
     ax.set_ylabel("c1")
-    ax.set_ylim(0.54, 0.66)
+    ax.set_ylim(0.56, 0.64)
     ax.grid(True, alpha=0.2)
     ax.set_axisbelow(True)
 
@@ -1278,7 +1258,7 @@ def plot_convergence():
     ax.set_axisbelow(True)
     ax.set_xlim(sizes[0], sizes[-1])
 
-    filename = os.path.join("figures", fig_name)
+    filename = os.path.join("figures", "convergence.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 
