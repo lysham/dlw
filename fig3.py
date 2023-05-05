@@ -9,13 +9,14 @@ import matplotlib.pyplot as plt
 
 from main import get_pw
 from corr26b import shakespeare, import_cs_compare_csv, fit_linear, \
-    compute_mbe, three_c_fit
+    compute_mbe, three_c_fit, add_afgl_t0_p0, add_solar_time, \
+    shakespeare_comparison, create_training_set, reduce_to_equal_pts_per_site
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.linear_model import LinearRegression, Ridge, SGDRegressor
 from scipy.stats import pearsonr
 
 from constants import LI_TABLE1, P_ATM, SIGMA, N_BANDS, N_SPECIES, SURFRAD, \
-    ELEVATIONS
+    ELEVATIONS, SURF_SITE_CODES
 
 
 def get_pw_norm(t, rh):
@@ -265,81 +266,44 @@ def plot_fig3_ondata(s, sample):
 
 
 def plot_fig3_quantiles(site=None, yr=None, all_sites=False, tau=False,
-                        temperature=False, pressure=False, shk=False):
-    # plot from cs_compare files, either "_{year}.csv" or "_{site}.csv"
+                        temperature=False, shk=False, pct_clr_min=0.3):
     # DISCLAIMER: tau may need to be adjusted since s["x"] is now defined
     #   using three_c_fit to solve for c1,c2, and c3 at once
 
-    # import afgl data
-    filename = os.path.join("data", "afgl_midlatitude_summer.csv")
-    afgl = pd.read_csv(filename)
-    afgl_alt = afgl.alt_km.values * 1000  # m
-    afgl_temp = afgl.temp_k.values
-    afgl_pa = afgl.pres_mb.values
-
-    if isinstance(yr, int) & all_sites:
-        s = import_cs_compare_csv(f"cs_compare_{yr}.csv")
-    elif isinstance(yr, int) & ~all_sites:
-        s = import_cs_compare_csv(f"cs_compare_{yr}.csv", site=site)
-    elif isinstance(yr, list) & all_sites:
-        s = pd.DataFrame()
-        for y in yr:
-            tmp = import_cs_compare_csv(f"cs_compare_{y}.csv")
-            s = pd.concat([s, tmp])
-    else:
-        s = import_cs_compare_csv(f"cs_compare_{site}.csv")
-    s = s.set_index("solar_time")
-    s = s.loc[s.index.hour > 8].copy()  # remove data before 8am solar
-    s["afgl_t0"] = np.interp(s.elev.values / 1000, afgl_alt, afgl_temp)
-    s["afgl_p"] = np.interp(s.elev.values / 1000, afgl_alt, afgl_pa)
-
-    clrs_g = ["#c8d5b9", "#8fc0a9", "#68b0ab", "#4a7c59", "#41624B"]
-    labels = ["Q05-95", "Q25-75", "Q40-60"]
-    quantiles = [0.05, 0.25, 0.4, 0.6, 0.75, 0.95]
-    clrs_p = ["#C9A6B7", "#995C7A", "#804D67", "663D52", "#4D2E3E"]
-    pressure_bins = 12
-
-    if temperature:
-        s = s.loc[abs(s.t_a - s.afgl_t0) <= 2].copy()
-        # s = s.loc[abs(s.t_a - 294.2) < 2].copy()
-    if pressure:
-        s = s.loc[abs(s.pa_hpa - s.afgl_p) <= 50].copy()
-    s["pp"] = s.pw_hpa * 100 / P_ATM
-    s["quant"] = pd.qcut(s.pp, pressure_bins, labels=False)
-    s["x"] = np.sqrt(s.pp)
-    if tau:
-        s["transmissivity"] = 1 - s.e_act
-        s["y"] = -1 * np.log(s.transmissivity)
-    else:
-        s["y"] = s.e_act
-    # processed and filtered dataset created
+    # Create dataset for training
+    s = create_training_set(
+        year=yr, all_sites=all_sites, site=site, temperature=temperature,
+        cs_only=True, pct_clr_min=pct_clr_min
+    )
+    s = reduce_to_equal_pts_per_site(s)  # reduce to num pts in common
 
     # import ijhmt data to plot
     df = import_ijhmt_df("fig3_esky_i.csv")
-    x = df.pw.to_numpy()
+    x_lbl = df.pw.to_numpy()
     df["total"] = df.pOverlaps
+
     if tau:
-        y = -1 * np.log(1 - df.total)
+        s["transmissivity"] = 1 - s.y  # create set will create y col (e_act)
+        s["y"] = -1 * np.log(s.transmissivity)
+        y_lbl = -1 * np.log(1 - df.total)
+        ylabel = "optical depth [-]"
+        ylim, ymax = 0.8, 3.0
     else:
-        y = df.total
+        y_lbl = df.total
+        ylabel = "effective sky emissivity [-]"
+        ymin, ymax = 0.60, 1.0
+    labels = ["Q05-95", "Q25-75", "Q40-60"]
+    quantiles = [0.05, 0.25, 0.4, 0.6, 0.75, 0.95]
+    pressure_bins = 20
 
-    # find linear fit
-    c1, c2, c3 = three_c_fit(s)
-    print(c1, c2, c3)
-    y2 = c1 + c2 * np.sqrt(x)
-    s["de_p"] = c3 * (P_ATM / 100000) * (np.exp(-1 * s.elev / 8500) - 1)
-    s["y"] = s.e_act - s.de_p  # revise y and bring to sea level
-
-    # Find quantile data per bin
-    xq = np.zeros(pressure_bins)
-    yq = np.zeros((pressure_bins, len(quantiles)))
-    for i, g in s.groupby(s.quant):
-        xq[i] = g.pp.median()
-        for j in range(len(quantiles)):
-            yq[i, j] = g.y.quantile(quantiles[j])
+    # Prepare data for quantiles plot
+    c1, c2, c3, xq, yq = prep_plot_data_for_quantiles_plot(
+        s, pressure_bins, quantiles
+    )
+    y_fit = c1 + c2 * np.sqrt(x_lbl)
 
     if shk:  # if using only one site, apply shakespeare model
-        pw = (x * P_ATM) / 100  # convert back to partial pressure [hPa]
+        pw = (x_lbl * P_ATM) / 100  # convert back to partial pressure [hPa]
         pa_hpa = s.P_rep.values[0] / 100
         w = 0.62198 * pw / (pa_hpa - pw)
         q_values = w / (1 + w)
@@ -358,52 +322,85 @@ def plot_fig3_quantiles(site=None, yr=None, all_sites=False, tau=False,
         else:  # emissivity
             y_sp = (1 - np.exp(-1 * np.array(tau_shakespeare)))
 
+    # set title and filename
+    suffix = "_tau" if tau else ""
+    suffix += "_ta" if temperature else ""
+    suffix += f"_clr{pct_clr_min*100:.0f}"
+    suffix += f"_{pressure_bins}"
+    title_suffix = r", T~T$_0$" if temperature else ""
+    title_suffix += f" day_clr>{pct_clr_min:.0%}"
+    if len(yr) == 1:
+        name = yr[0]
+    else:
+        str_name = f"{yr[0]} - {yr[-1]}"
+        name = f"{yr[0]}_{yr[-1]}"
+
+    if all_sites:
+        filename = os.path.join("figures", f"fig3{name}_q{suffix}.png")
+        title = f"SURFRAD {str_name} (n={s.shape[0]:,}) ST>8" + title_suffix
+    else:
+        filename = os.path.join("figures", f"fig3{name}_{site}_q{suffix}.png")
+        title = f"{site} {str_name} (n={s.shape[0]:,}) ST>8" + title_suffix
+
+    # Create figure
+    quantiles_figure(
+        x_lbl, y_lbl, y_fit, c1, c2, c3, xq, yq, ymin, ymax, ylabel,
+        title, filename, quantiles, labels
+    )
+
+    return None
+
+
+def prep_plot_data_for_quantiles_plot(df, pressure_bins, quantiles):
+    # PREPARE PLOTTING DATA
+    df["pp"] = df.pw_hpa * 100 / P_ATM
+    df["quant"] = pd.qcut(df.pp, pressure_bins, labels=False)
+    # find linear fit
+    c1, c2, c3 = three_c_fit(df)
+    print(c1, c2, c3)
+    df["de_p"] = c3 * (P_ATM / 100000) * (np.exp(-1 * df.elev / 8500) - 1)
+    df["y"] = df.y - df.de_p  # revise y and bring to sea level
+
+    # Find quantile data per bin
+    xq = np.zeros(pressure_bins)
+    yq = np.zeros((pressure_bins, len(quantiles)))
+    for i, group in df.groupby(df.quant):
+        xq[i] = group.pp.median()
+        for j in range(len(quantiles)):
+            yq[i, j] = group.y.quantile(quantiles[j])
+    return c1, c2, c3, xq, yq
+
+
+def quantiles_figure(x, y, y2, c1, c2, c3, xq, yq, ymin, ymax, ylabel, title,
+                     filename, quantiles, labels, y_sp=None):
+    clrs_g = ["#c8d5b9", "#8fc0a9", "#68b0ab", "#4a7c59", "#41624B"]
+    clrs_p = ["#C9A6B7", "#995C7A", "#804D67", "663D52", "#4D2E3E"]
+
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.grid(alpha=0.3)
     ax.plot(x, y, label="LBL", c="k")
-    ax.plot(x, y2, label=f"{c1}+{c2}x", ls="--", lw=1, c="g")
-    if shk:
+    ax.plot(x, y2, label="fit", ls="--", lw=1, c="g")
+    if y_sp is not None:
         ax.plot(x, y_sp, label="Shakespeare", c="0.2", ls=":")
     for i in range(int(len(quantiles) / 2)):
         t = int(-1 * (i + 1))
         ax.fill_between(
             xq, yq[:, i], yq[:, t], alpha=0.3, label=labels[i],
-            fc=clrs_g[i], ec="0.9", step="mid"
+            fc=clrs_g[i], ec="0.9",
         )
         # to make smoother, use default step setting
+    text = r"$\varepsilon$ = " + f"{c1} + {c2}" + r"$\sqrt{p_w}$" + \
+           f" + {c3}(" + r"$e^{-z/H}$" + " - 1)"
+    ax.text(
+        0.95, 0.05, s=text, transform=ax.transAxes, ha="right", va="bottom",
+        backgroundcolor="1.0", alpha=0.8
+    )
     ax.set_xlabel("p$_w$ [-]")
     ax.set_xlim(0, 0.03)
-    if tau:
-        ax.set_ylabel("optical depth [-]")
-        ax.set_ylim(0.8, 3.0)
-    else:
-        ax.set_ylabel("effective sky emissivity [-]")
-        ax.set_ylim(0.60, 1.0)
+    ax.set_ylim(ymin, ymax)
+    ax.set_ylabel(ylabel)
     ax.legend(ncols=3, loc="upper left")
     ax.set_axisbelow(True)
-
-    # set title and filename
-    suffix = "_tau" if tau else ""
-    suffix += "_ta" if temperature else ""
-    suffix += "_pa" if pressure else ""
-    suffix += f"_{pressure_bins}"
-    title_suffix = r", T~T$_0$" if temperature else ""
-    title_suffix += r", P~P$_0$" if pressure else ""
-    if isinstance(yr, int) & all_sites:
-        filename = os.path.join("figures", f"fig3_{yr}_q{suffix}.png")
-        title = f"{yr} (n={s.shape[0]:,}) ST>0800" + title_suffix
-    elif isinstance(yr, int) & ~all_sites:
-        filename = os.path.join("figures", f"fig3_{site}_q{suffix}.png")
-        title = f"{site} {yr} (n={s.shape[0]:,}) ST>0800" + title_suffix
-    elif isinstance(yr, list):
-        name = ""
-        for y in yr:
-            name = name + "_" + str(y)
-        filename = os.path.join("figures", f"fig3{name}.png")
-        title = f"(n={s.shape[0]:,}) ST>0800" + title_suffix
-    else:
-        filename = os.path.join("figures", f"fig3_{site}_q5yr{suffix}.png")
-        title = f"{site} 2012-2016 (n={s.shape[0]:,}) ST>0800" + title_suffix
     ax.set_title(title, loc="left")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
@@ -418,5 +415,17 @@ if __name__ == "__main__":
     # plot_fig3_ondata("FPK", sample=0.05)
     plot_fig3_quantiles(
         yr=[2010, 2011, 2012, 2013], all_sites=True, tau=False,
-        temperature=True, pressure=True
+        temperature=True, pct_clr_min=0.8
     )
+
+    # df = create_training_set(
+    #     year=[2012], all_sites=True, site=None, temperature=True,
+    #     cs_only=True, pct_clr_min=0.3
+    # )
+    # df = reduce_to_equal_pts_per_site(df)
+    #
+    # c1, c2, c3 = three_c_fit(df)
+    # print(c1, c2, c3)
+    #
+    # c1, c2, c3 = three_c_fit(df, c1=0.6376)
+    # print(c1, c2, c3)
