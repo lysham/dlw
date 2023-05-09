@@ -266,7 +266,8 @@ def plot_fig3_ondata(s, sample):
 
 
 def plot_fig3_quantiles(site=None, yr=None, all_sites=False, tau=False,
-                        temperature=False, shk=False, pct_clr_min=0.3):
+                        temperature=False, shk=False, pct_clr_min=0.3,
+                        pressure_bins=20, violin=False):
     # DISCLAIMER: tau may need to be adjusted since s["x"] is now defined
     #   using three_c_fit to solve for c1,c2, and c3 at once
 
@@ -287,18 +288,18 @@ def plot_fig3_quantiles(site=None, yr=None, all_sites=False, tau=False,
         s["y"] = -1 * np.log(s.transmissivity)
         y_lbl = -1 * np.log(1 - df.total)
         ylabel = "optical depth [-]"
-        ylim, ymax = 0.8, 3.0
+        # ymin, ymax = 0.8, 3.0
     else:
         y_lbl = df.total
         ylabel = "effective sky emissivity [-]"
-        ymin, ymax = 0.60, 1.0
+        # ymin, ymax = 0.60, 1.0
     labels = ["Q05-95", "Q25-75", "Q40-60"]
     quantiles = [0.05, 0.25, 0.4, 0.6, 0.75, 0.95]
-    pressure_bins = 20
+    pressure_bins = pressure_bins
 
     # Prepare data for quantiles plot
     c1, c2, c3, xq, yq = prep_plot_data_for_quantiles_plot(
-        s, pressure_bins, quantiles
+        s, pressure_bins, quantiles, violin=violin
     )
     y_fit = c1 + c2 * np.sqrt(x_lbl)
 
@@ -327,6 +328,7 @@ def plot_fig3_quantiles(site=None, yr=None, all_sites=False, tau=False,
     suffix += "_ta" if temperature else ""
     suffix += f"_clr{pct_clr_min*100:.0f}"
     suffix += f"_{pressure_bins}"
+    suffix += f"_violin" if violin else ""
     title_suffix = r", T~T$_0$" if temperature else ""
     title_suffix += f" day_clr>{pct_clr_min:.0%}"
     if len(yr) == 1:
@@ -343,15 +345,21 @@ def plot_fig3_quantiles(site=None, yr=None, all_sites=False, tau=False,
         title = f"{site} {str_name} (n={s.shape[0]:,}) ST>8" + title_suffix
 
     # Create figure
-    quantiles_figure(
-        x_lbl, y_lbl, y_fit, c1, c2, c3, xq, yq, ymin, ymax, ylabel,
-        title, filename, quantiles, labels
-    )
+    if violin:
+        violin_figure(
+            x_lbl, y_lbl, y_fit, xq, yq, c1, c2, c3,
+            title, filename, showmeans=True, showextrema=False
+        )
+    else:
+        quantiles_figure(
+            x_lbl, y_lbl, y_fit, c1, c2, c3, xq, yq, ylabel,
+            title, filename, quantiles, labels
+        )
 
     return None
 
 
-def prep_plot_data_for_quantiles_plot(df, pressure_bins, quantiles):
+def prep_plot_data_for_quantiles_plot(df, pressure_bins, quantiles, violin=False):
     # PREPARE PLOTTING DATA
     df["pp"] = df.pw_hpa * 100 / P_ATM
     df["quant"] = pd.qcut(df.pp, pressure_bins, labels=False)
@@ -363,15 +371,21 @@ def prep_plot_data_for_quantiles_plot(df, pressure_bins, quantiles):
 
     # Find quantile data per bin
     xq = np.zeros(pressure_bins)
-    yq = np.zeros((pressure_bins, len(quantiles)))
+    if violin:
+        yq = []
+    else:
+        yq = np.zeros((pressure_bins, len(quantiles)))
     for i, group in df.groupby(df.quant):
         xq[i] = group.pp.median()
-        for j in range(len(quantiles)):
-            yq[i, j] = group.y.quantile(quantiles[j])
+        if violin:
+            yq.append(group.y.to_numpy())
+        else:
+            for j in range(len(quantiles)):
+                yq[i, j] = group.y.quantile(quantiles[j])
     return c1, c2, c3, xq, yq
 
 
-def quantiles_figure(x, y, y2, c1, c2, c3, xq, yq, ymin, ymax, ylabel, title,
+def quantiles_figure(x, y, y2, c1, c2, c3, xq, yq, ylabel, title,
                      filename, quantiles, labels, y_sp=None):
     clrs_g = ["#c8d5b9", "#8fc0a9", "#68b0ab", "#4a7c59", "#41624B"]
     clrs_p = ["#C9A6B7", "#995C7A", "#804D67", "663D52", "#4D2E3E"]
@@ -397,10 +411,81 @@ def quantiles_figure(x, y, y2, c1, c2, c3, xq, yq, ymin, ymax, ylabel, title,
     )
     ax.set_xlabel("p$_w$ [-]")
     ax.set_xlim(0, 0.03)
-    ax.set_ylim(ymin, ymax)
+    ax.set_ylim(0.6, 1.0)
     ax.set_ylabel(ylabel)
     ax.legend(ncols=3, loc="upper left")
     ax.set_axisbelow(True)
+    ax.set_title(title, loc="left")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def violin_figure(x, y, y2, xq, yq, c1, c2, c3, title, filename,
+                  showmeans=True, showextrema=False):
+    clrs_g = ["#c8d5b9", "#8fc0a9", "#68b0ab", "#4a7c59", "#41624B"]
+
+    showmedians = False if showmeans else True
+    parts_list = []
+    if showmeans:
+        parts_list.append("cmeans")
+    if showmedians:
+        parts_list.append("cmedians")
+    if showextrema:
+        parts_list.append("cmins")
+        parts_list.append("cmaxes")
+        parts_list.append("cbars")
+
+    fig, (ax, ax0) = plt.subplots(2, 1, figsize=(8, 5),
+                                  sharex=True, height_ratios=[41, 2])
+    fig.subplots_adjust(hspace=0.05)
+    parts = ax.violinplot(
+        yq, xq, showmeans=showmeans,
+        showextrema=showextrema,
+        showmedians=showmedians,
+        widths=np.diff(xq).min(),
+    )
+    ax.plot(x, y, label="LBL", c="k")
+    ax.plot(x, y2, label="fit", ls="--", lw=1, c=clrs_g[-1])
+    ax.legend()
+
+    for pc in parts['bodies']:
+        pc.set_facecolor(clrs_g[1])
+        pc.set_edgecolor(clrs_g[1])
+    for p in parts_list:
+        vp = parts[p]
+        vp.set_edgecolor(clrs_g[2])
+
+    ax0.set_ylim(0, 0.02)
+    ax.set_ylim(0.59, 1.0)
+    # hide the spines between ax and ax2
+    ax.spines.bottom.set_visible(False)
+    ax0.xaxis.tick_bottom()
+    ax0.spines.top.set_visible(False)
+    ax.xaxis.tick_top()
+    ax0.tick_params(labeltop=False)  # don't put tick labels at the top
+    ax0.set_yticks([0])
+
+    # Draw lines indicating broken axis
+    d = .5  # proportion of vertical to horizontal extent of the slanted line
+    kwargs = dict(marker=[(-1, -d), (1, d)], markersize=12,
+                  linestyle="none", color='k', mec='k', mew=1, clip_on=False)
+    ax.plot([0, 1], [0, 0], transform=ax.transAxes, **kwargs)
+    ax0.plot([0, 1], [1, 1], transform=ax0.transAxes, **kwargs)
+    ax0.set_xlim(0, 0.025)
+    ax0.set_xlabel("p$_w$ [-]")
+    ax.set_ylabel("effective sky emissivity [-]")
+
+    text = r"$\varepsilon$ = " + f"{c1} + {c2}" + r"$\sqrt{p_w}$" + \
+           f" + {c3}(" + r"$e^{-z/H}$" + " - 1)"
+    ax.text(
+        0.95, 0.0, s=text, transform=ax.transAxes, ha="right", va="bottom",
+        backgroundcolor="1.0", alpha=0.8
+    )
+
+    ax.grid(True, alpha=0.3)
+    ax0.grid(True, alpha=0.3)
+    ax.set_axisbelow(True)
+    ax0.set_axisbelow(True)
     ax.set_title(title, loc="left")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
@@ -415,7 +500,11 @@ if __name__ == "__main__":
     # plot_fig3_ondata("FPK", sample=0.05)
     plot_fig3_quantiles(
         yr=[2010, 2011, 2012, 2013], all_sites=True, tau=False,
-        temperature=True, pct_clr_min=0.8
+        temperature=True, pct_clr_min=0.5, pressure_bins=5, violin=True
+    )
+    plot_fig3_quantiles(
+        yr=[2010, 2011, 2012, 2013], all_sites=True, tau=False,
+        temperature=True, pct_clr_min=0.3, pressure_bins=10, violin=True
     )
 
     # df = create_training_set(
