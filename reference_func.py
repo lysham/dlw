@@ -1537,5 +1537,33 @@ def three_step_fit(df):
     return c1, c2, c3
 
 
+def plot_uncertainty():
+    # visualize impact of +/- 5 W/m^2 error in LW measurement
+    x = np.linspace(250, 310, 9)  # Ta
+    y = np.linspace(260, 400, 9)  # LW
+    y = np.flip(y)  # smallest value at bottom
+    z = np.zeros((len(y), len(x)))
+    for i in range(len(y)):
+        for j in range(len(x)):
+            base_e = y[i] / (SIGMA * np.power(x[j], 4))
+            if base_e > 1:
+                z[i, j] = 0
+            else:
+                z[i, j] = (0.05 * y[i]) / (SIGMA * np.power(x[j], 4))
+
+    fig, ax = plt.subplots()
+    cb = ax.imshow(z, vmin=0, vmax=0.05)
+    fig.colorbar(cb, label=r"$\pm \varepsilon$ [-]")
+    ax.set_xticks(np.arange(len(x)))
+    ax.set_yticks(np.arange(len(y)))
+    ax.set_xticklabels(x, rotation=45)
+    ax.set_yticklabels(y)
+    ax.set_xlabel("T$_a$ [K]")
+    ax.set_ylabel("LW [W/m$^2$]")
+    filename = os.path.join("figures", "uncertainty.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
 if __name__ == "__main__":
     print()
