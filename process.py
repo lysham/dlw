@@ -228,9 +228,8 @@ if __name__ == "__main__":
 
     start_time = time.time()
     for s in SURF_SITE_CODES:
-        if s != "SXF":
-            process_site(s, folder=folder, yr="2000")
-            print(s, time.time() - start_time)
-
-    # 2020 data is incomplete
+        # if s != "SXF":  # for 2002 and prior
+        process_site(s, folder=folder, yr="2021")
+        process_site(s, folder=folder, yr="2022")
+        print(s, time.time() - start_time)
 
