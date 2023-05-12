@@ -782,6 +782,54 @@ def plot_z_vs_HandP():
     return None
 
 
+def plot_p_vs_elev():
+    # run in fig3.py
+    z = np.linspace(0, 2000, 20)
+    p = get_atm_p(z) / 100  # hPa
+
+    site_p = []
+    site_z = []
+    sites = []
+    h1_p = []
+    site_h = []
+    for s, elev in ELEVATIONS:
+        site_p.append(get_atm_p(elev) / 100)
+        site_z.append(elev)
+        sites.append(s)
+
+        lat1 = SURFRAD[s]["lat"]
+        lon1 = SURFRAD[s]["lon"]
+        h1, spline = shakespeare(lat1, lon1)
+        site_h.append(h1)
+        h1_p.append(P_ATM * np.exp(-1 * elev / h1) / 100)
+
+    site_h = np.array(site_h)
+    site_z = np.array(site_z)
+    site_he = (site_h / np.cos(40.3 * np.pi / 180)) * np.exp(-1.8 * site_z / site_h)
+
+    filename = os.path.join("data", "afgl_midlatitude_summer.csv")
+    af_sum = pd.read_csv(filename)
+    y_sum_p = np.interp(site_z / 1000, af_sum.alt_km.values, af_sum.pres_mb.values)
+
+    fig, ax = plt.subplots(figsize=(5, 8), sharey=True)
+    ax.grid(alpha=0.3)
+    ax.plot(p, z, c="0.7", lw=2, label="P=P0 e^(-z/H)", zorder=0)
+    ax.plot(y_sum_p, site_z, "k")
+    for i in range(len(sites)):
+        ax.text(site_p[i] + 5, site_z[i] + 5, s=sites[i], fontsize=11)
+    ax.scatter(site_p, site_z, s=10, label="P=P(H=8500m)")
+    ax.set_ylim(0, 2000)
+    ax.set_xlim(right=1100)
+    ax.set_xlabel("pressure [hPa]")
+    ax.set_ylabel("z [m]")
+    ax.legend(loc="lower left")
+    plt.tight_layout()
+    plt.show()
+    filename = os.path.join("figures", "P_vs_elev_afgl.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
 def generate_scale_heights_dict():
     height_dict = {}
     i = 0
