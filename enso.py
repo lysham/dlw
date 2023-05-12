@@ -74,29 +74,57 @@ def preprocess_helper(df, columns):
     return df
 
 
+def import_oni_mei_data():
+    filename = os.path.join("data", "enso_data", "oni.csv")
+    oni = pd.read_csv(filename, index_col=0, parse_dates=True)
+    filename = os.path.join("data", "enso_data", "meiv2.csv")
+    mei = pd.read_csv(filename, index_col=0, parse_dates=True)
+    return oni, mei
+
+
 if __name__ == "__main__":
     print()
     # preprocess_meiv2()
     # preprocess_oni()
 
-    filename = os.path.join("data", "enso_data", "meiv2.csv")
-    mei = pd.read_csv(filename, index_col=0, parse_dates=True)
-    mei = mei.loc[mei.index.year >= 2000]
+    mei_color = "#C54459"  # muted red
+    oni_color = "#4C6BE6"  # powder blue
+    mint = "#6CB289"
+    gold = "#E0A500"
 
-    filename = os.path.join("data", "enso_data", "oni.csv")
-    oni = pd.read_csv(filename, index_col=0, parse_dates=True)
+    oni, mei = import_oni_mei_data()
+    mei = mei.loc[mei.index.year >= 2000]
     oni = oni.loc[oni.index.year >= 2000]
 
-    fig, ax = plt.subplots(figsize=(10, 4))
+    # Get year averages
+    tmp = {}
+    oni["year"] = oni.index.year
+    for yr, group in oni.groupby(oni.year):
+        tmp[yr] = group.value.mean()
+    oni["yr_avg"] = oni["year"].map(tmp)
+
+    # Do the same for MEI
+    tmp = {}
+    mei["year"] = mei.index.year
+    for yr, group in mei.groupby(oni.year):
+        tmp[yr] = group.value.mean()
+    mei["yr_avg"] = mei["year"].map(tmp)
+
+    fig, ax = plt.subplots(figsize=(12, 4))
+    ax.grid(axis="x", alpha=0.2)
     ax.axhline(0, ls="--", c="0.3", alpha=0.3)
-    ax.plot(oni.index, oni.value, label="ONI")
-    ax.plot(mei.index, mei.value, label="MEIv2")
+    ax.plot(oni.index, oni.value, c=oni_color, alpha=0.4)
+    ax.plot(mei.index, mei.value, c=mei_color, alpha=0.4)
+    ax.step(oni.index, oni.yr_avg, label="ONI", c=oni_color, where="post")
+    ax.step(mei.index, mei.yr_avg, label="MEIv2", c=mei_color, where="post")
     ax.set_xlim(oni.index[0], oni.index[-1])
     ymin, ymax = ax.get_ylim()
     ylim = abs(ymin) if abs(ymin) > ymax else ymax
     ax.set_ylim(-1 * ylim, ylim)  # ensure symmetric around y=0
     ax.set_ylabel(r"$\leftarrow$ La Niña$\quad\quad$ El Niño $\rightarrow$")
     ax.legend()
+    ax.set_axisbelow(True)
+    plt.show()
     filename = os.path.join("figures", "enso_index.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
 
