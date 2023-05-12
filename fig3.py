@@ -332,6 +332,7 @@ def plot_fig3_quantiles(site=None, yr=None, all_sites=False, tau=False,
     title_suffix = r", T~T$_0$" if temperature else ""
     title_suffix += f" day_clr>{pct_clr_min:.0%}"
     if len(yr) == 1:
+        str_name = f"{yr[0]}"
         name = yr[0]
     else:
         str_name = f"{yr[0]} - {yr[-1]}"
@@ -498,12 +499,12 @@ if __name__ == "__main__":
     # pw = get_pw_norm(t_a, rh)
 
     # plot_fig3_ondata("FPK", sample=0.05)
+    # plot_fig3_quantiles(
+    #     yr=[2010, 2011, 2012, 2013], all_sites=True, tau=False,
+    #     temperature=True, pct_clr_min=0.5, pressure_bins=5, violin=True
+    # )
     plot_fig3_quantiles(
-        yr=[2010, 2011, 2012, 2013], all_sites=True, tau=False,
-        temperature=True, pct_clr_min=0.5, pressure_bins=5, violin=True
-    )
-    plot_fig3_quantiles(
-        yr=[2010, 2011, 2012, 2013], all_sites=True, tau=False,
+        yr=[2015], all_sites=True, tau=False,
         temperature=True, pct_clr_min=0.3, pressure_bins=10, violin=True
     )
 
