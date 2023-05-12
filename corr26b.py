@@ -232,13 +232,16 @@ def shakespeare_comparison(site, year="2012"):
     lon1 = SURFRAD[site]["lon"]
     h1, spline = shakespeare(lat1, lon1)
 
-    # use surfrad-only data (no cloud info)
-    filename = os.path.join("data", "SURFRAD", f"{site}_{year}.csv")
+    # use surfrad-only data (no cloud fraction info)
+    # filename = os.path.join("data", "SURFRAD", f"{site}_{year}.csv")
+    filename = os.path.join(
+        "/Volumes", "LMM_drive", "SURF_processed", f"{site}_{year}.csv")
+
     df = pd.read_csv(filename, index_col=0, parse_dates=True)
     df.sort_index(inplace=True)
     df = df.tz_localize("UTC")
     # drop rows with missing values in parameter columns
-    df.dropna(subset=["t_a", "rh", "lw_s"], inplace=True)
+    df.dropna(subset=["t_a", "rh"], inplace=True)
 
     df = df.rename(columns={"pressure": "pa_hpa"})
     df["pw_hpa"] = get_pw(df.t_a, df.rh) / 100  # hPa
@@ -541,9 +544,12 @@ if __name__ == "__main__":
     # plot_fit(site, model.coef_, y_true, y_pred, rmse)
 
     # CREATE CS_COMPARE
-    # create_cs_compare_csv(xvar="site", const="2012", xlist=SURF_SITE_CODES)
+    # create_cs_compare_csv(xvar="site", const="2022", xlist=SURF_SITE_CODES)
     # xlist = [2012, 2013, 2014, 2015, 2016]
     # create_cs_compare_csv(xvar="year", const="GWC", xlist=[2012])
 
     print()
     # look at LWerr by hours per day instead of percent of samples
+
+    df = shakespeare_comparison("BON", year="2008")
+
