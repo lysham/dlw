@@ -8,6 +8,9 @@ import datetime as dt
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
+from corr26b import create_training_set, fit_linear, alt2sl, \
+    reduce_to_equal_pts_per_site, three_c_fit
+
 
 def preprocess_meiv2():
     filename = os.path.join("data", "enso_data", "meiv2_raw.txt")
@@ -82,10 +85,62 @@ def import_oni_mei_data():
     return oni, mei
 
 
+def c1c2_intime():
+    start_time = time.time()
+    fit_three = False
+    c3_const = 0.17  # used if fit_three is False
+    c1_const = 0.55
+
+    years = np.arange(2009, 2023)  # till 2022
+
+    c1 = np.zeros(len(years))
+    c2 = np.zeros(len(years))
+    c3 = np.zeros(len(years))
+
+    i = 0
+    for yr in years:
+        df = create_training_set(
+            year=[yr], all_sites=True, temperature=True, cs_only=True,
+            pct_clr_min=0.3
+        )
+        df = reduce_to_equal_pts_per_site(df)
+
+        if fit_three:
+            c1[i], c2[i], c3[i] = three_c_fit(df)
+        else:
+            df = alt2sl(df, c3=c3_const)
+            c3[i] = c3_const
+            c1[i], c2[i] = fit_linear(df, set_intercept=None)
+        i += 1
+        print(yr, time.time() - start_time)
+
+    df = pd.DataFrame(dict(year=years, c1=c1, c2=c2, c3=c3))
+    if fit_three:
+        filename = os.path.join("data", "enso_c", f"c1c2c3.csv")
+    else:
+        filename = os.path.join("data", "enso_c", f"c1c2_c3={c3_const}.csv")
+    df.to_csv(filename)
+    return None
+
+
 if __name__ == "__main__":
     print()
     # preprocess_meiv2()
     # preprocess_oni()
+
+    filename = os.path.join("data", f"c1c2.csv")
+    df = pd.read_csv(filename, index_col=0)
+
+    df["month"] = 1
+    df["day"] = 1  # locate date at first day of assigned month
+    df["date"] = pd.to_datetime(df[["year", "month", "day"]])
+    df = df.set_index("date").sort_index()
+    df = df.drop(columns=["year", "month", "day"])
+
+    c1_avg = df.c1.mean()
+    c2_avg = df.c2.mean()
+    df["c1_dev"] = df.c1 - c1_avg
+    df["c2_dev"] = df.c2 - c2_avg
 
     mei_color = "#C54459"  # muted red
     oni_color = "#4C6BE6"  # powder blue
@@ -117,6 +172,11 @@ if __name__ == "__main__":
     ax.plot(mei.index, mei.value, c=mei_color, alpha=0.4)
     ax.step(oni.index, oni.yr_avg, label="ONI", c=oni_color, where="post")
     ax.step(mei.index, mei.yr_avg, label="MEIv2", c=mei_color, where="post")
+
+    ax.step(df.index, df.c1, label="c1", c=mint, where="post")
+    ax.step(df.index, df.c2, label="c2", c=gold, where="post")
+    ax.step(df.index, df.c3, label="c3", c="0.5", where="post")
+
     ax.set_xlim(oni.index[0], oni.index[-1])
     ymin, ymax = ax.get_ylim()
     ylim = abs(ymin) if abs(ymin) > ymax else ymax
@@ -125,6 +185,5 @@ if __name__ == "__main__":
     ax.legend()
     ax.set_axisbelow(True)
     plt.show()
-    filename = os.path.join("figures", "enso_index.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
-
+    # filename = os.path.join("figures", "enso_index.png")
+    # fig.savefig(filename, bbox_inches="tight", dpi=300)

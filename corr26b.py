@@ -234,8 +234,10 @@ def shakespeare_comparison(site, year="2012"):
 
     # use surfrad-only data (no cloud fraction info)
     # filename = os.path.join("data", "SURFRAD", f"{site}_{year}.csv")
+    # filename = os.path.join(
+    #     "/Volumes", "LMM_drive", "SURFRAD_processed", f"{site}_{year}.csv")
     filename = os.path.join(
-        "/Volumes", "LMM_drive", "SURF_processed", f"{site}_{year}.csv")
+        "/Volumes", "Lysha_drive", "SURFRAD_processed", f"{site}_{year}.csv")
 
     df = pd.read_csv(filename, index_col=0, parse_dates=True)
     df.sort_index(inplace=True)
@@ -522,6 +524,15 @@ def create_training_set(year=[2012, 2013], all_sites=True, site=None,
     df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
     df["y"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))
 
+    return df
+
+
+def alt2sl(df, c3=0):
+    # altitude to sea level
+    df['correction'] = c3 * (np.exp(-1 * df.elev / 8500) - 1)
+    # c3 >= 0, () < 0
+    # "adding the correction" reduces y
+    df['y'] = df.y + df.correction
     return df
 
 
