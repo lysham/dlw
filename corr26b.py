@@ -499,18 +499,18 @@ def create_training_set(year=[2012, 2013], all_sites=True, site=None,
                 if pct_clr_min is not None:
                     tmp_clr = tmp["cs_period"].resample("D").mean()
                     tmp["daily_clr"] = tmp_clr.reindex(tmp.index, method="ffill")
-                    tmp = tmp.loc[tmp.daily_clr >= pct_clr_min].copy()
+                    tmp = tmp.loc[tmp.daily_clr >= pct_clr_min].copy(deep=True)
                 df = pd.concat([df, tmp])
 
     # filter solar time
-    df = df.loc[df.index.hour > 8].copy()
+    df = df.loc[df.index.hour > 8].copy(deep=True)
 
     df = add_afgl_t0_p0(df)  # add t0 and p0 values
     if temperature:
-        df = df.loc[(abs(df.t_a - df.afgl_t0) <= 2)].copy()
+        df = df.loc[(abs(df.t_a - df.afgl_t0) <= 2)].copy(deep=True)
 
     if cs_only:
-        df = df.loc[df.cs_period].copy()  # reduce to only clear skies
+        df = df.loc[df.cs_period].copy(deep=True)  # reduce to only clear skies
 
     df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
     df["y"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))

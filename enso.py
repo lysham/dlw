@@ -90,7 +90,7 @@ def c1c2_intime():
     fix_c1 = False
     fix_c3 = True
 
-    c3_const = 0.20  # used if fix_c3 is True
+    c3_const = 0.0  # used if fix_c3 is True
     c1_const = 0.55  # used if fix_c1 is True
 
     years = np.arange(2000, 2023)  # till 2022
@@ -114,7 +114,7 @@ def c1c2_intime():
                 df["y"] = df["y"] - c1_const
                 c1[i], c2[i] = fit_linear(df, set_intercept=c1_const)
             else:
-                c1[i], c2[i] = fit_linear(df, set_intercept=None)
+                c1[i], c2[i] = fit_linear(df, set_intercept=None, print_out=True)
         else:
             c1[i], c2[i], c3[i] = three_c_fit(df)
 
@@ -134,13 +134,31 @@ def c1c2_intime():
     return None
 
 
-if __name__ == "__main__":
-    print()
-    # preprocess_meiv2()
-    # preprocess_oni()
-    # c1c2_intime()  # TODO issue with constants
+def c3_intime(c1_const, c2_const):
+    start_time = time.time()
+    years = np.arange(2000, 2023)  # till 2022
+    c3 = np.zeros(len(years))
 
-    filename = os.path.join("data", "enso_c", f"c1c2c3.csv")
+    i = 0
+    for yr in years:
+        df = create_training_set(
+            year=[yr], all_sites=True, temperature=True, cs_only=True,
+            pct_clr_min=0.3, drive="server4"
+        )
+        df = reduce_to_equal_pts_per_site(df)
+        df["y"] = df.y - (c1_const + (c2_const * df.x))
+        df["x"] = np.exp(-1 * df.elev / 8500) - 1
+        _, c3[i] = fit_linear(df, set_intercept=0)
+
+        i += 1
+        print(yr, time.time() - start_time)
+
+    df = pd.DataFrame(dict(year=years, c1=c1_const, c2=c2_const, c3=c3))
+    df.to_csv(os.path.join("data", "enso_c", f"c3_{c1_const}_{c2_const}.csv"))
+    return None
+
+
+def plot_index(filename, save_name="enso_index", c1=True, c2=True, c3=True):
     df = pd.read_csv(filename, index_col=0)
 
     df["month"] = 1
@@ -149,10 +167,9 @@ if __name__ == "__main__":
     df = df.set_index("date").sort_index()
     df = df.drop(columns=["year", "month", "day"])
 
-    c1_avg = df.c1.mean()
-    c2_avg = df.c2.mean()
-    # df["c1_dev"] = df.c1 - c1_avg
-    # df["c2_dev"] = df.c2 - c2_avg
+    # c1_avg = df.c1.mean()
+    # c2_avg = df.c2.mean()
+    # c3_avg = df.c3.mean()
 
     mei_color = "#C54459"  # muted red
     oni_color = "#4C6BE6"  # powder blue
@@ -177,18 +194,21 @@ if __name__ == "__main__":
         tmp[yr] = group.value.mean()
     mei["yr_avg"] = mei["year"].map(tmp)
 
-    fig, (ax0, ax) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
-    ax0.step(df.index, df.c1, label="c1", c=mint, where="post")
-    ax0.step(df.index, df.c2, label="c2", c=gold, where="post")
-    ax0.step(df.index, df.c3, label="c3", c="0.5", where="post")
-    ax0.legend()
-
+    # fig, (ax0, ax) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+    fig, ax = plt.subplots(figsize=(12, 4))
     ax.grid(axis="x", alpha=0.2)
     ax.axhline(0, ls="--", c="0.3", alpha=0.3)
     ax.plot(oni.index, oni.value, c=oni_color, alpha=0.4)
     ax.plot(mei.index, mei.value, c=mei_color, alpha=0.4)
     ax.step(oni.index, oni.yr_avg, label="ONI", c=oni_color, where="post")
     ax.step(mei.index, mei.yr_avg, label="MEIv2", c=mei_color, where="post")
+
+    if c1:
+        ax.step(df.index, df.c1, label="c1", c=mint, where="post")
+    if c2:
+        ax.step(df.index, df.c2, label="c2", c=gold, where="post")
+    if c3:
+        ax.step(df.index, df.c3, label="c3", c="0.5", where="post")
 
     ax.set_xlim(oni.index[0], oni.index[-1])
     ymin, ymax = ax.get_ylim()
@@ -198,9 +218,37 @@ if __name__ == "__main__":
     ax.legend()
     ax.set_axisbelow(True)
     plt.show()
-    # filename = os.path.join("figures", "enso_index.png")
-    # fig.savefig(filename, bbox_inches="tight", dpi=300)
+    filename = os.path.join("figures", save_name + ".png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
 
     df["mei"] = mei.value.groupby(mei.index.year).median().to_numpy()
     df["oni"] = oni.value.groupby(oni.index.year).median().to_numpy()
-    df.corr()  # 0.57 correlation between c3 and mei, 0.51 for c3 and oni
+    print(df.corr())
+    # 0.57 correlation between c3 and mei, 0.51 for c3 and oni
+    return None
+
+
+if __name__ == "__main__":
+    print()
+    # preprocess_meiv2()
+    # preprocess_oni()
+    # c1c2_intime()  # TODO issue with constants
+    # c3_intime(c1_const=0.6, c2_const=1.5)
+    # df = create_training_set(
+    #     year=[2012], all_sites=True, temperature=True, cs_only=True,
+    #     pct_clr_min=0.3, drive="server4"
+    # )
+    # df = reduce_to_equal_pts_per_site(df)
+    # df_ref = df.copy(deep=True)
+    #
+    # df = df_ref.copy(deep=True)
+    # df = alt2sl(df, c3=0.2)
+    # fit_linear(df, set_intercept=None, print_out=True)
+    #
+    #
+    # filename = os.path.join("data", "enso_c", f"c1c2c3.csv")
+    filename = os.path.join("data", "enso_c", f"c3_0.6_1.5.csv")
+    # filename = os.path.join("data", "enso_c", "c1c2_c3=0.0.csv")
+    plot_index(filename, save_name="enso_c3")
+    # df = pd.read_csv(filename, index_col=0)
+
