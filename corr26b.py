@@ -227,13 +227,13 @@ def shakespeare(lat, lon):
     return h1, tau_spline
 
 
-def shakespeare_comparison(site, year="2012"):
+def shakespeare_comparison(site, year="2012", import_from="hdd"):
     # clear sky comparison only
     lat1 = SURFRAD[site]["lat"]
     lon1 = SURFRAD[site]["lon"]
     h1, spline = shakespeare(lat1, lon1)
 
-    df = import_site_year(site, year, drive="hdd")
+    df = import_site_year(site, year, drive=import_from)
 
     df["pw_hpa"] = get_pw(df.t_a, df.rh) / 100  # hPa
     tmp = np.log(df.pw_hpa * 100 / 610.94)
@@ -473,7 +473,8 @@ def add_afgl_t0_p0(df):
 
 
 def create_training_set(year=[2012, 2013], all_sites=True, site=None,
-                        temperature=False, cs_only=True, pct_clr_min=0.3):
+                        temperature=False, cs_only=True, pct_clr_min=0.3,
+                        drive="server4"):
     # start broad then filter
     keep_cols = [
         "zen", "GHI_m", "DNI_m", "diffuse", "dw_ir", "t_a", "rh",
@@ -488,17 +489,18 @@ def create_training_set(year=[2012, 2013], all_sites=True, site=None,
     df = pd.DataFrame()
     for s in site_codes:
         for yr in year:
-            tmp = shakespeare_comparison(s, yr)
-            tmp = tmp[keep_cols]
-            tmp["site"] = s
-            tmp = add_solar_time(tmp)
-            tmp = tmp.set_index("solar_time")
-            if pct_clr_min is not None:
-                tmp_clr = tmp["cs_period"].resample("D").mean()
-                tmp["daily_clr"] = tmp_clr.reindex(tmp.index, method="ffill")
-                tmp = tmp.loc[tmp.daily_clr >= pct_clr_min].copy()
-
-            df = pd.concat([df, tmp])
+            check_sxf = (s == "SXF") and (yr < 2003)
+            if not check_sxf:
+                tmp = shakespeare_comparison(s, yr, import_from=drive)
+                tmp = tmp[keep_cols]
+                tmp["site"] = s
+                tmp = add_solar_time(tmp)
+                tmp = tmp.set_index("solar_time")
+                if pct_clr_min is not None:
+                    tmp_clr = tmp["cs_period"].resample("D").mean()
+                    tmp["daily_clr"] = tmp_clr.reindex(tmp.index, method="ffill")
+                    tmp = tmp.loc[tmp.daily_clr >= pct_clr_min].copy()
+                df = pd.concat([df, tmp])
 
     # filter solar time
     df = df.loc[df.index.hour > 8].copy()
