@@ -25,6 +25,7 @@ from pcmap_data_funcs import get_asos_stations
 
 from constants import SIGMA, SURFRAD, SURF_COLS, SURF_ASOS, SURF_SITE_CODES, \
     P_ATM, E_C1, E_C2, ELEV_DICT, ELEVATIONS, LON_DICT, SEVEN_COLORS, P_ATM_BAR
+from process import import_site_year
 
 
 def tsky_table(l1, l2):
@@ -232,20 +233,8 @@ def shakespeare_comparison(site, year="2012"):
     lon1 = SURFRAD[site]["lon"]
     h1, spline = shakespeare(lat1, lon1)
 
-    # use surfrad-only data (no cloud fraction info)
-    # filename = os.path.join("data", "SURFRAD", f"{site}_{year}.csv")
-    # filename = os.path.join(
-    #     "/Volumes", "LMM_drive", "SURFRAD_processed", f"{site}_{year}.csv")
-    filename = os.path.join(
-        "/Volumes", "Lysha_drive", "SURFRAD_processed", f"{site}_{year}.csv")
+    df = import_site_year(site, year, drive="hdd")
 
-    df = pd.read_csv(filename, index_col=0, parse_dates=True)
-    df.sort_index(inplace=True)
-    df = df.tz_localize("UTC")
-    # drop rows with missing values in parameter columns
-    df.dropna(subset=["t_a", "rh"], inplace=True)
-
-    df = df.rename(columns={"pressure": "pa_hpa"})
     df["pw_hpa"] = get_pw(df.t_a, df.rh) / 100  # hPa
     tmp = np.log(df.pw_hpa * 100 / 610.94)
     df["tdp"] = 273.15 + ((243.04 * tmp) / (17.625 - tmp))

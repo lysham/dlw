@@ -17,6 +17,7 @@ from fraction import fe_lt, fi_lt
 
 from constants import *
 from fig3 import get_atm_p
+from process import *
 
 
 def look_at_jyj():
@@ -1724,6 +1725,39 @@ def plot_uncertainty():
     ax.set_ylabel("LW [W/m$^2$]")
     filename = os.path.join("figures", "uncertainty.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+# 5/15/2023
+def compare_clearsky_id_3min():
+    # built in main of process.py
+    # pre-2009, SURFRAD sites seem to be on 3-min frequency
+    keep_cols = ["zen", "GHI_m", "DNI_m", "GHI_c", "DNI_c", "cs_period"]
+    # df8 = import_site_year("BON", "2008", drive="server4")  # 2008
+    # df8 = df8[keep_cols]
+    df9 = import_site_year("BON", "2009", drive="server4")  # 2009
+    df9 = df9[keep_cols]
+    df9 = df9.rename(columns={"cs_period": "cs_orig"})
+
+    # df = df9.resample('3T', label="right").mean()
+    start_time = time.time()
+    df = df9.groupby(df9.index.floor("3T")).mean()
+    df = find_clearsky(df, window=10, min_sample=2)
+    df["cs_min2"] = df.cs_period.astype(int)
+    print(time.time() - start_time)
+
+    df = find_clearsky(df, window=30, min_sample=3)
+    df["cs_w30"] = df.cs_period.astype(int)
+    print(time.time() - start_time)
+
+    df[["cs_orig", "cs_min2", "cs_w30"]].describe()
+    df[["cs_orig", "cs_min2", "cs_w30"]].corr()
+
+    df9 = find_clearsky(df9, window=10, min_sample=2)
+    df9["cs_min2"] = df9.cs_period.astype(int)
+    df9["cs_orig"] = df9.cs_orig.astype(int)
+    df9[["cs_orig", "cs_min2"]].describe()
+    print(time.time() - start_time)
     return None
 
 

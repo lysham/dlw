@@ -6,16 +6,17 @@ import pvlib
 import numpy as np
 import pandas as pd
 import datetime as dt
+import matplotlib.pyplot as plt
 
 from constants import SURFRAD, SURF_COLS, SIGMA, SURF_SITE_CODES
 
 
-def find_clearsky(df, window=10, min_sample=5):
+def find_clearsky(df, window=10, min_sample=2):
     # only applies for daytime values
     df["day"] = df.zen < 85
 
     starts = df.index.values
-    ends = df.index + dt.timedelta(minutes=window)  # ten-minute sliding window
+    ends = df.index.values + np.timedelta64(window, "m")  # X minutes
     # note that sliding window may preferentially treat shoulders of days
     # since windows will have fewer points
 
@@ -24,9 +25,10 @@ def find_clearsky(df, window=10, min_sample=5):
         window_start = starts[i]
         window_end = ends[i]
         # select for sliding window
-        sw = df[(df.index < window_end) & (df.index >= window_start)]
-        day_check = sw.day.sum() == len(sw)  # all pts are labelled day
-        npts_check = len(sw) > min_sample  # at least X min of data
+        sw = df[(df.index.values < window_end) &
+                (df.index.values >= window_start)]
+        day_check = sw.day.sum() == len(sw)  # all pts labelled day
+        npts_check = len(sw) > min_sample  # at least X pts in sliding window
         if npts_check & day_check:
             obs = sw.GHI_m.to_numpy()
             clr = sw.GHI_c.to_numpy()
@@ -64,7 +66,7 @@ def get_cs_metrics_1to5(obs, clr, thresholds="ghi"):
     Returns
     -------
     metrics_sum : int
-        For each condition that passes the threshold, metrics_sum is
+        For each condition that passes the threshold, `metrics_sum` is
         incremented by one. A clear sky period needs to pass the five
         conditions tested for in this function.
     """
@@ -105,7 +107,7 @@ def get_cs_metrics_1to5(obs, clr, thresholds="ghi"):
     return metrics_sum
 
 
-def process_site(site, folder, yr="2012"):
+def process_site(site, folder, yr="2012", min_sample=2):
     """
     Gather data for a given SURFRAD site in a given year.
     Perform quality control checks, format, and sample data.
@@ -116,6 +118,9 @@ def process_site(site, folder, yr="2012"):
     ----------
     site : string
     yr : string, optional
+    min_sample : int, optional
+        Minimum number of samples that must be in sliding window evaluated by
+        the `find_clearsky()` function
 
     Returns
     -------
@@ -194,7 +199,7 @@ def process_site(site, folder, yr="2012"):
     # print("QC and clear sky applied.", time.time() - start_time)
 
     # Apply clear sky period filter
-    df = find_clearsky(df)
+    df = find_clearsky(df, min_sample=min_sample)
     # need to apply clear sky filter before data is sampled
     # print("Clear sky filter applied.", time.time() - start_time)
 
@@ -221,6 +226,38 @@ def process_site(site, folder, yr="2012"):
     return None
 
 
+def import_site_year(site, year, drive="hdd"):
+    """Import a single site year of SURFRAD data from processed SURFRAD file.
+    The DataFrame output has been produced by process_site() in process.py.
+
+    Parameters
+    ----------
+    site : str
+    year : int, str
+    drive : ["usb", "hdd", "server4"], optional
+
+    Returns
+    -------
+    df
+    """
+    # use surfrad-only data (no cloud fraction info)
+    if drive == "usb":
+        folder = os.path.join("/Volumes", "LMM_drive", "SURFRAD_processed")
+    elif drive == "hdd":
+        folder = os.path.join("/Volumes", "Lysha_drive", "SURFRAD_processed")
+    else:
+        folder = os.path.join("data", "SURFRAD")
+    filename = os.path.join(folder, f"{site}_{year}.csv")
+
+    df = pd.read_csv(filename, index_col=0, parse_dates=True)
+    df.sort_index(inplace=True)
+    df = df.tz_localize("UTC")
+    # drop rows with missing values in parameter columns
+    df.dropna(subset=["t_a", "rh"], inplace=True)
+    df = df.rename(columns={"pressure": "pa_hpa"})
+    return df
+
+
 if __name__ == "__main__":
     # filepath to folder SURFRAD data
     # directory = os.path.join("/Volumes", "LMM_drive", "SURFRAD")
@@ -228,8 +265,9 @@ if __name__ == "__main__":
 
     start_time = time.time()
     for s in SURF_SITE_CODES:
-        # if s != "SXF":  # for 2002 and prior
-        process_site(s, folder=folder, yr="2021")
-        process_site(s, folder=folder, yr="2022")
+        if s != "SXF":  # for 2002 and prior
+            process_site(s, folder=folder, yr="2000", min_sample=2)
+            process_site(s, folder=folder, yr="2001", min_sample=2)
+            process_site(s, folder=folder, yr="2002", min_sample=2)
         print(s, time.time() - start_time)
 
