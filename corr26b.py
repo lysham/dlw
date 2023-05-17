@@ -227,13 +227,13 @@ def shakespeare(lat, lon):
     return h1, tau_spline
 
 
-def shakespeare_comparison(site, year="2012", import_from="hdd"):
+def shakespeare_comparison(site, year="2012", import_from="hdd", pv=False):
     # clear sky comparison only
     lat1 = SURFRAD[site]["lat"]
     lon1 = SURFRAD[site]["lon"]
     h1, spline = shakespeare(lat1, lon1)
 
-    df = import_site_year(site, year, drive=import_from)
+    df = import_site_year(site, year, drive=import_from, pv=pv)
 
     df["pw_hpa"] = get_pw(df.t_a, df.rh) / 100  # hPa
     tmp = np.log(df.pw_hpa * 100 / 610.94)
@@ -474,7 +474,7 @@ def add_afgl_t0_p0(df):
 
 def create_training_set(year=[2012, 2013], all_sites=True, site=None,
                         temperature=False, cs_only=True, pct_clr_min=0.3,
-                        drive="server4"):
+                        drive="server4", pv=False):
     # start broad then filter
     keep_cols = [
         "zen", "GHI_m", "DNI_m", "diffuse", "dw_ir", "t_a", "rh",
@@ -491,7 +491,7 @@ def create_training_set(year=[2012, 2013], all_sites=True, site=None,
         for yr in year:
             check_sxf = (s == "SXF") and (yr < 2003)
             if not check_sxf:
-                tmp = shakespeare_comparison(s, yr, import_from=drive)
+                tmp = shakespeare_comparison(s, yr, import_from=drive, pv=pv)
                 tmp = tmp[keep_cols]
                 tmp["site"] = s
                 tmp = add_solar_time(tmp)
@@ -553,6 +553,42 @@ if __name__ == "__main__":
     print()
     # look at LWerr by hours per day instead of percent of samples
     # df = shakespeare_comparison("BON", year="2008")  # 3min freq
+    df = shakespeare_comparison(site="BON", year="2012", import_from="server4", pv=True)
+    df[["cs_period", "reno_cs"]].astype(int).groupby(df.index.month).mean()
 
+    s = "BON"  # site
+    plot_date = dt.date(2012, 7, 20)  # date to plot
+
+    df = shakespeare_comparison(s, plot_date.year, import_from="server4", pv=True)
+    df["site"] = s
+    df = add_solar_time(df)
+    df = df.set_index("solar_time")
+    df_ref = df.copy(deep=True)
+
+    plot_date = dt.date(2012, 7, 15)  # date to plot
+    df = df_ref.copy(deep=True)
+    df = df.loc[df.index.date == plot_date].copy(deep=True)
+
+    # FIGURE
+    fig, ax = plt.subplots(figsize=(10, 4))
+    plt.subplots_adjust(hspace=0.05)
+
+    date_str = plot_date.strftime("%m-%d-%Y")
+    title = f"{s} {date_str}"
+    ax.set_title(title, loc="left")
+    ax.plot(df.index, df.DNI_m, label="DNI")
+    ax.plot(df.index, df.GHI_m, label="GHI")
+    ax.fill_between(
+        df.index, 0, df.GHI_m, where=df.cs_period, fc="0.7", alpha=0.4,
+        label="CS"
+    )
+    ax.fill_between(
+        df.index, 0, df.GHI_m, where=df.reno_cs, hatch="//", fc="0.4",
+        alpha=0.4, label="Reno"
+    )
+    ax.set_ylim(0, 1200)
+    ax.legend()
+
+    plt.show()
 
 

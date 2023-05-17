@@ -7,6 +7,7 @@ import pandas as pd
 import datetime as dt
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from sklearn.metrics import mean_squared_error, r2_score
 
 from corr26b import create_training_set, fit_linear, alt2sl, \
     reduce_to_equal_pts_per_site, three_c_fit
@@ -234,21 +235,100 @@ if __name__ == "__main__":
     # preprocess_oni()
     # c1c2_intime()  # TODO issue with constants
     # c3_intime(c1_const=0.6, c2_const=1.5)
-    # df = create_training_set(
-    #     year=[2012], all_sites=True, temperature=True, cs_only=True,
-    #     pct_clr_min=0.3, drive="server4"
-    # )
+    df = create_training_set(
+        year=[2008, 2009, 2010, 2011],
+        all_sites=True, temperature=True, cs_only=True,
+        pct_clr_min=0.3, drive="server4", pv=False
+    )
+    # df = df_ref.copy(deep=True)
+    df["year"] = df.index.year
+    df["month"] = df.index.month
+
+    keep_samples = 500
+    out = []  # c1, c2, c3, rmse, r2, npts
+    for yr, group1 in df.groupby(df.year):
+        for m, group2 in group1.groupby(group1.month):
+            n_pts = group2.shape[0]
+            n_sites = len(np.unique(group2.site.to_numpy()))
+            group2 = group2.sample(n=keep_samples, replace=True, random_state=21)
+
+            c1, c2, c3 = three_c_fit(group2)
+            train_y = group2.y.to_numpy().reshape(-1, 1)
+            if n_sites > 1:
+                pred_y = c1 + (c2 * group2.y) + (c3 * group2.correction)
+            else:
+                pred_y = c1 + (c2 * group2.y)
+            rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+            r2 = r2_score(train_y, pred_y)
+            entry = dict(
+                year=yr, month=m, day=1,
+                c1=c2, c2=c2, c3=c3,
+                r2=r2, rmse=rmse, n_pts=n_pts, n_sites=n_sites
+            )
+            out.append(entry)
+    # df_ref = df.copy(deep=True)
+    df = pd.DataFrame(out)
+
+    df["date"] = pd.to_datetime(df[["year", "month", "day"]])
+    df = df.set_index("date").sort_index()
+    df = df.drop(columns=["year", "month", "day"])
+
+    mei_color = "#C54459"  # muted red
+    oni_color = "#4C6BE6"  # powder blue
+    mint = "#6CB289"
+    gold = "#E0A500"
+
+    oni, mei = import_oni_mei_data()
+    mei = mei.loc[mei.index.year >= 2000]
+    oni = oni.loc[oni.index.year >= 2000]
+
+    fig, (ax0, ax) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+    # fig, ax = plt.subplots(figsize=(12, 4))
+    ax0.step(df.index, df.n_pts)
+
+    ax.grid(axis="x", alpha=0.2)
+    ax.axhline(0, ls="--", c="0.3", alpha=0.3)
+    ax.plot(oni.index, oni.value, c=oni_color, alpha=0.4)
+    ax.plot(mei.index, mei.value, c=mei_color, alpha=0.4)
+
+    ax.step(df.index, df.c1, label="c1", c=mint, where="post")
+    ax.step(df.index, df.c2, label="c2", c=gold, where="post")
+    ax.step(df.index, df.c3, label="c3", c="0.5", where="post")
+
+    ax.set_xlim(oni.index[0], oni.index[-1])
+    ymin, ymax = ax.get_ylim()
+    ylim = abs(ymin) if abs(ymin) > ymax else ymax
+    ax.set_ylim(-1 * ylim, ylim)  # ensure symmetric around y=0
+    ax.set_ylabel(r"$\leftarrow$ La Niña$\quad\quad$ El Niño $\rightarrow$")
+    ax.legend()
+    ax.set_axisbelow(True)
+    plt.show()
+
+
+    # starts = df.index.values
+    # ends = df.index.values + np.timedelta64(3, "M")  # X minutes
+    # # note that sliding window may preferentially treat shoulders of days
+    # # since windows will have fewer points
+    #
+
+    # cs_array = np.zeros(df.shape[0])  # start as False for clear sky
+    # for i in range(0, len(starts)):
+    #     window_start = starts[i]
+    #     window_end = ends[i]
+    #     # select for sliding window
+    #     sw = df[(df.index.values < window_end) &
+    #             (df.index.values >= window_start)]
+    #
     # df = reduce_to_equal_pts_per_site(df)
     # df_ref = df.copy(deep=True)
-    #
+
     # df = df_ref.copy(deep=True)
     # df = alt2sl(df, c3=0.2)
     # fit_linear(df, set_intercept=None, print_out=True)
-    #
-    #
+
     # filename = os.path.join("data", "enso_c", f"c1c2c3.csv")
-    filename = os.path.join("data", "enso_c", f"c3_0.6_1.5.csv")
+    # filename = os.path.join("data", "enso_c", f"c3_0.6_1.5.csv")
     # filename = os.path.join("data", "enso_c", "c1c2_c3=0.0.csv")
-    plot_index(filename, save_name="enso_c3")
+    # plot_index(filename, save_name="enso_c3")
     # df = pd.read_csv(filename, index_col=0)
 

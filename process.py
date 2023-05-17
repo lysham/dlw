@@ -200,6 +200,9 @@ def process_site(site, folder, yr="2012", min_sample=2):
 
     # Apply clear sky period filter
     df = find_clearsky(df, min_sample=min_sample)
+    df = df.asfreq("1T")
+    df["reno_cs"] = pvlib.clearsky.detect_clearsky(df.GHI_m, df.GHI_c)
+
     # need to apply clear sky filter before data is sampled
     # print("Clear sky filter applied.", time.time() - start_time)
 
@@ -217,7 +220,8 @@ def process_site(site, folder, yr="2012", min_sample=2):
     if not os.path.exists(os.path.join("data", "SURFRAD")):
         os.makedirs(os.path.join("data", "SURFRAD"))
 
-    filename = os.path.join("data", "SURFRAD", f"{site}_{yr}.csv")
+    # filename = os.path.join("data", "SURFRAD", f"{site}_{yr}.csv")
+    filename = os.path.join("data", "SURFRAD", f"{site}_{yr}_pvlib.csv")
     df.to_csv(filename)
     print(df.shape)
 
@@ -226,7 +230,7 @@ def process_site(site, folder, yr="2012", min_sample=2):
     return None
 
 
-def import_site_year(site, year, drive="hdd"):
+def import_site_year(site, year, drive="hdd", pv=False):
     """Import a single site year of SURFRAD data from processed SURFRAD file.
     The DataFrame output has been produced by process_site() in process.py.
 
@@ -247,7 +251,10 @@ def import_site_year(site, year, drive="hdd"):
         folder = os.path.join("/Volumes", "Lysha_drive", "SURFRAD_processed")
     else:
         folder = os.path.join("data", "SURFRAD")
-    filename = os.path.join(folder, f"{site}_{year}.csv")
+    if pv:
+        filename = os.path.join(folder, f"{site}_{year}_pvlib.csv")
+    else:
+        filename = os.path.join(folder, f"{site}_{year}.csv")
 
     df = pd.read_csv(filename, index_col=0, parse_dates=True)
     df.sort_index(inplace=True)
@@ -264,10 +271,12 @@ if __name__ == "__main__":
     folder = os.path.join("data", "SURFRAD_raw")
 
     start_time = time.time()
-    for s in SURF_SITE_CODES:
-        if s != "SXF":  # for 2002 and prior
-            process_site(s, folder=folder, yr="2000", min_sample=2)
-            process_site(s, folder=folder, yr="2001", min_sample=2)
-            process_site(s, folder=folder, yr="2002", min_sample=2)
-        print(s, time.time() - start_time)
+    for yr in ["2012", "2009"]:
+        process_site(site="BON", folder=folder, yr=yr)
+    # for s in SURF_SITE_CODES:
+    #     if s != "SXF":  # for 2002 and prior
+    #         process_site(s, folder=folder, yr="2000", min_sample=2)
+    #         process_site(s, folder=folder, yr="2001", min_sample=2)
+    #         process_site(s, folder=folder, yr="2002", min_sample=2)
+    #     print(s, time.time() - start_time)
 
