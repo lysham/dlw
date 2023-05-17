@@ -256,7 +256,7 @@ def add_pvlib_cs(site, year, drive="hdd"):
     return None
 
 
-def import_site_year(site, year, drive="hdd", pv=False):
+def import_site_year(site, year, drive="hdd"):
     """Import a single site year of SURFRAD data from processed SURFRAD file.
     The DataFrame output has been produced by process_site() in process.py.
 
@@ -277,10 +277,8 @@ def import_site_year(site, year, drive="hdd", pv=False):
         folder = os.path.join("/Volumes", "Lysha_drive", "SURFRAD_processed")
     else:
         folder = os.path.join("data", "SURFRAD")
-    if pv:
-        filename = os.path.join(folder, f"{site}_{year}_pvlib.csv")
-    else:
-        filename = os.path.join(folder, f"{site}_{year}.csv")
+
+    filename = os.path.join(folder, f"{site}_{year}.csv")
 
     df = pd.read_csv(filename, index_col=0, parse_dates=True)
     df.sort_index(inplace=True)
@@ -297,9 +295,7 @@ if __name__ == "__main__":
     folder = os.path.join("data", "SURFRAD_raw")
 
     start_time = time.time()
-    for s in SURF_SITE_CODES:
-        add_pvlib_cs(s, year="2009", drive="server4")
-        add_pvlib_cs(s, year="2010", drive="server4")
-        add_pvlib_cs(s, year="2011", drive="server4")
-        add_pvlib_cs(s, year="2012", drive="server4")
+    for s in ["SXF"]:
+        for yr in np.arange(2003, 2009):
+            add_pvlib_cs(s, year=str(yr), drive="server4")
         print(s, time.time() - start_time)
