@@ -200,8 +200,8 @@ def process_site(site, folder, yr="2012", min_sample=2):
 
     # Apply clear sky period filter
     df = find_clearsky(df, min_sample=min_sample)
-    df = df.asfreq("1T")
-    df["reno_cs"] = pvlib.clearsky.detect_clearsky(df.GHI_m, df.GHI_c)
+    # df = df.asfreq("1T")
+    # df["reno_cs"] = pvlib.clearsky.detect_clearsky(df.GHI_m, df.GHI_c)
 
     # need to apply clear sky filter before data is sampled
     # print("Clear sky filter applied.", time.time() - start_time)
@@ -220,13 +220,39 @@ def process_site(site, folder, yr="2012", min_sample=2):
     if not os.path.exists(os.path.join("data", "SURFRAD")):
         os.makedirs(os.path.join("data", "SURFRAD"))
 
-    # filename = os.path.join("data", "SURFRAD", f"{site}_{yr}.csv")
-    filename = os.path.join("data", "SURFRAD", f"{site}_{yr}_pvlib.csv")
+    filename = os.path.join("data", "SURFRAD", f"{site}_{yr}.csv")
+    # filename = os.path.join("data", "SURFRAD", f"{site}_{yr}_pvlib.csv")
     df.to_csv(filename)
     print(df.shape)
 
     dt = time.time() - start_time
     print(f"Completed {site} {yr} in {dt:.0f}s")
+    return None
+
+
+def add_pvlib_cs(site, year, drive="hdd"):
+    # import processed files and add a column for reno_cs determination
+    if drive == "usb":
+        folder = os.path.join("/Volumes", "LMM_drive", "SURFRAD_processed")
+    elif drive == "hdd":
+        folder = os.path.join("/Volumes", "Lysha_drive", "SURFRAD_processed")
+    else:
+        folder = os.path.join("data", "SURFRAD")
+
+    filename = os.path.join(folder, f"{site}_{year}.csv")
+    df = pd.read_csv(filename, index_col=0, parse_dates=True)
+
+    # find most appropriate sample frequency
+    vals, counts = np.unique(np.diff(df.index.to_numpy()), return_counts=True)
+    freq = vals[np.argmax(counts)]  # most frequent delta
+    freq = freq / np.timedelta64(1, 's')  # convert to seconds
+    # convert to even sample frequency
+    tmp = df.asfreq(str(freq) + "S")
+    # evaluate
+    tmp["reno_cs"] = pvlib.clearsky.detect_clearsky(tmp.GHI_m, tmp.GHI_c)
+    # return to original index
+    df = df.merge(tmp["reno_cs"], how="left", left_index=True, right_index=True)
+    df.to_csv(filename)  # save as same filename
     return None
 
 
@@ -271,12 +297,9 @@ if __name__ == "__main__":
     folder = os.path.join("data", "SURFRAD_raw")
 
     start_time = time.time()
-    for yr in ["2012", "2009"]:
-        process_site(site="BON", folder=folder, yr=yr)
-    # for s in SURF_SITE_CODES:
-    #     if s != "SXF":  # for 2002 and prior
-    #         process_site(s, folder=folder, yr="2000", min_sample=2)
-    #         process_site(s, folder=folder, yr="2001", min_sample=2)
-    #         process_site(s, folder=folder, yr="2002", min_sample=2)
-    #     print(s, time.time() - start_time)
-
+    for s in SURF_SITE_CODES:
+        add_pvlib_cs(s, year="2009", drive="server4")
+        add_pvlib_cs(s, year="2010", drive="server4")
+        add_pvlib_cs(s, year="2011", drive="server4")
+        add_pvlib_cs(s, year="2012", drive="server4")
+        print(s, time.time() - start_time)
