@@ -227,24 +227,23 @@ def shakespeare(lat, lon):
     return h1, tau_spline
 
 
-def shakespeare_comparison(site, year="2012", import_from="hdd", pv=False):
+def shakespeare_comparison(site, year="2012", import_from="hdd"):
+    # PLAN TO DEPRECATE
     # clear sky comparison only
     lat1 = SURFRAD[site]["lat"]
     lon1 = SURFRAD[site]["lon"]
     h1, spline = shakespeare(lat1, lon1)
 
-    df = import_site_year(site, year, drive=import_from, pv=pv)
+    df = import_site_year(site, year, drive=import_from)
 
     df["pw_hpa"] = get_pw(df.t_a, df.rh) / 100  # hPa
     tmp = np.log(df.pw_hpa * 100 / 610.94)
     df["tdp"] = 273.15 + ((243.04 * tmp) / (17.625 - tmp))
-    # df["esky_c"] = get_esky_c(df.pw_hpa)
-    # df["lw_c"] = df.esky_c * SIGMA * np.power(df.t_a, 4)
 
     # add elevation and altitude correction
     df["elev"] = ELEV_DICT[site]  # Add elevation
     df["P_rep"] = P_ATM * np.exp(-1 * df.elev / 8500)  # Pa
-    df["de_p"] = 0.00012 * ((df.P_rep / 100) - 1000)  # TODO
+    # df["de_p"] = 0.00012 * ((df.P_rep / 100) - 1000)  # TODO
 
     # shakespeare variables
     df["w"] = 0.62198 * df.pw_hpa / (df.pa_hpa - df.pw_hpa)
@@ -472,45 +471,56 @@ def add_afgl_t0_p0(df):
     return df
 
 
-def create_training_set(year=[2012, 2013], all_sites=True, site=None,
-                        temperature=False, cs_only=True, pct_clr_min=0.3,
-                        drive="server4", pv=False):
-    # start broad then filter
-    keep_cols = [
-        "zen", "GHI_m", "DNI_m", "diffuse", "dw_ir", "t_a", "rh",
-        "pa_hpa", "pw_hpa", "cs_period", "elev", "P_rep", "tdp", "q", "he"
-    ]
-
-    if all_sites:
-        site_codes = SURF_SITE_CODES
-    else:
-        site_codes = [site]
+def create_training_set(year=[2012, 2013], sites=SURF_SITE_CODES,
+                        temperature=False, cs_only=True, filter_pct_clr=None,
+                        filter_npts_clr=None, drive="server4"):
+    if isinstance(sites, str):
+        sites = [sites]
 
     df = pd.DataFrame()
-    for s in site_codes:
+    for s in sites:
         for yr in year:
             check_sxf = (s == "SXF") and (yr < 2003)
             if not check_sxf:
-                tmp = shakespeare_comparison(s, yr, import_from=drive, pv=pv)
-                tmp = tmp[keep_cols]
+                # tmp = shakespeare_comparison(s, yr, import_from=drive)
+                tmp = import_site_year(s, yr, drive=drive)
+
+                tmp["pw_hpa"] = get_pw(tmp.t_a, tmp.rh) / 100  # hPa
+                # add elevation and altitude correction
+                tmp["elev"] = ELEV_DICT[s]  # Add elevation
+                tmp["P_rep"] = P_ATM * np.exp(-1 * tmp.elev / 8500)  # Pa
+
                 tmp["site"] = s
                 tmp = add_solar_time(tmp)
                 tmp = tmp.set_index("solar_time")
-                if pct_clr_min is not None:
-                    tmp_clr = tmp["cs_period"].resample("D").mean()
-                    tmp["daily_clr"] = tmp_clr.reindex(tmp.index, method="ffill")
-                    tmp = tmp.loc[tmp.daily_clr >= pct_clr_min].copy(deep=True)
+
+                tmp["csv2"] = (tmp.cs_period & tmp.reno_cs)
+                # tmp["csv2"] = tmp.reno_cs
                 df = pd.concat([df, tmp])
 
     # filter solar time
     df = df.loc[df.index.hour > 8].copy(deep=True)
+
+    if filter_pct_clr is not None:
+        # apply daily percent clear filter
+        tmp_clr = df["csv2"].resample("D").mean()
+        df["clr_pct"] = tmp_clr.reindex(df.index, method="ffill")
+        df = df.loc[df.clr_pct >= filter_pct_clr].copy(deep=True)
+    if filter_npts_clr is not None:
+        # apply daily absolute number clear filter
+        tmp_clr = df["csv2"].resample("D").count()
+        thresh = np.quantile(
+            tmp_clr.loc[tmp_clr > 0].to_numpy(), filter_npts_clr
+        )
+        df["clr_num"] = tmp_clr.reindex(df.index, method="ffill")
+        df = df.loc[df.clr_num >= thresh].copy(deep=True)
 
     df = add_afgl_t0_p0(df)  # add t0 and p0 values
     if temperature:
         df = df.loc[(abs(df.t_a - df.afgl_t0) <= 2)].copy(deep=True)
 
     if cs_only:
-        df = df.loc[df.cs_period].copy(deep=True)  # reduce to only clear skies
+        df = df.loc[df.csv2].copy(deep=True)  # reduce to only clear skies
 
     df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
     df["y"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))
@@ -553,42 +563,54 @@ if __name__ == "__main__":
     print()
     # look at LWerr by hours per day instead of percent of samples
     # df = shakespeare_comparison("BON", year="2008")  # 3min freq
-    df = shakespeare_comparison(site="BON", year="2012", import_from="server4", pv=True)
-    df[["cs_period", "reno_cs"]].astype(int).groupby(df.index.month).mean()
 
-    s = "BON"  # site
-    plot_date = dt.date(2012, 7, 20)  # date to plot
+    # for s in SURF_SITE_CODES:
+    #     df = shakespeare_comparison(s, 2008, import_from="server4")
+    #     df = add_afgl_t0_p0(df)  # add t0 and p0 values
+    #     df = df.loc[(abs(df.t_a - df.afgl_t0) <= 2)].copy()
+    #     df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
+    #     df["y"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))
+    #     pv = df.loc[df.reno_cs]
+    #     ml = df.loc[df.cs_period]
+    #
+    #     c1, c2 = fit_linear(df.loc[df.reno_cs], print_out=False)
+    #     train_y = df.loc[df.reno_cs].y.to_numpy().reshape(-1, 1)
+    #     pred_y = c1 + (c2 * df.loc[df.reno_cs].y)
+    #     rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+    #     r2 = r2_score(train_y, pred_y)
+    #     print(s, c1, c2, rmse, r2)
+    #
+    # for s in SURF_SITE_CODES:
+    #     for yr in [2009, 2010, 2011, 2012]:
+    #         df = import_site_year(s, yr, drive="server4")
+    #         ttl = df.shape[0]
+    #         clr_reno_pct = df.loc[df.reno_cs].shape[0] / ttl
+    #         clr_orig_pct = df.loc[df.cs_period].shape[0] / ttl
+    #         overlap = (df.reno_cs & df.cs_period)
+    #         clr_overlap_pct = overlap.sum() / ttl
+    #         print(s, yr, f"{clr_reno_pct:.2%} "
+    #                      f"{clr_orig_pct:.2%} {clr_overlap_pct:.2%}")
+    #     print()
 
-    df = shakespeare_comparison(s, plot_date.year, import_from="server4", pv=True)
-    df["site"] = s
-    df = add_solar_time(df)
-    df = df.set_index("solar_time")
-    df_ref = df.copy(deep=True)
+    s = "PSU"
+    # c1, c2 = 0.5861, 1.6461  # constants for PSU
+    df = create_training_set(
+        year=[2012], sites=s, filter_pct_clr=0.2, filter_npts_clr=0.2,
+        temperature=False, cs_only=False, drive="server4")
+    c1, c2 = fit_linear(df.loc[df.csv2])
+    df["y"] = c1 + c2 * np.sqrt(df.pw_hpa * 100 / P_ATM)
+    df["lw_pred"] = df.y * SIGMA * np.power(df.t_a, 4)
 
-    plot_date = dt.date(2012, 7, 15)  # date to plot
-    df = df_ref.copy(deep=True)
-    df = df.loc[df.index.date == plot_date].copy(deep=True)
+    df["lw_err"] = df.lw_pred - df.dw_ir
+    df["csv2"] = df.csv2.astype("bool")
+    pdf = df[["csv2", "lw_err"]].resample("D").mean()
+    x = df.resample("D")["csv2"].mean()
+    y = df.resample("D")["csv2"].count()
 
-    # FIGURE
-    fig, ax = plt.subplots(figsize=(10, 4))
-    plt.subplots_adjust(hspace=0.05)
-
-    date_str = plot_date.strftime("%m-%d-%Y")
-    title = f"{s} {date_str}"
+    fig, ax = plt.subplots()
+    ax.grid(True, alpha=0.7)
+    ax.scatter(pdf.csv2, pdf.lw_err, marker=".")
+    # ax.scatter(x, y, marker=".")
+    title = f"{s} 2012 (ndays={pdf.shape[0]}) [{c1}, {c2}]"
     ax.set_title(title, loc="left")
-    ax.plot(df.index, df.DNI_m, label="DNI")
-    ax.plot(df.index, df.GHI_m, label="GHI")
-    ax.fill_between(
-        df.index, 0, df.GHI_m, where=df.cs_period, fc="0.7", alpha=0.4,
-        label="CS"
-    )
-    ax.fill_between(
-        df.index, 0, df.GHI_m, where=df.reno_cs, hatch="//", fc="0.4",
-        alpha=0.4, label="Reno"
-    )
-    ax.set_ylim(0, 1200)
-    ax.legend()
-
     plt.show()
-
-
