@@ -283,7 +283,7 @@ if __name__ == "__main__":
             c1, c2, c3 = three_c_fit(group2)
             train_y = group2.y.to_numpy().reshape(-1, 1)
             if n_sites > 1:
-                pred_y = c1 + (c2 * group2.y) + (c3 * group2.correction)
+                pred_y = c1 + (c2 * group2.x) + (c3 * group2.correction)
             else:
                 pred_y = c1 + (c2 * group2.y)
             rmse = np.sqrt(mean_squared_error(train_y, pred_y))
