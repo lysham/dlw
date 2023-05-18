@@ -476,14 +476,20 @@ def create_training_set(year=[2012, 2013], sites=SURF_SITE_CODES,
                         filter_npts_clr=None, drive="server4"):
     if isinstance(sites, str):
         sites = [sites]
+    keep_cols = [
+        'zen', 'GHI_m', 'DNI_m', 'diffuse', 'dw_ir', 'temp', 'rh', 'pa_hpa',
+        't_a', 'GHI_c', 'DNI_c', 'dhi', 'cs_period', 'reno_cs'
+    ]
 
     df = pd.DataFrame()
     for s in sites:
+        print(s)
         for yr in year:
             check_sxf = (s == "SXF") and (yr < 2003)
             if not check_sxf:
                 # tmp = shakespeare_comparison(s, yr, import_from=drive)
                 tmp = import_site_year(s, yr, drive=drive)
+                tmp = tmp[keep_cols]  # drop potential lw_s and uvb vals
 
                 tmp["pw_hpa"] = get_pw(tmp.t_a, tmp.rh) / 100  # hPa
                 # add elevation and altitude correction
@@ -493,13 +499,13 @@ def create_training_set(year=[2012, 2013], sites=SURF_SITE_CODES,
                 tmp["site"] = s
                 tmp = add_solar_time(tmp)
                 tmp = tmp.set_index("solar_time")
+                tmp = tmp.loc[tmp.index.hour > 8]  # filter solar time
 
                 tmp["csv2"] = (tmp.cs_period & tmp.reno_cs)
                 # tmp["csv2"] = tmp.reno_cs
-                df = pd.concat([df, tmp])
 
-    # filter solar time
-    df = df.loc[df.index.hour > 8].copy(deep=True)
+                df = pd.concat([df, tmp])
+    # df = df.loc[df.index.hour > 8].copy(deep=True)
 
     if filter_pct_clr is not None:
         # apply daily percent clear filter
@@ -592,11 +598,11 @@ if __name__ == "__main__":
     #                      f"{clr_orig_pct:.2%} {clr_overlap_pct:.2%}")
     #     print()
 
-    s = "PSU"
+    s = "GWC"
     # c1, c2 = 0.5861, 1.6461  # constants for PSU
     df = create_training_set(
-        year=[2012, 2013, 2014], sites=s, filter_pct_clr=0.2,
-        filter_npts_clr=0.2,
+        year=[2012, 2013, 2014], sites=s, filter_pct_clr=0.0,
+        filter_npts_clr=0.0,
         temperature=False, cs_only=False, drive="server4")
     c1, c2 = fit_linear(df.loc[df.csv2])
     df["y"] = c1 + c2 * np.sqrt(df.pw_hpa * 100 / P_ATM)
@@ -608,10 +614,25 @@ if __name__ == "__main__":
     x = df.resample("D")["csv2"].mean()
     y = df.resample("D")["csv2"].count()
 
-    fig, ax = plt.subplots()
+    tmp_clr = df["csv2"].resample("D").count()
+    thresh = np.quantile(
+        tmp_clr.loc[tmp_clr > 0].to_numpy(), 0.2
+    )
+
+    fig, ax = plt.subplots(figsize=(4, 4))
     ax.grid(True, alpha=0.7)
     # ax.scatter(pdf.csv2, pdf.lw_err, marker=".")
-    ax.scatter(x, y, marker=".")
-    title = f"{s} 2012 (ndays={pdf.shape[0]}) [{c1}, {c2}]"
+    ax.scatter(x, y, marker=".", alpha=0.5)
+    ax.axvline(0.05, c="k")
+    ax.axhline(thresh, c="k")
+    title = f"{s} (ndays={pdf.shape[0]})"
     ax.set_title(title, loc="left")
-    plt.show()
+    ax.set_xlim(0, 1)
+    ax.set_xlabel("daily clear sky fraction")
+    ax.set_ylabel("daily clear sky samples")
+    ax.set_ylim(bottom=0)
+    ax.set_axisbelow(True)
+    filename = os.path.join("figures", f"clear_{s}.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+
+

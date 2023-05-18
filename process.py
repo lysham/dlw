@@ -298,3 +298,5 @@ if __name__ == "__main__":
     for s in SURF_SITE_CODES:
         add_pvlib_cs(s, year="2008", drive="server4")
         print(s, time.time() - start_time)
+
+    # todo potential issue with existing t_sky columns and duplicate reno_cs
