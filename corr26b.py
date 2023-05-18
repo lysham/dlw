@@ -595,7 +595,8 @@ if __name__ == "__main__":
     s = "PSU"
     # c1, c2 = 0.5861, 1.6461  # constants for PSU
     df = create_training_set(
-        year=[2012], sites=s, filter_pct_clr=0.2, filter_npts_clr=0.2,
+        year=[2012, 2013, 2014], sites=s, filter_pct_clr=0.2,
+        filter_npts_clr=0.2,
         temperature=False, cs_only=False, drive="server4")
     c1, c2 = fit_linear(df.loc[df.csv2])
     df["y"] = c1 + c2 * np.sqrt(df.pw_hpa * 100 / P_ATM)
@@ -609,8 +610,8 @@ if __name__ == "__main__":
 
     fig, ax = plt.subplots()
     ax.grid(True, alpha=0.7)
-    ax.scatter(pdf.csv2, pdf.lw_err, marker=".")
-    # ax.scatter(x, y, marker=".")
+    # ax.scatter(pdf.csv2, pdf.lw_err, marker=".")
+    ax.scatter(x, y, marker=".")
     title = f"{s} 2012 (ndays={pdf.shape[0]}) [{c1}, {c2}]"
     ax.set_title(title, loc="left")
     plt.show()
