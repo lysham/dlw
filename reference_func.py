@@ -1761,5 +1761,47 @@ def compare_clearsky_id_3min():
     return None
 
 
+def plot_clear_site():
+    # plot daily values of pct_clr and npts_clr per site
+    # from corr26b
+    s = "GWC"
+    # c1, c2 = 0.5861, 1.6461  # constants for PSU
+    df = create_training_set(
+        year=[2012, 2013, 2014], sites=s, filter_pct_clr=0.0,
+        filter_npts_clr=0.0,
+        temperature=False, cs_only=False, drive="server4")
+    c1, c2 = fit_linear(df.loc[df.csv2])
+    df["y"] = c1 + c2 * np.sqrt(df.pw_hpa * 100 / P_ATM)
+    df["lw_pred"] = df.y * SIGMA * np.power(df.t_a, 4)
+
+    df["lw_err"] = df.lw_pred - df.dw_ir
+    df["csv2"] = df.csv2.astype("bool")
+    pdf = df[["csv2", "lw_err"]].resample("D").mean()
+    x = df.resample("D")["csv2"].mean()
+    y = df.resample("D")["csv2"].count()
+
+    tmp_clr = df["csv2"].resample("D").count()
+    thresh = np.quantile(
+        tmp_clr.loc[tmp_clr > 0].to_numpy(), 0.2
+    )
+
+    fig, ax = plt.subplots(figsize=(4, 4))
+    ax.grid(True, alpha=0.7)
+    # ax.scatter(pdf.csv2, pdf.lw_err, marker=".")
+    ax.scatter(x, y, marker=".", alpha=0.5)
+    ax.axvline(0.05, c="k")
+    ax.axhline(thresh, c="k")
+    title = f"{s} (ndays={pdf.shape[0]})"
+    ax.set_title(title, loc="left")
+    ax.set_xlim(0, 1)
+    ax.set_xlabel("daily clear sky fraction")
+    ax.set_ylabel("daily clear sky samples")
+    ax.set_ylim(bottom=0)
+    ax.set_axisbelow(True)
+    filename = os.path.join("figures", f"clear_{s}.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
 if __name__ == "__main__":
     print()
