@@ -295,7 +295,6 @@ if __name__ == "__main__":
     folder = os.path.join("data", "SURFRAD_raw")
 
     start_time = time.time()
-    for s in ["SXF"]:
-        for yr in np.arange(2003, 2009):
-            add_pvlib_cs(s, year=str(yr), drive="server4")
+    for s in SURF_SITE_CODES:
+        add_pvlib_cs(s, year="2008", drive="server4")
         print(s, time.time() - start_time)
