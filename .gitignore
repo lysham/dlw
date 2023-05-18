@@ -13,6 +13,7 @@ data/SURFRAD/
 data/asos*
 data/cs_compare/
 data/SURFRAD_raw/
+data/train_df/
 
 randall_files
 

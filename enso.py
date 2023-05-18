@@ -88,11 +88,11 @@ def import_oni_mei_data():
 
 def c1c2_intime():
     start_time = time.time()
-    fix_c1 = False
+    fix_c1 = True
     fix_c3 = True
 
-    c3_const = 0.0  # used if fix_c3 is True
-    c1_const = 0.55  # used if fix_c1 is True
+    c3_const = 0.13  # used if fix_c3 is True
+    c1_const = 0.6  # used if fix_c1 is True
 
     years = np.arange(2000, 2023)  # till 2022
 
@@ -103,8 +103,8 @@ def c1c2_intime():
     i = 0
     for yr in years:
         df = create_training_set(
-            year=[yr], all_sites=True, temperature=True, cs_only=True,
-            pct_clr_min=0.3, drive="server4"
+            year=[yr], temperature=False, cs_only=True,
+            filter_pct_clr=0.2, filter_npts_clr=0.2, drive="server4"
         )
         df = reduce_to_equal_pts_per_site(df)
 
@@ -115,7 +115,7 @@ def c1c2_intime():
                 df["y"] = df["y"] - c1_const
                 c1[i], c2[i] = fit_linear(df, set_intercept=c1_const)
             else:
-                c1[i], c2[i] = fit_linear(df, set_intercept=None, print_out=True)
+                c1[i], c2[i] = fit_linear(df, set_intercept=None)
         else:
             c1[i], c2[i], c3[i] = three_c_fit(df)
 
@@ -143,8 +143,8 @@ def c3_intime(c1_const, c2_const):
     i = 0
     for yr in years:
         df = create_training_set(
-            year=[yr], all_sites=True, temperature=True, cs_only=True,
-            pct_clr_min=0.3, drive="server4"
+            year=[yr], temperature=False, cs_only=True,
+            filter_pct_clr=0.2, filter_npts_clr=0.2, drive="server4"
         )
         df = reduce_to_equal_pts_per_site(df)
         df["y"] = df.y - (c1_const + (c2_const * df.x))
@@ -219,8 +219,8 @@ def plot_index(filename, save_name="enso_index", c1=True, c2=True, c3=True):
     ax.legend()
     ax.set_axisbelow(True)
     plt.show()
-    filename = os.path.join("figures", save_name + ".png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    # filename = os.path.join("figures", save_name + ".png")
+    # fig.savefig(filename, bbox_inches="tight", dpi=300)
 
     df["mei"] = mei.value.groupby(mei.index.year).median().to_numpy()
     df["oni"] = oni.value.groupby(oni.index.year).median().to_numpy()
@@ -234,13 +234,25 @@ if __name__ == "__main__":
     # preprocess_meiv2()
     # preprocess_oni()
     # c1c2_intime()  # TODO issue with constants
-    # c3_intime(c1_const=0.6, c2_const=1.5)
-    df = create_training_set(
-        year=[2008, 2009, 2010, 2011],
-        all_sites=True, temperature=True, cs_only=True,
-        pct_clr_min=0.3, drive="server4", pv=False
-    )
+    # c3_intime(c1_const=0.6, c2_const=1.6)
+    # filename = os.path.join("data", "enso_c", f"c1c2c3.csv")
+    # filename = os.path.join("data", "enso_c", f"c1=0.6_c3=0.13.csv")
+    # plot_index(filename, save_name="tmp")
+    # df = pd.read_csv(filename, index_col=0)
+
+    # df = create_training_set(
+    #     year=np.arange(2000, 2023),
+    #     temperature=False, cs_only=True,
+    #     filter_pct_clr=0.2, filter_npts_clr=0.2, drive="server4"
+    # )
+    # filename = os.path.join("data", "train_df", "train_pct20_npts20.csv")
+    # df.to_csv(filename)
+    # # need to reduce Ta later TODO
+
     # df = df_ref.copy(deep=True)
+    filename = os.path.join("data", "train_df", "train_pct20_npts20.csv")
+    df = pd.read_csv(filename, index_col=0, parse_dates=True)
+    df = df.loc[(abs(df.t_a - df.afgl_t0) <= 2)]
     df["year"] = df.index.year
     df["month"] = df.index.month
 
@@ -250,7 +262,8 @@ if __name__ == "__main__":
         for m, group2 in group1.groupby(group1.month):
             n_pts = group2.shape[0]
             n_sites = len(np.unique(group2.site.to_numpy()))
-            group2 = group2.sample(n=keep_samples, replace=True, random_state=21)
+            group2 = group2.sample(
+                n=keep_samples, replace=True, random_state=21)
 
             c1, c2, c3 = three_c_fit(group2)
             train_y = group2.y.to_numpy().reshape(-1, 1)
@@ -285,6 +298,7 @@ if __name__ == "__main__":
     fig, (ax0, ax) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
     # fig, ax = plt.subplots(figsize=(12, 4))
     ax0.step(df.index, df.n_pts)
+    ax0.set_ylim(bottom=0)
 
     ax.grid(axis="x", alpha=0.2)
     ax.axhline(0, ls="--", c="0.3", alpha=0.3)
@@ -296,39 +310,13 @@ if __name__ == "__main__":
     ax.step(df.index, df.c3, label="c3", c="0.5", where="post")
 
     ax.set_xlim(oni.index[0], oni.index[-1])
-    ymin, ymax = ax.get_ylim()
-    ylim = abs(ymin) if abs(ymin) > ymax else ymax
-    ax.set_ylim(-1 * ylim, ylim)  # ensure symmetric around y=0
+    # ymin, ymax = ax.get_ylim()
+    # ylim = abs(ymin) if abs(ymin) > ymax else ymax
+    # ax.set_ylim(-1 * ylim, ylim)  # ensure symmetric around y=0
+    ax.set_ylim(-2, 2)
     ax.set_ylabel(r"$\leftarrow$ La Niña$\quad\quad$ El Niño $\rightarrow$")
     ax.legend()
     ax.set_axisbelow(True)
     plt.show()
 
-
-    # starts = df.index.values
-    # ends = df.index.values + np.timedelta64(3, "M")  # X minutes
-    # # note that sliding window may preferentially treat shoulders of days
-    # # since windows will have fewer points
-    #
-
-    # cs_array = np.zeros(df.shape[0])  # start as False for clear sky
-    # for i in range(0, len(starts)):
-    #     window_start = starts[i]
-    #     window_end = ends[i]
-    #     # select for sliding window
-    #     sw = df[(df.index.values < window_end) &
-    #             (df.index.values >= window_start)]
-    #
-    # df = reduce_to_equal_pts_per_site(df)
-    # df_ref = df.copy(deep=True)
-
-    # df = df_ref.copy(deep=True)
-    # df = alt2sl(df, c3=0.2)
-    # fit_linear(df, set_intercept=None, print_out=True)
-
-    # filename = os.path.join("data", "enso_c", f"c1c2c3.csv")
-    # filename = os.path.join("data", "enso_c", f"c3_0.6_1.5.csv")
-    # filename = os.path.join("data", "enso_c", "c1c2_c3=0.0.csv")
-    # plot_index(filename, save_name="enso_c3")
-    # df = pd.read_csv(filename, index_col=0)
 
