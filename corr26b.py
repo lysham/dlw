@@ -598,38 +598,3 @@ if __name__ == "__main__":
     #                      f"{clr_orig_pct:.2%} {clr_overlap_pct:.2%}")
     #     print()
 
-    df = create_training_set(
-        year=[2012, 2013], filter_pct_clr=0.05,
-        filter_npts_clr=0.2, temperature=False, cs_only=True, drive="server4")
-    site = "GWC"
-    df = df.loc[df.site == site]
-
-    c1_x = np.linspace(0.3, 0.8, 100)
-    c2_c = np.zeros(len(c1_x))
-    rmse_y = np.zeros(len(c1_x))
-    train_x = df.x.to_numpy().reshape(-1, 1)
-    train_y = df.y.to_numpy().reshape(-1, 1)
-    for i in range(len(c1_x)):
-        # c1, c2 = fit_linear(df, set_intercept=c1_x[i])
-        model = LinearRegression(fit_intercept=False)
-        model.fit(train_x, train_y - c1_x[i])
-        c2 = model.coef_[0].round(4)
-        c2 = c2[0]
-        c1 = c1_x[i]
-        # print(c2, c1_x[i])
-        pred_y = c1 + (c2 * df.x)
-        rmse_y[i] = np.sqrt(mean_squared_error(train_y, pred_y))
-        c2_c[i] = c2
-    # best: 0.5988, 1.7085
-
-    fig, ax = plt.subplots(figsize=(5, 4))
-    ax.grid(alpha=0.3)
-    cb = ax.scatter(c1_x, rmse_y, c=c2_c)
-    fig.colorbar(cb, label="c2")
-    ax.set_ylabel("rmse in emissivity")
-    ax.set_xlabel("c1")
-    title = f"{site} (npts={df.shape[0]})"
-    ax.set_title(title, loc="left")
-    plt.tight_layout()
-    ax.set_axisbelow(True)
-    plt.show()

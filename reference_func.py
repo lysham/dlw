@@ -1803,5 +1803,187 @@ def plot_clear_site():
     return None
 
 
+def plot_surface_c1c2(elev, azim):
+    # run in corr26b
+    df = create_training_set(
+        year=[2010, 2011, 2012, 2013], filter_pct_clr=0.05,
+        filter_npts_clr=0.2, temperature=True, cs_only=True, drive="server4"
+    )
+    test = df.loc[df.index.year == 2012].copy()  # make test set
+
+    c1_x = np.linspace(0, 1, 100)
+    c2_x = np.linspace(0, 4, 200)
+
+    # Zoom in
+    # c1_x = np.linspace(0.5, 0.65, 80)
+    # c2_x = np.linspace(1.7, 2, 50)
+
+    z = np.zeros((len(c1_x), len(c2_x)))
+    for i in range(len(c1_x)):
+        for j in range(len(c2_x)):
+            pred_y = c1_x[i] + c2_x[j] * test.x
+            z[i, j] = np.sqrt(mean_squared_error(test.y, pred_y))
+
+    X, Y = np.meshgrid(c2_x, c1_x)
+
+    # elev = 30
+    # azim = 40
+    fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+    ax.view_init(elev=elev, azim=azim)
+    cb = ax.plot_surface(
+        X, Y, z, cmap=mpl.cm.coolwarm,
+        norm=mpl.colors.LogNorm(),
+        linewidth=0, antialiased=True
+    )
+    ax.contourf(
+        c2_x, c1_x, z, zdir='z', offset=0, cmap=mpl.cm.coolwarm, alpha=0.7,
+        norm=mpl.colors.LogNorm()
+    )
+    fig.colorbar(cb, shrink=0.6, label="rmse")
+    ax.set_ylabel(f"c1 [{c1_x[0]}, {c1_x[-1]}]")
+    ax.set_xlabel(f"c2 [{c2_x[0]}, {c2_x[-1]}]")
+    ax.set_zlabel("rmse")
+    ax.xaxis.set_major_locator(mpl.ticker.LinearLocator(5))
+    ax.xaxis.set_major_formatter('{x:.02f}')
+    ax.yaxis.set_major_locator(mpl.ticker.LinearLocator(5))
+    ax.yaxis.set_major_formatter('{x:.02f}')
+    title = f"view note: elev={elev}, azim={azim}"
+    ax.set_title(title, loc="left")
+    plt.tight_layout()
+    plt.show()
+    return None
+
+
+def rmse_v_c1_sites_3d():
+    df = create_training_set(
+        year=[2011, 2012, 2013], filter_pct_clr=0.05,
+        filter_npts_clr=0.2, temperature=True, cs_only=True, drive="server4")
+
+    yticks = np.flip(np.arange(7))  # ticks for y-axis
+    c1_x = np.linspace(0.4, 0.8, 50)
+    c2 = np.zeros((len(ELEVATIONS), len(c1_x)))
+    rmse = np.zeros((len(ELEVATIONS), len(c1_x)))
+    i = 0
+    for site in ELEVATIONS:
+        tmp = df.loc[df.site == site[0]]
+        train = tmp.loc[tmp.index.year != 2013]
+        test = tmp.loc[tmp.index.year == 2013]
+        train_x = train.x.to_numpy().reshape(-1, 1)
+        train_y = train.y.to_numpy().reshape(-1, 1)
+        for j in range(len(c1_x)):
+            model = LinearRegression(fit_intercept=False)
+            model.fit(train_x, train_y - c1_x[j])
+            pred_y = c1_x[j] + (model.coef_[0].round(4)[0] * test.x)
+            rmse[i, j] = np.sqrt(mean_squared_error(test.y, pred_y))
+            c2[i, j] = model.coef_[0].round(4)[0]
+        i += 1
+
+    elev = -90
+    azim = 180
+    fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+    ax.view_init(elev=elev, azim=azim)
+    ax.set_box_aspect((3, 8, 3))
+    ylabels = []
+    min_c1 = []
+    min_c2 = []
+    for i in range(len(ELEVATIONS)):
+        cb = ax.scatter(
+            c1_x, rmse[i, :], zs=yticks[i], zdir="y",
+            c=c2[i, :], cmap=mpl.cm.Spectral, vmin=0, vmax=3,
+            alpha=0.9, marker="."
+        )
+        ylabels.append(ELEVATIONS[i][0])
+        idx = rmse[i, :].argmin()
+        ax.scatter(c1_x[idx], yticks[i], 0, edgecolor="0.3", facecolor="1.0", marker=".")
+        text = f"({c1_x[idx]:.02f}, {c2[i, idx]:.02f})"
+        min_c1.append(c1_x[idx])
+        min_c2.append(c2[i, idx])
+        # ax.text(
+        #     c1_x[idx] - 0.05, yticks[i] + 0.05, 0, s=text,
+        #     fontsize="x-small", color="0.2"
+        # )
+    ax.set_xlabel(f"c1 [{c1_x[0]}, {c1_x[-1]}]")
+    ax.set_zlabel('RMSE', rotation=90)
+    ax.set_yticks(yticks)
+    ax.set_yticklabels(ylabels)
+    ax.set_zlim(0, 0.08)
+    ax.zaxis.set_major_locator(mpl.ticker.LinearLocator(5))
+    ax.zaxis.set_major_formatter('{x:.02f}')
+    title = f"view note: elev={elev}, azim={azim}"
+    ax.set_title(title, loc="left")
+    # fig.colorbar(cb, pad=0.15, shrink=0.6, label="c2", extend="both")
+    plt.show()
+
+    # ELEVATION: look at minimized c1 vs station elevation
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.grid(alpha=0.3)
+    xx = np.zeros(len(min_c1))
+    yy = np.zeros(len(min_c1))
+    for i in range(len(min_c1)):
+        elev = ELEVATIONS[i][1]
+        xx[i] = elev
+        yy[i] = min_c1[i]
+        # ax.scatter(elev, min_c1[i], c="0.3")
+        ax.text(elev + 5, min_c1[i] + 0.001, ELEVATIONS[i][0])
+    ax.scatter(xx, yy, c="0.3")
+    x = np.linspace(0, 1670, 20)
+    y = 0.2 * (np.exp(-1 * x / 8500) - 1)
+    ax.plot(x, y + 0.63)
+    ax.axhline(0.6, ls="--")
+    ax.set_xlabel("Station elevation (m)")
+    ax.set_ylabel("best fit c1")
+    ax.set_xlim(left=0)
+    ax.set_axisbelow(True)
+    plt.show()
+
+    y2 = yy - yy.max()  # normalize
+    model = LinearRegression(fit_intercept=False)
+    model.fit(xx.reshape(-1, 1), y2.reshape(-1, 1))
+    c2 = model.coef_[0].round(4)  # slope of best fit
+
+    return None
+
+
+def rmse_v_c1_single_site():
+    # run in corr26b
+    df = create_training_set(
+        year=[2011, 2012, 2013], filter_pct_clr=0.05,
+        filter_npts_clr=0.2, temperature=True, cs_only=True, drive="server4")
+    c1_x = np.linspace(0.4, 0.8, 50)
+    site = "GWC"
+    tmp = df.loc[df.site == site]
+    train = tmp.loc[tmp.index.year != 2013]
+    test = tmp.loc[tmp.index.year == 2013]
+    train_x = train.x.to_numpy().reshape(-1, 1)
+    train_y = train.y.to_numpy().reshape(-1, 1)
+    rmse = np.zeros(len(c1_x))
+    c2 = np.zeros(len(c1_x))
+    for j in range(len(c1_x)):
+        model = LinearRegression(fit_intercept=False)
+        model.fit(train_x, train_y - c1_x[j])
+        pred_y = c1_x[j] + (model.coef_[0].round(4)[0] * test.x)
+        rmse[j] = np.sqrt(mean_squared_error(test.y, pred_y))
+        c2[j] = model.coef_[0].round(4)[0]
+
+    fig, ax = plt.subplots()
+    ax.grid(alpha=0.5)
+    cb = ax.scatter(c1_x, rmse, c=c2, vmin=0, vmax=3, cmap=mpl.cm.Spectral)
+    fig.colorbar(cb, label=f"c2", extend="both")
+    ax.set_ylabel("RMSE")
+    ax.set_xlabel(f"c1 [{c1_x[0]}, {c1_x[-1]}]")
+    ax.set_axisbelow(True)
+    ax.set_xlim(c1_x[0], c1_x[-1])
+    idx = rmse.argmin()
+    text = f"minimum RMSE @ ({c1_x[idx]:.04f}, {c2[idx]})"
+    ax.text(
+        0.95, 0.95, text, transform=ax.transAxes, ha="right", va="top",
+        backgroundcolor="1.0")
+    title = f"{site} (train={train.shape[0]:,} pts, test={test.shape[0]:,} pts)"
+    ax.set_title(title, loc="left")
+    plt.tight_layout()
+    plt.show()
+    return None
+
+
 if __name__ == "__main__":
     print()
