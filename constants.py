@@ -15,14 +15,22 @@ LONs = [-88.37, -105.24, -116.06, -105.10, -89.87, -77.93, -96.62]
 ALTs = [213, 1689, 1007, 634, 98, 376, 437]  # m
 
 SURFRAD = dict(
-    BON=dict(name="Bondville_IL", lat=40.05, lon=-88.37, alt=213),
-    BOU=dict(name="Boulder_CO", lat=40.13, lon=-105.24, alt=1689),
-    DRA=dict(name="Desert_Rock_NV", lat=36.62, lon=-116.06, alt=1007),
-    FPK=dict(name="Fort_Peck_MT", lat=48.31, lon=-105.10, alt=634),
-    GWC=dict(name="Goodwin_Creek_MS", lat=34.25, lon=-89.87, alt=98),
-    PSU=dict(name="Penn_State_PA", lat=40.72, lon=-77.93, alt=376),
-    SXF=dict(name="Sioux_Falls_SD", lat=43.73, lon=-96.62, alt=437),
+    BON=dict(name="Bondville_IL", lat=40.05, lon=-88.37, alt=213, rho=0.247),
+    BOU=dict(name="Boulder_CO", lat=40.13, lon=-105.24, alt=1689, rho=0.199),
+    DRA=dict(name="Desert_Rock_NV", lat=36.62, lon=-116.06, alt=1007, rho=0.211),
+    FPK=dict(name="Fort_Peck_MT", lat=48.31, lon=-105.10, alt=634, rho=0.247),
+    GWC=dict(name="Goodwin_Creek_MS", lat=34.25, lon=-89.87, alt=98, rho=0.200),
+    PSU=dict(name="Penn_State_PA", lat=40.72, lon=-77.93, alt=376, rho=0.252),
+    SXF=dict(name="Sioux_Falls_SD", lat=43.73, lon=-96.62, alt=437, rho=0.238),
 )
+# pd.DataFrame.from_dict(SURFRAD, orient="index")
+# albedo and surface type from Marion, 2021, osti 1763970
+
+SEVEN_COLORS = ["#156064", "#00C49A", "#F8E16C", "#FFC2B4",
+                "#FB8F67", "#437C90", "#7E2E84"]
+COLOR7_DICT = {}
+for i in range(len(SURF_SITE_CODES)):
+    COLOR7_DICT[SURF_SITE_CODES[i]] = SEVEN_COLORS[i]
 
 ELEV_DICT = {}
 LON_DICT = {}
@@ -30,9 +38,6 @@ for i in SURFRAD:
     ELEV_DICT[i] = SURFRAD[i]["alt"]
     LON_DICT[i] = SURFRAD[i]["lon"]
 ELEVATIONS = sorted(ELEV_DICT.items(), key=lambda x: x[1])  # sorted list
-
-SEVEN_COLORS = ["#156064", "#00C49A", "#F8E16C", "#FFC2B4",
-                "#FB8F67", "#437C90", "#7E2E84"]
 
 # Generate from integrating shakespeare data (function in ref_func)
 SITE_H_DICT = {

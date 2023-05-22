@@ -1985,5 +1985,103 @@ def rmse_v_c1_single_site():
     return None
 
 
+def rmse_contour_c1_vs_c2():
+    # contourf plots, fixed c1, c2, c3. RMSE evaluated collectively.
+    df = create_training_set(
+        year=[2010, 2011, 2012, 2013], filter_pct_clr=0.05,
+        filter_npts_clr=0.2, temperature=True, cs_only=True, drive="server4"
+    )
+    df['correction'] = np.exp(-1 * df.elev / 8500) - 1
+    test = df.copy()
+    # train = df.loc[df.index.year != 2012].copy()
+    # test = df.loc[df.index.year == 2012].copy()  # make test set
+
+    c1_x = np.linspace(0.3, 0.8, 25)  # 100
+    c2_x = np.linspace(1, 3, 50)  # 200
+    c3 = 0.5
+
+    z = np.zeros((len(c1_x), len(c2_x)))
+    for i in range(len(c1_x)):
+        for j in range(len(c2_x)):
+            pred_y = c1_x[i] + c2_x[j] * test.x
+            correction = c3 * test.correction
+            z[i, j] = np.sqrt(mean_squared_error(test.y, pred_y + correction))
+
+    # cnorm = mpl.colors.LogNorm(vmin=0.01, vmax=1)
+    xi, yi = np.unravel_index(z.argmin(), z.shape)
+    cnorm = mpl.colors.Normalize(vmin=0, vmax=0.4)
+    fig, ax = plt.subplots()
+    ax.grid(alpha=0.3)
+    cb = ax.contourf(
+        c2_x, c1_x, z, cmap=mpl.cm.coolwarm, norm=cnorm
+    )
+    ax.scatter(c2_x[yi], c1_x[xi], c="k", marker="^")
+    text = f"({c1_x[xi]:.4f}, {c2_x[yi]:.4f}, {c3})"
+    ax.text(c2_x[yi] + .05, c1_x[xi] + 0.01, text)
+    fig.colorbar(cb, label="RMSE")
+    ax.set_ylabel(f"c1 [{c1_x[0]}, {c1_x[-1]}]")
+    ax.set_xlabel(f"c2 [{c2_x[0]}, {c2_x[-1]}]")
+    ax.xaxis.set_major_locator(mpl.ticker.LinearLocator(5))
+    ax.xaxis.set_major_formatter('{x:.02f}')
+    ax.yaxis.set_major_locator(mpl.ticker.LinearLocator(6))
+    ax.yaxis.set_major_formatter('{x:.02f}')
+    title = f"c3={c3} (RMSE: min={z.min():.3f}, avg={z.mean():.3f})"
+    ax.set_title(title, loc="left")
+    plt.tight_layout()
+    plt.show()
+    return None
+
+
+def fitted_c2_vs_c1_fixed_c3():
+    df = create_training_set(
+        year=[2010, 2011, 2012, 2013], filter_pct_clr=0.05,
+        filter_npts_clr=0.2, temperature=True, cs_only=True, drive="server4")
+    df['correction'] = np.exp(-1 * df.elev / 8500) - 1
+
+    c3 = 0.5
+    df["yc"] = df.y - (c3 * df.correction)
+    yticks = np.flip(np.arange(7))  # ticks for y-axis
+    c1_x = np.linspace(0.4, 0.8, 50)
+    c2 = np.zeros((len(ELEVATIONS), len(c1_x)))
+    rmse = np.zeros((len(ELEVATIONS), len(c1_x)))
+    i = 0
+    for site in ELEVATIONS:
+        tmp = df.loc[df.site == site[0]]
+        train = tmp.loc[tmp.index.year != 2013]
+        test = tmp.loc[tmp.index.year == 2013]
+        train_x = train.x.to_numpy().reshape(-1, 1)
+        train_y = train.yc.to_numpy().reshape(-1, 1)
+        for j in range(len(c1_x)):
+            model = LinearRegression(fit_intercept=False)
+            model.fit(train_x, train_y - c1_x[j])
+            pred_y = c1_x[j] + (model.coef_[0].round(4)[0] * test.x)
+            rmse[i, j] = np.sqrt(mean_squared_error(test.yc, pred_y))
+            c2[i, j] = model.coef_[0].round(4)[0]
+        i += 1
+
+    # fig, ax = plt.subplots(figsize=(8, 3))
+    fig, ax = plt.subplots()
+    ax.grid(alpha=0.3)
+    for i in range(len(ELEVATIONS)):
+        site = ELEVATIONS[i][0]
+        y_pad = rmse[i, :] * 5
+        ax.fill_between(
+            c1_x, c2[i, :] - y_pad, c2[i, :] + y_pad,
+            fc=COLOR7_DICT[site], alpha=0.2
+        )
+        ax.plot(c1_x, c2[i, :], label=site, c=COLOR7_DICT[site])
+    ax.legend()
+    ax.set_xlabel("given c1")
+    ax.set_ylabel("fitted c2")
+    # ax.set_xlim(0.5, 0.7)
+    # ax.set_ylim(0, 3)
+    ax.set_xlim(0.4, 0.8)
+    ax.set_ylim(-2, 6)
+    ax.set_title(f"c3={c3}", loc="left")
+    ax.set_axisbelow(True)
+    plt.show()
+    return None
+
+
 if __name__ == "__main__":
     print()

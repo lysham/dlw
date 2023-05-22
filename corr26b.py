@@ -24,7 +24,8 @@ from main import get_pw, get_esky_c, li_lw, CORR26A, compute_mbe, pw2tdp, tdp2pw
 from pcmap_data_funcs import get_asos_stations
 
 from constants import SIGMA, SURFRAD, SURF_COLS, SURF_ASOS, SURF_SITE_CODES, \
-    P_ATM, E_C1, E_C2, ELEV_DICT, ELEVATIONS, LON_DICT, SEVEN_COLORS, P_ATM_BAR
+    P_ATM, E_C1, E_C2, ELEV_DICT, ELEVATIONS, LON_DICT, SEVEN_COLORS, \
+    P_ATM_BAR, COLOR7_DICT
 from process import import_site_year
 
 
