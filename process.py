@@ -6,9 +6,10 @@ import pvlib
 import numpy as np
 import pandas as pd
 import datetime as dt
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-from constants import SURFRAD, SURF_COLS, SIGMA, SURF_SITE_CODES
+from constants import SURFRAD, SURF_COLS, SIGMA, SURF_SITE_CODES, LON_DICT
 
 
 def find_clearsky(df, window=10, min_sample=2):
@@ -286,17 +287,113 @@ def import_site_year(site, year, drive="hdd"):
     # drop rows with missing values in parameter columns
     df.dropna(subset=["t_a", "rh"], inplace=True)
     df = df.rename(columns={"pressure": "pa_hpa"})
+
+    df["site"] = site
+    return df
+
+
+def add_solar_time(df):
+    # index should be in UTC, df must include site
+    doy = df.index.dayofyear.to_numpy()
+    eq_of_time = pvlib.solarposition.equation_of_time_spencer71(doy)
+    df["lon"] = df["site"].map(LON_DICT)
+    df["dloc"] = 4 * df.lon
+    minutes = df.dloc + eq_of_time  # difference in min
+    df["dtime"] = pd.to_timedelta(minutes, unit="m")
+    df["solar_time"] = df.index + df.dtime
+    df = df.drop(columns=["dtime", "lon", "dloc"])
     return df
 
 
 if __name__ == "__main__":
+    print()
     # filepath to folder SURFRAD data
     # directory = os.path.join("/Volumes", "LMM_drive", "SURFRAD")
-    folder = os.path.join("data", "SURFRAD_raw")
-
-    start_time = time.time()
-    for s in SURF_SITE_CODES:
-        add_pvlib_cs(s, year="2008", drive="server4")
-        print(s, time.time() - start_time)
+    # folder = os.path.join("data", "SURFRAD_raw")
+    # start_time = time.time()
+    # for s in SURF_SITE_CODES:
+    #     if s != "SXF":
+    #         for year in np.arange(2000, 2023):
+    #             process_site(s, folder, yr=f"{year}", min_sample=2)
+    #             add_pvlib_cs(s, year=year, drive="server4")
+    #     print(s, time.time() - start_time)
+    #
+    # start_time = time.time()
+    # for s in SURF_SITE_CODES:
+    #     add_pvlib_cs(s, year="2008", drive="server4")
+    #     print(s, time.time() - start_time)
 
     # todo potential issue with existing t_sky columns and duplicate reno_cs
+    # redo all sites for consistency
+
+    red = "#C54459"  # muted red
+    blue = "#4C6BE6"  # powder blue
+    mint = "#6CB289"
+    gold = "#E0A500"
+
+    s = "DRA"
+    df = import_site_year(s, year=2020, drive="server4")
+    df = add_solar_time(df)
+    df = df.set_index("solar_time")
+    x = df[["cs_period", "reno_cs"]].groupby(df.index.date).sum()
+    x["daily_diff"] = np.abs(x.cs_period - x.reno_cs)
+    x["cr_diff"] = x.cs_period - x.reno_cs
+    # x = x.sort_values('daily_diff')
+
+    fig, ax = plt.subplots(figsize=(11, 4))
+    ax.grid(alpha=0.3)
+    x1 = x.loc[x.cr_diff == 0].copy()
+    ax.scatter(x1.index, x1.cr_diff, c=mint, marker=".", label="C = R")
+    x1 = x.loc[x.cr_diff < 0].copy()
+    ax.scatter(x1.index, x1.cr_diff, c=blue, marker=".", label="C < R")
+    x1 = x.loc[x.cr_diff > 0].copy()
+    ax.scatter(x1.index, x1.cr_diff, c=red, marker=".", label="C > R")
+    ax.set_ylim(-400, 400)
+    ax.set_xlim(x.index[0], x.index[-1])
+    ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('%b'))
+    ax.set_ylabel("Daily C - R")
+    ax.set_title(f"{s} {x.index[-1].year}", loc="left")
+    ax.legend(frameon=True, ncol=3, bbox_to_anchor=(1, 0.99), loc="upper right")
+    plt.tight_layout()
+    plt.show()
+
+    # fig, ax = plt.subplots(figsize=(10, 3))
+    # ax.scatter(range(x.shape[0]), x.cs_period, label="cs")
+    # ax.scatter(range(x.shape[0]), x.reno_cs, label="reno")
+    # plt.show()
+
+    # FIGURE
+    plot_date = dt.date(2020, 8, 20)
+    pdf = df.loc[df.index.date == plot_date].copy()
+
+    npts_r = pdf.loc[pdf.reno_cs].shape[0]
+    npts_c = pdf.loc[pdf.cs_period].shape[0]
+    npts_o = pdf.loc[pdf.reno_cs & pdf.cs_period].shape[0]
+    frac_r = npts_r / pdf.shape[0]
+    frac_c = npts_c / pdf.shape[0]
+    frac_o = npts_o / pdf.shape[0]
+    txt1 = f"frac clr: C {frac_c:.2f} | R {frac_r:.2f} | O {frac_o:.2f}"
+    txt2 = f"npts clr: C {npts_c} | R {npts_r} | O {npts_o}"
+
+    fig, ax = plt.subplots(figsize=(12, 4))
+    date_str = plot_date.strftime("%m-%d-%Y")
+    title = f"{s} {date_str}"
+    ax.set_title(title, loc="left")
+    ax.plot(pdf.index, pdf.DNI_m, c=blue, label="DNI")
+    ax.plot(pdf.index, pdf.DNI_c, c=blue, ls="--", label="DNI_c")
+    ax.plot(pdf.index, pdf.GHI_m, c=mint, label="GHI")
+    ax.plot(pdf.index, pdf.GHI_c, c=mint, ls="--", label="GHI_c")
+    ax.fill_between(
+        pdf.index, 0, pdf.GHI_m, where=pdf.cs_period, fc="0.7", alpha=0.4,
+        label="CS", ec="0.3"
+    )
+    ax.fill_between(
+        pdf.index, 0, pdf.GHI_m, where=pdf.reno_cs, fc="0.9", alpha=0.4,
+        hatch="//", label="Reno", ec="0.5"
+    )
+    ax.text(0.01, 0.98, txt1, va="top", transform=ax.transAxes)
+    ax.text(0.01, 0.92, txt2, va="top", transform=ax.transAxes)
+    ax.set_ylim(bottom=0)
+    ax.legend(frameon=False, ncol=6, bbox_to_anchor=(1, 1), loc="lower right")
+    ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M'))
+    plt.show()

@@ -26,7 +26,7 @@ from pcmap_data_funcs import get_asos_stations
 from constants import SIGMA, SURFRAD, SURF_COLS, SURF_ASOS, SURF_SITE_CODES, \
     P_ATM, E_C1, E_C2, ELEV_DICT, ELEVATIONS, LON_DICT, SEVEN_COLORS, \
     P_ATM_BAR, COLOR7_DICT
-from process import import_site_year
+from process import import_site_year, add_solar_time
 
 
 def tsky_table(l1, l2):
@@ -366,19 +366,6 @@ def e_time(n):
     e = 229.2 * (0.0000075 + (0.001868 * np.cos(b)) - (0.032077 * np.sin(b)) -
                  (0.014615 * np.cos(2 * b)) - (0.04089 * np.sin(2 * b)))
     return e
-
-
-def add_solar_time(df):
-    # index should be in UTC, df must include site
-    doy = df.index.dayofyear.to_numpy()
-    eq_of_time = pvlib.solarposition.equation_of_time_spencer71(doy)
-    df["lon"] = df["site"].map(LON_DICT)
-    df["dloc"] = 4 * df.lon
-    minutes = df.dloc + eq_of_time  # difference in min
-    df["dtime"] = pd.to_timedelta(minutes, unit="m")
-    df["solar_time"] = df.index + df.dtime
-    df = df.drop(columns=["dtime", "lon", "dloc"])
-    return df
 
 
 def fit_linear(df, set_intercept=None, print_out=False):
