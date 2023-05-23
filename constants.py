@@ -26,18 +26,19 @@ SURFRAD = dict(
 # pd.DataFrame.from_dict(SURFRAD, orient="index")
 # albedo and surface type from Marion, 2021, osti 1763970
 
-SEVEN_COLORS = ["#156064", "#00C49A", "#F8E16C", "#FFC2B4",
-                "#FB8F67", "#437C90", "#7E2E84"]
-COLOR7_DICT = {}
-for i in range(len(SURF_SITE_CODES)):
-    COLOR7_DICT[SURF_SITE_CODES[i]] = SEVEN_COLORS[i]
-
 ELEV_DICT = {}
 LON_DICT = {}
 for i in SURFRAD:
     ELEV_DICT[i] = SURFRAD[i]["alt"]
     LON_DICT[i] = SURFRAD[i]["lon"]
 ELEVATIONS = sorted(ELEV_DICT.items(), key=lambda x: x[1])  # sorted list
+
+
+SEVEN_COLORS = ["#156064", "#00C49A", "#F8E16C", "#FFC2B4",
+                "#FB8F67", "#437C90", "#7E2E84"]
+COLOR7_DICT = {}
+for i in range(len(ELEVATIONS)):
+    COLOR7_DICT[ELEVATIONS[i][0]] = SEVEN_COLORS[i]
 
 # Generate from integrating shakespeare data (function in ref_func)
 SITE_H_DICT = {

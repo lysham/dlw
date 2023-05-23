@@ -2083,5 +2083,52 @@ def fitted_c2_vs_c1_fixed_c3():
     return None
 
 
+def cs_count_per_site():
+    s = "SXF"
+    out = []
+    for yr in np.arange(2003, 2023):
+        df = import_site_year(s, yr, drive="server4")
+        entry = dict(
+            year=yr,
+            cs_base=df.cs_period.sum(),
+            cs_reno=df.reno_cs.sum(),
+            cs_union=df[["cs_period", "reno_cs"]].all(axis=1).sum(),
+            cs_intersect=df[["cs_period", "reno_cs"]].any(axis=1).sum(),
+            total=df.shape[0]
+        )
+        out.append(entry)
+    df = pd.DataFrame(out)
+    filename = os.path.join("data", "cs_count", f"{s}.csv")
+    df.to_csv(filename)
+    return None
+
+
+def plot_cs_count_per_site():
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.grid(alpha=0.3)
+    total = np.zeros(len(np.arange(2003, 2023)))
+    cs_sum = np.zeros(len(total))
+    for s in SURF_SITE_CODES:
+        filename = os.path.join("data", "cs_count", f"{s}.csv")
+        df = pd.read_csv(filename, index_col=0)
+        ax.step(
+            df.year, df.cs_union / df.total, where="post", c=COLOR7_DICT[s],
+            label=s,
+        )
+        total += df.loc[df.year >= 2003, "total"].to_numpy()
+        cs_sum += df.loc[df.year >= 2003, "cs_union"].to_numpy()
+    ax.plot(np.arange(2003, 2023), cs_sum / total, ".--", c="0.3",
+            label="total")
+
+    ax.legend(bbox_to_anchor=(1, 1))
+    ax.set_ylim(0, 0.8)
+    ax.set_xlim(2000, 2023)
+    ax.set_ylabel("Fraction of samples labelled clear per year")
+    ax.set_axisbelow(True)
+    plt.tight_layout()
+    plt.show()
+    return None
+
+
 if __name__ == "__main__":
     print()
