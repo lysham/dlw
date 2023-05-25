@@ -1383,10 +1383,11 @@ def plot_t0_p0_per_site():
 
 def plot_ts_ps_season():
     # variation on t0/p0 original, without season distinction
-    overlay_profile = False
+    overlay_profile = True
     filter_ta = False
     alpha_background = 0.2 if overlay_profile else 1.0
     pm_p_mb = 20  # plus minus pressure (mb)
+    ms = 15  # marker size
 
     if overlay_profile:
         filename = os.path.join("data", "afgl_midlatitude_summer.csv")
@@ -1395,8 +1396,8 @@ def plot_ts_ps_season():
         af_win = pd.read_csv(filename)
 
     df = create_training_set(
-        year=[2011, 2012], all_sites=True, site=None, temperature=False,
-        cs_only=True, pct_clr_min=0.3
+        year=[2010, 2011, 2012], temperature=False, cs_only=True,
+        filter_pct_clr=0.05, filter_npts_clr=0.2, drive="server4"
     )
     df = reduce_to_equal_pts_per_site(df)
 
@@ -1447,23 +1448,23 @@ def plot_ts_ps_season():
 
         ax.scatter(
             group.loc[group.season == "fall"].t_a,
-            group.loc[group.season == "fall"].pa_hpa, marker="*",
+            group.loc[group.season == "fall"].pa_hpa, marker="*", s=ms,
             alpha=0.8 * alpha_background * 0.5,
             c=SEVEN_COLORS[i], ec="0.5", zorder=10)
         ax.scatter(
             group.loc[group.season == "spring"].t_a,
-            group.loc[group.season == "spring"].pa_hpa, marker="*",
+            group.loc[group.season == "spring"].pa_hpa, marker="*", s=ms,
             alpha=0.8 * alpha_background * 0.5,
             c=SEVEN_COLORS[i], ec="0.5", zorder=10)
 
         ax.scatter(
             group.loc[group.season == "summer"].t_a,
-            group.loc[group.season == "summer"].pa_hpa, marker="o",
+            group.loc[group.season == "summer"].pa_hpa, marker="o", s=ms,
             alpha=0.8 * alpha_background,
             c=SEVEN_COLORS[i], ec="0.5", zorder=10)
         ax.scatter(
             group.loc[group.season == "winter"].t_a,
-            group.loc[group.season == "winter"].pa_hpa, marker="^",
+            group.loc[group.season == "winter"].pa_hpa, marker="^", s=ms,
             alpha=0.8 * alpha_background,
             c=SEVEN_COLORS[i], ec="0.5", zorder=10)
         i += 1
@@ -1482,7 +1483,7 @@ def plot_ts_ps_season():
     ax.plot([], [], marker="^", color="0.2", ls="none", label="winter")
     ax.plot([], [], marker="*", color="0.2", ls="none", label="spring/fall")
     lgd = ax.legend(bbox_to_anchor=(1.0, 1.0), loc="upper left")
-    for lh in lgd.legendHandles:
+    for lh in lgd.legend_handles:
         lh.set_alpha(1)
     ax.set_xlabel("T$_a$ [K]")
     ax.set_ylabel("P [mb]")
@@ -1490,8 +1491,8 @@ def plot_ts_ps_season():
     plt.tight_layout()
     suffix = "_afgl" if overlay_profile else ""
     suffix += "_filterTa" if filter_ta else ""
-    filename = os.path.join("figures", f"ts_ps_season{suffix}.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    # filename = os.path.join("figures", f"ts_ps_season{suffix}.png")
+    # fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 
 
@@ -2035,7 +2036,7 @@ def rmse_contour_c1_vs_c2():
 def fitted_c2_vs_c1_fixed_c3():
     df = create_training_set(
         year=[2010, 2011, 2012, 2013], filter_pct_clr=0.05,
-        filter_npts_clr=0.2, temperature=True, cs_only=True, drive="server4")
+        filter_npts_clr=0.2, temperature=False, cs_only=True, drive="server4")
     df['correction'] = np.exp(-1 * df.elev / 8500) - 1
 
     c3 = 0.5

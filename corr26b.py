@@ -471,7 +471,7 @@ def create_training_set(year=[2012, 2013], sites=SURF_SITE_CODES,
 
     df = pd.DataFrame()
     for s in sites:
-        print(s)
+        # print(s)
         for yr in year:
             check_sxf = (s == "SXF") and (yr < 2003)
             if not check_sxf:
@@ -585,4 +585,48 @@ if __name__ == "__main__":
     #         print(s, yr, f"{clr_reno_pct:.2%} "
     #                      f"{clr_orig_pct:.2%} {clr_overlap_pct:.2%}")
     #     print()
+    # contourf plots, fixed c1, c2, c3. RMSE evaluated collectively.
+    df = create_training_set(
+        year=[2010, 2011, 2012, 2013], filter_pct_clr=0.05,
+        filter_npts_clr=0.2, temperature=False, cs_only=True, drive="server4"
+    )
+    df['correction'] = np.exp(-1 * df.elev / 8500) - 1
+    test = df.copy()
+    # train = df.loc[df.index.year != 2012].copy()
+    # test = df.loc[df.index.year == 2012].copy()  # make test set
+
+    c1_x = np.linspace(0.3, 0.8, 25)  # 100
+    c2_x = np.linspace(1, 3, 50)  # 200
+    c3 = 0.4
+
+    z = np.zeros((len(c1_x), len(c2_x)))
+    for i in range(len(c1_x)):
+        for j in range(len(c2_x)):
+            pred_y = c1_x[i] + c2_x[j] * test.x
+            correction = c3 * test.correction
+            z[i, j] = np.sqrt(mean_squared_error(test.y, pred_y + correction))
+
+    # cnorm = mpl.colors.LogNorm(vmin=0.01, vmax=1)
+    xi, yi = np.unravel_index(z.argmin(), z.shape)
+    cnorm = mpl.colors.Normalize(vmin=0, vmax=0.4)
+    fig, ax = plt.subplots()
+    ax.grid(alpha=0.3)
+    cb = ax.contourf(
+        c2_x, c1_x, z, cmap=mpl.cm.coolwarm, norm=cnorm
+    )
+    ax.scatter(c2_x[yi], c1_x[xi], c="k", marker="^")
+    text = f"({c1_x[xi]:.4f}, {c2_x[yi]:.4f}, {c3})"
+    ax.text(c2_x[yi] + .05, c1_x[xi] + 0.01, text)
+    fig.colorbar(cb, label="RMSE")
+    ax.set_ylabel(f"c1 [{c1_x[0]}, {c1_x[-1]}]")
+    ax.set_xlabel(f"c2 [{c2_x[0]}, {c2_x[-1]}]")
+    ax.xaxis.set_major_locator(mpl.ticker.LinearLocator(5))
+    ax.xaxis.set_major_formatter('{x:.02f}')
+    ax.yaxis.set_major_locator(mpl.ticker.LinearLocator(6))
+    ax.yaxis.set_major_formatter('{x:.02f}')
+    title = f"c3={c3} (RMSE: min={z.min():.3f}, avg={z.mean():.3f})"
+    ax.set_title(title, loc="left")
+    plt.tight_layout()
+    plt.show()
+
 

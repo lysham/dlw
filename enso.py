@@ -161,6 +161,31 @@ def c3_intime(c1_const, c2_const):
     return None
 
 
+def c2_intime(c1_const, c3_const):
+    start_time = time.time()
+    years = np.arange(2000, 2023)  # till 2022
+    c2 = np.zeros(len(years))
+
+    i = 0
+    for yr in years:
+        df = create_training_set(
+            year=[yr], temperature=True, cs_only=True,
+            filter_pct_clr=0.05, filter_npts_clr=0.2, drive="server4"
+        )
+        df = reduce_to_equal_pts_per_site(df)
+        df['correction'] = c3_const * (np.exp(-1 * df.elev / 8500) - 1)
+        df["y_ref"] = df.y.to_numpy()
+        df["y"] = df.y_ref + df.correction - c1_const
+        _, c2[i] = fit_linear(df, set_intercept=0)
+
+        i += 1
+        print(yr, time.time() - start_time)
+
+    df = pd.DataFrame(dict(year=years, c1=c1_const, c2=c2, c3=c3_const))
+    df.to_csv(os.path.join("data", "enso_c", f"c2_{c1_const}_{c3_const}.csv"))
+    return None
+
+
 def plot_index(filename, save_name="enso_index", c1=True, c2=True, c3=True):
     df = pd.read_csv(filename, index_col=0)
 
@@ -206,20 +231,29 @@ def plot_index(filename, save_name="enso_index", c1=True, c2=True, c3=True):
     ax.step(oni.index, oni.yr_avg, label="ONI", c=oni_color, where="post")
     ax.step(mei.index, mei.yr_avg, label="MEIv2", c=mei_color, where="post")
 
+    title = ""
     if c1:
         ax.step(df.index, df.c1, label="c1", c=mint, where="post")
+    else:
+        title += f"c1={df.c1.values[0]} "
     if c2:
         ax.step(df.index, df.c2, label="c2", c=gold, where="post")
+    else:
+        title += f"c2={df.c2.values[0]} "
     if c3:
         ax.step(df.index, df.c3, label="c3", c="0.5", where="post")
+    else:
+        title += f"c3={df.c3.values[0]} "
 
     ax.set_xlim(oni.index[0], oni.index[-1])
     ymin, ymax = ax.get_ylim()
     ylim = abs(ymin) if abs(ymin) > ymax else ymax
     ax.set_ylim(-1 * ylim, ylim)  # ensure symmetric around y=0
     ax.set_ylabel(r"$\leftarrow$ La Niña$\quad\quad$ El Niño $\rightarrow$")
-    ax.legend()
+    ax.legend(ncol=5, bbox_to_anchor=(1.0, 1.01), loc="lower right")
+    ax.set_title(title, loc="left")
     ax.set_axisbelow(True)
+    plt.tight_layout()
     plt.show()
     # filename = os.path.join("figures", save_name + ".png")
     # fig.savefig(filename, bbox_inches="tight", dpi=300)
@@ -237,10 +271,21 @@ if __name__ == "__main__":
     # preprocess_oni()
     # c1c2_intime()  # TODO issue with constants
     # c3_intime(c1_const=0.6, c2_const=1.6)
-    filename = os.path.join("data", "enso_c", f"c1c2c3.csv")
-    # filename = os.path.join("data", "enso_c", f"c1=0.6_c3=0.13.csv")
-    # plot_index(filename, save_name="tmp")
+    # c2_intime(c1_const=0.6, c3_const=0.1)
+    # c2_intime(c1_const=0.6, c3_const=0.15)
+    # filename = os.path.join("data", "enso_c", f"c1c2c3.csv")
+    filename = os.path.join("data", "enso_c", f"c2_0.6_0.15.csv")
+    # plot_index(filename, save_name="tmp", c1=False, c3=False)
     df = pd.read_csv(filename, index_col=0)
+
+    fig, ax = plt.subplots()
+    ax.grid(alpha=0.5)
+    ax.plot(df.year, df.c2, ".-")
+    ax.set_xlabel("year")
+    ax.set_ylabel("c2")
+    ax.set_xlim(2000, 2023)
+    ax.set_ylim(1.2, 1.6)
+    plt.show()
 
     # # increments of 5 ye    ars[00 - 05, 06 - 10, 11 - 15, 16 - 22]
     # for y1, y2 in [(0, 5), (6, 10), (11, 15), (16, 22)]:
@@ -251,106 +296,129 @@ if __name__ == "__main__":
     #     )
     #     filename = os.path.join(
     #         "data", "train_df",
-    #         f"train_pct20_npts20_{str(y1+2000)[-2:]}_{str(y2+2000)[-2:]}.csv")
+    #         f"train_pct05_npts20_{str(y1+2000)[-2:]}_"
+    #         f"{str(y2+2000)[-2:]}_allT.csv")
     #     df.to_csv(filename)
-    #
-    # start_time = time.time()
-    # df = pd.DataFrame()
-    # for y1, y2 in [(6, 10), (11, 15), (16, 22)]:
-    #     filename = os.path.join(
-    #         "data", "train_df",
-    #         f"train_pct20_npts20_{str(y1+2000)[-2:]}_{str(y2+2000)[-2:]}.csv")
-    #     tmp = pd.read_csv(filename, index_col=0, parse_dates=True)
-    #     tmp = tmp.loc[(abs(tmp.t_a - tmp.afgl_t0) <= 2)]
-    #     df = pd.concat([df, tmp])
-    #     print(time.time() - start_time)
-    #
-    # df["year"] = df.index.year
-    # df["month"] = df.index.month
-    # df_train = df.copy(deep=True)
-    #
-    # keep_samples = 1000
-    # # site = "GWC"
-    # out = []  # c1, c2, c3, rmse, r2, npts
-    # for yr, group1 in df_train.groupby(df_train.year):
-    #     # group1 = group1.loc[group1.site == site]
-    #     for m, group2 in group1.groupby(group1.month):
-    #         n_pts = group2.shape[0]
-    #         n_sites = len(np.unique(group2.site.to_numpy()))
-    #         group2 = group2.sample(
-    #             n=keep_samples, replace=True, random_state=21)
-    #
-    #         c1, c2, c3 = three_c_fit(group2)
-    #         train_y = group2.y.to_numpy().reshape(-1, 1)
-    #         if n_sites > 1:
-    #             pred_y = c1 + (c2 * group2.x) + (c3 * group2.correction)
-    #         else:
-    #             pred_y = c1 + (c2 * group2.y)
-    #         rmse = np.sqrt(mean_squared_error(train_y, pred_y))
-    #         r2 = r2_score(train_y, pred_y)
-    #         entry = dict(
-    #             year=yr, month=m, day=1,
-    #             c1=c1, c2=c2, c3=c3,
-    #             r2=r2, rmse=rmse, n_pts=n_pts, n_sites=n_sites
-    #         )
-    #         out.append(entry)
-    # # df_ref = df.copy(deep=True)
-    # df = pd.DataFrame(out)
-    # df["date"] = pd.to_datetime(df[["year", "month", "day"]])
-    # df = df.set_index("date").sort_index()
-    # df = df.drop(columns=["year", "month", "day"])
-    #
-    # mei_color = "#C54459"  # muted red
-    # oni_color = "#4C6BE6"  # powder blue
-    # mint = "#6CB289"
-    # gold = "#E0A500"
-    #
-    # oni, mei = import_oni_mei_data()
+
+    start_time = time.time()
+    df = pd.DataFrame()
+    for y1, y2 in [(0, 5), (6, 10), (11, 15), (16, 22)]:
+        filename = os.path.join(
+            "data", "train_df",
+            f"train_pct05_npts20_{str(y1+2000)[-2:]}_"
+            f"{str(y2+2000)[-2:]}_allT.csv")
+        tmp = pd.read_csv(filename, index_col=0, parse_dates=True)
+        # tmp = tmp.loc[(abs(tmp.t_a - tmp.afgl_t0) <= 2)]
+        df = pd.concat([df, tmp])
+        print(time.time() - start_time)
+
+    df["year"] = df.index.year
+    df["month"] = df.index.month
+    df_train = df.copy(deep=True)
+
+    keep_samples = 1000
+    c1_const = 0.6
+    c3_const = 0.1
+    # site = "GWC"
+    out = []  # c1, c2, c3, rmse, r2, npts
+    df_train["correction"] = c3_const * (np.exp(-1 * df_train.elev / 8500) - 1)
+    for yr, group1 in df_train.groupby(df_train.year):
+        # group1 = group1.loc[group1.site == site]
+        for m, group2 in group1.groupby(group1.month):
+            n_pts = group2.shape[0]
+            n_sites = len(np.unique(group2.site.to_numpy()))
+            group2 = group2.sample(
+                n=keep_samples, replace=True, random_state=21)
+
+            # c1, c2, c3 = three_c_fit(group2)
+            train_y = group2.y.to_numpy().reshape(-1, 1)
+            group2.y = group2.y + (c3_const * group2.correction) - c1_const
+            _, c2 = fit_linear(group2, set_intercept=0)
+
+            if n_sites > 1:
+                pred_y = c1_const + (c2 * group2.x) + (c3_const * group2.correction)
+            else:
+                pred_y = c1_const + (c2 * group2.y)
+            rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+            r2 = r2_score(train_y, pred_y)
+            entry = dict(
+                year=yr, month=m, day=1,
+                c1=c1_const, c2=c2, c3=c3_const,
+                r2=r2, rmse=rmse, n_pts=n_pts, n_sites=n_sites
+            )
+            out.append(entry)
+    # df_ref = df.copy(deep=True)
+    df = pd.DataFrame(out)
+    df["date"] = pd.to_datetime(df[["year", "month", "day"]])
+    df = df.set_index("date").sort_index()
+    df = df.drop(columns=["year", "month", "day"])
+
+    mei_color = "#C54459"  # muted red
+    oni_color = "#4C6BE6"  # powder blue
+    mint = "#6CB289"
+    gold = "#E0A500"
+
+    oni, mei = import_oni_mei_data()
     # mei = mei.loc[mei.index.year >= 2006]
     # oni = oni.loc[oni.index.year >= 2006]
-    #
+
     # month_window = 3
     # df = df.rolling(month_window, center=False).sum()
-    #
-    # fig, (ax0, ax) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
-    # # fig, ax = plt.subplots(figsize=(16, 4))
-    # ax0.step(df.index, df.rmse)
-    # ax0.set_ylim(bottom=0)
-    #
-    # ax.grid(axis="x", alpha=0.2)
-    # ax.axhline(0, ls="--", c="0.3", alpha=0.3)
-    # ax.axhline(0.6, ls=":", c="0.8", alpha=0.3)
-    # ax.plot(oni.index, oni.value, c=oni_color, alpha=0.4)
-    # ax.plot(mei.index, mei.value, c=mei_color, alpha=0.4)
-    #
-    # ax.step(df.index, df.c1 / month_window, label="c1", c=mint, where="post")
-    # ax.step(df.index, df.c2 / month_window, label="c2", c=gold, where="post")
-    # ax.step(df.index, df.c3 / month_window, label="c3", c="0.5", where="post")
-    #
-    # ax.set_xlim(df.index[0], df.index[-1])
-    # # ymin, ymax = ax.get_ylim()
-    # # ylim = abs(ymin) if abs(ymin) > ymax else ymax
-    # # ax.set_ylim(-1 * ylim, ylim)  # ensure symmetric around y=0
-    # ax.set_ylim(-2, 2)
-    # ax.set_ylabel(r"$\leftarrow$ La Niña$\quad\quad$ El Niño $\rightarrow$")
-    # ax.legend()
-    # ax.set_axisbelow(True)
-    # ax.set_title(f"Month rolling window = {month_window}", loc="left")
-    # plt.show()
-    # #
-    # # filename = os.path.join("figures", f"enso_m{month_window}_2.png")
-    # # fig.savefig(filename, bbox_inches="tight", dpi=300)
 
-    # # df["mei"] = mei.value.groupby(mei.index.year).median().to_numpy()
-    # # df["oni"] = oni.value.groupby(oni.index.year).median().to_numpy()
-    # df = pd.merge_asof(
-    #     df, mei["value"], left_index=True, right_index=True, direction="nearest"
-    # )
-    # df = pd.merge_asof(
-    #     df, oni["value"], left_index=True, right_index=True, direction="nearest"
-    # )
-    # print(df.corr())
+    grid_alpha = 0.5
+    fig, axes = plt.subplots(3, 1, figsize=(12, 8), sharex=True, height_ratios=[1, 1, 2])
+    plt.subplots_adjust(hspace=0.1)
+    # fig, ax = plt.subplots(figsize=(16, 4))
+    ax = axes[0]
+    ax.step(df.index, df.rmse)
+    ax.set_ylim(bottom=0)
+    ax.grid(alpha=grid_alpha)
+    ax.set_axisbelow(True)
+    ax.set_ylabel("RMSE")
+
+    ax = axes[1]
+    ax.step(df.index, df.n_pts)
+    ax.set_ylim(bottom=0)
+    ax.grid(alpha=grid_alpha)
+    ax.set_axisbelow(True)
+    ax.set_ylabel("sample size")
+
+    ax = axes[-1]
+    ax.grid(alpha=grid_alpha)
+    ax.axhline(0, ls="--", c="0.3", alpha=0.3)
+    # ax.axhline(0.6, ls=":", c="0.8", alpha=0.3)
+    ax.plot(oni.index, oni.value, c=oni_color, alpha=0.4)
+    ax.plot(mei.index, mei.value, c=mei_color, alpha=0.4)
+
+    # ax.step(df.index, df.c1 / month_window, label="c1", c=mint, where="post")
+    ax.step(df.index, df.c2, label="c2", c=gold, where="post")
+    # ax.step(df.index, df.c3 / month_window, label="c3", c="0.5", where="post")
+
+    ax.set_xlim(df.index[0], df.index[-1])
+    # ymin, ymax = ax.get_ylim()
+    # ylim = abs(ymin) if abs(ymin) > ymax else ymax
+    # ax.set_ylim(-1 * ylim, ylim)  # ensure symmetric around y=0
+    ax.set_ylim(-2, 2)
+    ax.set_ylabel(r"$\leftarrow$ La Niña$\quad\quad$ El Niño $\rightarrow$")
+    # ax.legend()
+    ax.xaxis.set_major_locator(mpl.dates.YearLocator())
+    ax.set_axisbelow(True)
+    # ax.set_title(f"Month rolling window = {month_window}", loc="left")
+    plt.show()
     #
+    # filename = os.path.join("figures", f"enso_m{month_window}_2.png")
+    # fig.savefig(filename, bbox_inches="tight", dpi=300)
+
+    # df["mei"] = mei.value.groupby(mei.index.year).median().to_numpy()
+    # df["oni"] = oni.value.groupby(oni.index.year).median().to_numpy()
+    df = pd.merge_asof(
+        df, mei["value"], left_index=True, right_index=True, direction="nearest"
+    )
+    df = pd.merge_asof(
+        df, oni["value"], left_index=True, right_index=True, direction="nearest"
+    )
+    print(df.corr())
+
     # analysis = df[['c1']].copy()
     # analysis.dropna(inplace=True)
     # decompose_result_mult = seasonal_decompose(analysis, model="additive", period=12)
