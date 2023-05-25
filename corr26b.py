@@ -461,7 +461,8 @@ def add_afgl_t0_p0(df):
 
 def create_training_set(year=[2012, 2013], sites=SURF_SITE_CODES,
                         temperature=False, cs_only=True, filter_pct_clr=None,
-                        filter_npts_clr=None, drive="server4"):
+                        filter_npts_clr=None, filter_solar_time=True,
+                        drive="server4"):
     if isinstance(sites, str):
         sites = [sites]
     keep_cols = [
@@ -487,7 +488,8 @@ def create_training_set(year=[2012, 2013], sites=SURF_SITE_CODES,
                 tmp["site"] = s
                 tmp = add_solar_time(tmp)
                 tmp = tmp.set_index("solar_time")
-                tmp = tmp.loc[tmp.index.hour > 8]  # filter solar time
+                if filter_solar_time:
+                    tmp = tmp.loc[tmp.index.hour > 8]  # filter solar time
 
                 tmp["csv2"] = (tmp.cs_period & tmp.reno_cs)
                 # tmp["csv2"] = tmp.reno_cs
