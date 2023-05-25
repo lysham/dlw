@@ -274,18 +274,18 @@ if __name__ == "__main__":
     # c2_intime(c1_const=0.6, c3_const=0.1)
     # c2_intime(c1_const=0.6, c3_const=0.15)
     # filename = os.path.join("data", "enso_c", f"c1c2c3.csv")
-    filename = os.path.join("data", "enso_c", f"c2_0.6_0.15.csv")
-    # plot_index(filename, save_name="tmp", c1=False, c3=False)
-    df = pd.read_csv(filename, index_col=0)
-
-    fig, ax = plt.subplots()
-    ax.grid(alpha=0.5)
-    ax.plot(df.year, df.c2, ".-")
-    ax.set_xlabel("year")
-    ax.set_ylabel("c2")
-    ax.set_xlim(2000, 2023)
-    ax.set_ylim(1.2, 1.6)
-    plt.show()
+    # filename = os.path.join("data", "enso_c", f"c2_0.6_0.15.csv")
+    # # plot_index(filename, save_name="tmp", c1=False, c3=False)
+    # df = pd.read_csv(filename, index_col=0)
+    #
+    # fig, ax = plt.subplots()
+    # ax.grid(alpha=0.5)
+    # ax.plot(df.year, df.c2, ".-")
+    # ax.set_xlabel("year")
+    # ax.set_ylabel("c2")
+    # ax.set_xlim(2000, 2023)
+    # ax.set_ylim(1.2, 1.6)
+    # plt.show()
 
     # # increments of 5 ye    ars[00 - 05, 06 - 10, 11 - 15, 16 - 22]
     # for y1, y2 in [(0, 5), (6, 10), (11, 15), (16, 22)]:
@@ -341,10 +341,15 @@ if __name__ == "__main__":
                 pred_y = c1_const + (c2 * group2.y)
             rmse = np.sqrt(mean_squared_error(train_y, pred_y))
             r2 = r2_score(train_y, pred_y)
+            avg_pw = group2.x.mean()
             entry = dict(
                 year=yr, month=m, day=1,
                 c1=c1_const, c2=c2, c3=c3_const,
-                r2=r2, rmse=rmse, n_pts=n_pts, n_sites=n_sites
+                r2=r2, rmse=rmse, n_pts=n_pts, n_sites=n_sites,
+                avg_x=group2.x.mean(), avg_y=group2.y.mean(),
+                avg_t=group2.t_a.mean(),
+                avg_rh=group2.rh.mean(),
+                avg_pw=group2.pw_hpa.mean()
             )
             out.append(entry)
     # df_ref = df.copy(deep=True)
@@ -353,10 +358,37 @@ if __name__ == "__main__":
     df = df.set_index("date").sort_index()
     df = df.drop(columns=["year", "month", "day"])
 
+    fig, ax = plt.subplots(figsize=(12, 4))
+    ax.grid(True, alpha=0.3)
+    ax.plot(df.index, df.avg_rh, label="avg T_a")
+    # ax.legend()
+    ax.set_xlim(df.index[0], df.index[-1])
+    ax.set_ylim(20, 70)
+    ax.xaxis.set_major_locator(mpl.dates.YearLocator())
+    ax.set_axisbelow(True)
+    ax.set_title("Monthly average RH (all sites)", loc="left")
+    plt.tight_layout()
+    plt.show()
+
     mei_color = "#C54459"  # muted red
     oni_color = "#4C6BE6"  # powder blue
     mint = "#6CB289"
     gold = "#E0A500"
+
+    fig, ax = plt.subplots(figsize=(12, 4))
+    ax.grid(True, alpha=0.3)
+    ax.plot(df.index, df.c2, color=gold, label="monthly")
+    pdf = df.rolling(6, center=True).mean()
+    ax.plot(pdf.index, pdf.c2, label="6mo avg")
+    pdf = df.rolling(12, center=True).mean()
+    ax.plot(pdf.index, pdf.c2, c=mei_color, label="12mo avg")
+    ax.set_axisbelow(True)
+    ax.set_xlim(df.index[0], df.index[-1])
+    ax.xaxis.set_major_locator(mpl.dates.YearLocator())
+    ax.legend()
+    ax.set_title("Fitted c2 values (all sites) for c1=0.6, c3=0.1", loc="left")
+    plt.tight_layout()
+    plt.show()
 
     oni, mei = import_oni_mei_data()
     # mei = mei.loc[mei.index.year >= 2006]
@@ -366,22 +398,25 @@ if __name__ == "__main__":
     # df = df.rolling(month_window, center=False).sum()
 
     grid_alpha = 0.5
-    fig, axes = plt.subplots(3, 1, figsize=(12, 8), sharex=True, height_ratios=[1, 1, 2])
+    # fig, ax = plt.subplots(figsize=(12, 4))
+    fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=True, height_ratios=[1, 2])
     plt.subplots_adjust(hspace=0.1)
     # fig, ax = plt.subplots(figsize=(16, 4))
     ax = axes[0]
-    ax.step(df.index, df.rmse)
+    # ax.step(df.index, df.rmse)
+    ax.step(df.index, df.avg_rh)
     ax.set_ylim(bottom=0)
     ax.grid(alpha=grid_alpha)
     ax.set_axisbelow(True)
-    ax.set_ylabel("RMSE")
+    # ax.set_ylabel("RMSE")
+    ax.set_ylabel("RH")
 
-    ax = axes[1]
-    ax.step(df.index, df.n_pts)
-    ax.set_ylim(bottom=0)
-    ax.grid(alpha=grid_alpha)
-    ax.set_axisbelow(True)
-    ax.set_ylabel("sample size")
+    # ax = axes[1]
+    # ax.step(df.index, df.n_pts)
+    # ax.set_ylim(bottom=0)
+    # ax.grid(alpha=grid_alpha)
+    # ax.set_axisbelow(True)
+    # ax.set_ylabel("sample size")
 
     ax = axes[-1]
     ax.grid(alpha=grid_alpha)
@@ -406,61 +441,61 @@ if __name__ == "__main__":
     # ax.set_title(f"Month rolling window = {month_window}", loc="left")
     plt.show()
     #
-    # filename = os.path.join("figures", f"enso_m{month_window}_2.png")
-    # fig.savefig(filename, bbox_inches="tight", dpi=300)
-
-    # df["mei"] = mei.value.groupby(mei.index.year).median().to_numpy()
-    # df["oni"] = oni.value.groupby(oni.index.year).median().to_numpy()
-    df = pd.merge_asof(
-        df, mei["value"], left_index=True, right_index=True, direction="nearest"
-    )
-    df = pd.merge_asof(
-        df, oni["value"], left_index=True, right_index=True, direction="nearest"
-    )
-    print(df.corr())
-
-    # analysis = df[['c1']].copy()
-    # analysis.dropna(inplace=True)
-    # decompose_result_mult = seasonal_decompose(analysis, model="additive", period=12)
-    # # decompose_result_mult.plot()
-    # # plt.show()
-    # x1 = decompose_result_mult.trend
+    # # filename = os.path.join("figures", f"enso_m{month_window}_2.png")
+    # # fig.savefig(filename, bbox_inches="tight", dpi=300)
     #
-    # analysis = df[['c2']].copy()
-    # analysis.dropna(inplace=True)
-    # decompose_result_mult = seasonal_decompose(analysis, model="additive", period=12)
-    # # decompose_result_mult.plot()
-    # # plt.show()
-    # x2 = decompose_result_mult.trend
-    #
-    # analysis = df[['c3']].copy()
-    # analysis.dropna(inplace=True)
-    # decompose_result_mult = seasonal_decompose(analysis, model="additive", period=12)
-    # # decompose_result_mult.plot()
-    # # plt.show()
-    # x3 = decompose_result_mult.trend
-    #
-    # trend = decompose_result_mult.trend
-    # seasonal = decompose_result_mult.seasonal
-    # residual = decompose_result_mult.resid
-    #
-    # fig, ax = plt.subplots(figsize=(16, 4))
-    # ax.grid(alpha=0.2)
-    # ax.axhline(0, ls="--", c="0.3", alpha=0.3)
-    # ax.axhline(0.6, ls=":", c="0.8", alpha=0.3)
-    # ax.plot(oni.index, oni.value, c=oni_color, alpha=0.4)
-    # ax.plot(mei.index, mei.value, c=mei_color, alpha=0.4)
-    # ax.fill_between(
-    #     mei.index, -1, 1, where=abs(mei.value) > 0.5,
-    #     fc="0.8", alpha=0.5,
-    #     transform=mpl.transforms.blended_transform_factory(ax.transData, ax.transAxes)
+    # # df["mei"] = mei.value.groupby(mei.index.year).median().to_numpy()
+    # # df["oni"] = oni.value.groupby(oni.index.year).median().to_numpy()
+    # df = pd.merge_asof(
+    #     df, mei["value"], left_index=True, right_index=True, direction="nearest"
     # )
-    # # ax.plot(x1 - x1.mean(), c="k")
-    # ax.plot(x2 - x2.mean(), c=gold, label="c2")
-    # ax.plot(x3 - x3.mean(), c="0.5", label="c3")
-    # ax.set_ylabel(r"$\leftarrow$ La Niña$\quad\quad$ El Niño $\rightarrow$")
-    # ax.set_xlim(oni.index[0], oni.index[-1])
-    # ax.legend()
-    # plt.show()
-    # filename = os.path.join("figures", f"enso_detrend_v2_2.png")
-    # fig.savefig(filename, bbox_inches="tight", dpi=300)
+    # df = pd.merge_asof(
+    #     df, oni["value"], left_index=True, right_index=True, direction="nearest"
+    # )
+    # print(df.corr())
+    #
+    # # analysis = df[['c1']].copy()
+    # # analysis.dropna(inplace=True)
+    # # decompose_result_mult = seasonal_decompose(analysis, model="additive", period=12)
+    # # # decompose_result_mult.plot()
+    # # # plt.show()
+    # # x1 = decompose_result_mult.trend
+    # #
+    # # analysis = df[['c2']].copy()
+    # # analysis.dropna(inplace=True)
+    # # decompose_result_mult = seasonal_decompose(analysis, model="additive", period=12)
+    # # # decompose_result_mult.plot()
+    # # # plt.show()
+    # # x2 = decompose_result_mult.trend
+    # #
+    # # analysis = df[['c3']].copy()
+    # # analysis.dropna(inplace=True)
+    # # decompose_result_mult = seasonal_decompose(analysis, model="additive", period=12)
+    # # # decompose_result_mult.plot()
+    # # # plt.show()
+    # # x3 = decompose_result_mult.trend
+    # #
+    # # trend = decompose_result_mult.trend
+    # # seasonal = decompose_result_mult.seasonal
+    # # residual = decompose_result_mult.resid
+    # #
+    # # fig, ax = plt.subplots(figsize=(16, 4))
+    # # ax.grid(alpha=0.2)
+    # # ax.axhline(0, ls="--", c="0.3", alpha=0.3)
+    # # ax.axhline(0.6, ls=":", c="0.8", alpha=0.3)
+    # # ax.plot(oni.index, oni.value, c=oni_color, alpha=0.4)
+    # # ax.plot(mei.index, mei.value, c=mei_color, alpha=0.4)
+    # # ax.fill_between(
+    # #     mei.index, -1, 1, where=abs(mei.value) > 0.5,
+    # #     fc="0.8", alpha=0.5,
+    # #     transform=mpl.transforms.blended_transform_factory(ax.transData, ax.transAxes)
+    # # )
+    # # # ax.plot(x1 - x1.mean(), c="k")
+    # # ax.plot(x2 - x2.mean(), c=gold, label="c2")
+    # # ax.plot(x3 - x3.mean(), c="0.5", label="c3")
+    # # ax.set_ylabel(r"$\leftarrow$ La Niña$\quad\quad$ El Niño $\rightarrow$")
+    # # ax.set_xlim(oni.index[0], oni.index[-1])
+    # # ax.legend()
+    # # plt.show()
+    # # filename = os.path.join("figures", f"enso_detrend_v2_2.png")
+    # # fig.savefig(filename, bbox_inches="tight", dpi=300)
