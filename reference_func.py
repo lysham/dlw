@@ -14,10 +14,12 @@ from corr26b import get_tsky, join_surfrad_asos, shakespeare, \
     add_solar_time, add_afgl_t0_p0, create_training_set, \
     reduce_to_equal_pts_per_site
 from fraction import fe_lt, fi_lt
+from statsmodels.tsa.seasonal import seasonal_decompose
 
 from constants import *
 from fig3 import get_atm_p
 from process import *
+from enso import get_train, import_oni_mei_data, create_monthly_df
 
 
 def look_at_jyj():
@@ -2128,6 +2130,163 @@ def plot_cs_count_per_site():
     ax.set_axisbelow(True)
     plt.tight_layout()
     plt.show()
+    return None
+
+
+def plot_enso_detrend():
+    mei_color = "#C54459"  # muted red
+    oni_color = "#4C6BE6"  # powder blue
+    mint = "#6CB289"
+    gold = "#E0A500"
+    oni, mei = import_oni_mei_data()
+
+    df = get_train()  # retrieve and concatenate create_train csv files
+    df = create_monthly_df(df, keep_samples=1000, c1_const=0.6, c3_const=0.1)
+
+    df["mei"] = mei.value.groupby(mei.index.year).median().to_numpy()
+    df["oni"] = oni.value.groupby(oni.index.year).median().to_numpy()
+    df = pd.merge_asof(
+        df, mei["value"], left_index=True, right_index=True, direction="nearest"
+    )
+    df = pd.merge_asof(
+        df, oni["value"], left_index=True, right_index=True, direction="nearest"
+    )
+    print(df.corr())
+
+    analysis = df[['c1']].copy()
+    analysis.dropna(inplace=True)
+    decompose_result_mult = seasonal_decompose(analysis, model="additive", period=12)
+    # decompose_result_mult.plot()
+    # plt.show()
+    x1 = decompose_result_mult.trend
+
+    analysis = df[['c2']].copy()
+    analysis.dropna(inplace=True)
+    decompose_result_mult = seasonal_decompose(analysis, model="additive", period=12)
+    # decompose_result_mult.plot()
+    # plt.show()
+    x2 = decompose_result_mult.trend
+
+    analysis = df[['c3']].copy()
+    analysis.dropna(inplace=True)
+    decompose_result_mult = seasonal_decompose(analysis, model="additive", period=12)
+    # decompose_result_mult.plot()
+    # plt.show()
+    x3 = decompose_result_mult.trend
+
+    trend = decompose_result_mult.trend
+    seasonal = decompose_result_mult.seasonal
+    residual = decompose_result_mult.resid
+
+    fig, ax = plt.subplots(figsize=(16, 4))
+    ax.grid(alpha=0.2)
+    ax.axhline(0, ls="--", c="0.3", alpha=0.3)
+    ax.axhline(0.6, ls=":", c="0.8", alpha=0.3)
+    ax.plot(oni.index, oni.value, c=oni_color, alpha=0.4)
+    ax.plot(mei.index, mei.value, c=mei_color, alpha=0.4)
+    ax.fill_between(
+        mei.index, -1, 1, where=abs(mei.value) > 0.5,
+        fc="0.8", alpha=0.5,
+        transform=mpl.transforms.blended_transform_factory(ax.transData, ax.transAxes)
+    )
+    # ax.plot(x1 - x1.mean(), c="k")
+    ax.plot(x2 - x2.mean(), c=gold, label="c2")
+    ax.plot(x3 - x3.mean(), c="0.5", label="c3")
+    ax.set_ylabel(r"$\leftarrow$ La Niña$\quad\quad$ El Niño $\rightarrow$")
+    ax.set_xlim(oni.index[0], oni.index[-1])
+    ax.legend()
+    plt.show()
+    filename = os.path.join("figures", f"enso_detrend_v2_2.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def plot_c2_intime():
+    # run in enso
+    mei_color = "#C54459"  # muted red
+    gold = "#E0A500"
+    df = get_train()
+    df = create_monthly_df(df, keep_samples=1000, c1_const=0.6, c3_const=0.1)
+
+    fig, ax = plt.subplots(figsize=(12, 4))
+    ax.grid(True, alpha=0.3)
+    ax.plot(df.index, df.c2, color=gold, label="monthly")
+    pdf = df.rolling(6, center=True).mean()
+    ax.plot(pdf.index, pdf.c2, label="6mo avg")
+    pdf = df.rolling(12, center=True).mean()
+    ax.plot(pdf.index, pdf.c2, c=mei_color, label="12mo avg")
+    ax.set_axisbelow(True)
+    ax.set_xlim(df.index[0], df.index[-1])
+    ax.xaxis.set_major_locator(mpl.dates.YearLocator())
+    ax.legend()
+    ax.set_title("Fitted c2 values (all sites) for c1=0.6, c3=0.1", loc="left")
+    plt.tight_layout()
+    plt.show()
+    return None
+
+
+def plot_enso_plus_single_var():
+    mei_color = "#C54459"  # muted red
+    oni_color = "#4C6BE6"  # powder blue
+    mint = "#6CB289"
+    gold = "#E0A500"
+
+    df = get_train()  # retrieve and concatenate create_train csv files
+    df = create_monthly_df(df, keep_samples=1000, c1_const=0.6, c3_const=0.1)
+
+    oni, mei = import_oni_mei_data()
+    # mei = mei.loc[mei.index.year >= 2006]
+    # oni = oni.loc[oni.index.year >= 2006]
+
+    # month_window = 3
+    # df = df.rolling(month_window, center=False).sum()
+
+    grid_alpha = 0.5
+    # fig, ax = plt.subplots(figsize=(12, 4))
+    fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=True, height_ratios=[1, 2])
+    plt.subplots_adjust(hspace=0.1)
+    # fig, ax = plt.subplots(figsize=(16, 4))
+    ax = axes[0]
+    # ax.step(df.index, df.rmse)
+    ax.step(df.index, df.avg_rh)
+    ax.set_ylim(bottom=0)
+    ax.grid(alpha=grid_alpha)
+    ax.set_axisbelow(True)
+    # ax.set_ylabel("RMSE")
+    ax.set_ylabel("RH")
+
+    # ax = axes[1]
+    # ax.step(df.index, df.n_pts)
+    # ax.set_ylim(bottom=0)
+    # ax.grid(alpha=grid_alpha)
+    # ax.set_axisbelow(True)
+    # ax.set_ylabel("sample size")
+
+    ax = axes[-1]
+    ax.grid(alpha=grid_alpha)
+    ax.axhline(0, ls="--", c="0.3", alpha=0.3)
+    # ax.axhline(0.6, ls=":", c="0.8", alpha=0.3)
+    ax.plot(oni.index, oni.value, c=oni_color, alpha=0.4)
+    ax.plot(mei.index, mei.value, c=mei_color, alpha=0.4)
+
+    # ax.step(df.index, df.c1 / month_window, label="c1", c=mint, where="post")
+    ax.step(df.index, df.c2, label="c2", c=gold, where="post")
+    # ax.step(df.index, df.c3 / month_window, label="c3", c="0.5", where="post")
+
+    ax.set_xlim(df.index[0], df.index[-1])
+    # ymin, ymax = ax.get_ylim()
+    # ylim = abs(ymin) if abs(ymin) > ymax else ymax
+    # ax.set_ylim(-1 * ylim, ylim)  # ensure symmetric around y=0
+    ax.set_ylim(-2, 2)
+    ax.set_ylabel(r"$\leftarrow$ La Niña$\quad\quad$ El Niño $\rightarrow$")
+    # ax.legend()
+    ax.xaxis.set_major_locator(mpl.dates.YearLocator())
+    ax.set_axisbelow(True)
+    # ax.set_title(f"Month rolling window = {month_window}", loc="left")
+    plt.show()
+
+    # filename = os.path.join("figures", f"enso_m{month_window}_2.png")
+    # fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 
 
