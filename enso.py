@@ -9,6 +9,8 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, r2_score
 
+from constants import COLOR7_DICT
+
 from statsmodels.tsa.seasonal import seasonal_decompose
 
 from corr26b import create_training_set, fit_linear, alt2sl, \
@@ -323,7 +325,7 @@ def create_monthly_df(df, keep_samples, c1_const, c3_const):
             if n_sites > 1:
                 pred_y = c1_const + (c2 * group2.x) + (c3_const * group2.correction)
             else:
-                pred_y = c1_const + (c2 * group2.y)
+                pred_y = c1_const + (c2 * group2.x)
             rmse = np.sqrt(mean_squared_error(train_y, pred_y))
             r2 = r2_score(train_y, pred_y)
             entry = dict(
@@ -331,9 +333,8 @@ def create_monthly_df(df, keep_samples, c1_const, c3_const):
                 c1=c1_const, c2=c2, c3=c3_const,
                 r2=r2, rmse=rmse, n_pts=n_pts, n_sites=n_sites,
                 avg_x=group2.x.mean(), avg_y=group2.y.mean(),
-                avg_t=group2.t_a.mean(),
-                avg_rh=group2.rh.mean(),
-                avg_pw=group2.pw_hpa.mean()
+                avg_t=group2.t_a.mean(), avg_rh=group2.rh.mean(),
+                avg_pw=group2.pw_hpa.mean(),
             )
             out.append(entry)
     # df_ref = df.copy(deep=True)
@@ -344,12 +345,15 @@ def create_monthly_df(df, keep_samples, c1_const, c3_const):
     return out
 
 
-def plot_single_var(df, colname, title):
+def plot_single_var(df, colname, title, ymin=None, ymax=None):
     fig, ax = plt.subplots(figsize=(12, 4))
     ax.grid(True, alpha=0.3)
     ax.plot(df.index, df[[colname]])
     ax.set_xlim(df.index[0], df.index[-1])
-    ax.set_ylim(20, 70)
+    if ymin is not None:
+        ax.set_ylim(bottom=ymin)
+    if ymax is not None:
+        ax.set_ylim(top=ymax)
     ax.xaxis.set_major_locator(mpl.dates.YearLocator())
     ax.set_axisbelow(True)
     ax.set_title(title, loc="left")
@@ -358,26 +362,98 @@ def plot_single_var(df, colname, title):
     return None
 
 
+def c2_intime_per_site(c1_const, c3_const):
+    start_time = time.time()
+    years = np.arange(2003, 2023)  # till 2022
+
+    out = []
+    for yr in years:
+        df = create_training_set(
+            year=[yr], temperature=False, cs_only=True,
+            filter_pct_clr=0.05, filter_npts_clr=0.2, drive="server4"
+        )
+        df['correction'] = c3_const * (np.exp(-1 * df.elev / 8500) - 1)
+        df["e_act"] = df.y.to_numpy()
+        df["y"] = df.y + df.correction - c1_const
+        for s, group1 in df.groupby(df.site):
+            for m, group2 in group1.groupby(group1.index.month):
+                n_pts = group2.shape[0]
+                train_y = group2.y.to_numpy().reshape(-1, 1)
+                _, c2 = fit_linear(group2, set_intercept=0)
+                pred_y = c2 * group2.x
+                rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+                entry = dict(
+                    year=yr, month=m, day=1, site=s, c2=c2,
+                    rmse=rmse, n_pts=n_pts,
+                    avg_x=group2.x.mean(), avg_y=group2.y.mean(),
+                    avg_e=group2.e_act.mean(), avg_pw=group2.pw_hpa.mean(),
+                    avg_t=group2.t_a.mean(), med_t=group2.t_a.median(),
+                    avg_rh=group2.rh.mean(), med_rh=group2.rh.median(),
+                    avg_lw=group2.dw_ir.mean(), med_lw=group2.dw_ir.median()
+                )
+                out.append(entry)
+        print(yr, time.time() - start_time)
+    out = pd.DataFrame(out)
+    out["date"] = pd.to_datetime(out[["year", "month", "day"]])
+    out = out.set_index("date").sort_index()
+    out = out.drop(columns=["year", "month", "day"])
+    out.to_csv(os.path.join("data", "enso_c",
+                            f"c2_{c1_const}_{c3_const}_site.csv"))
+    return None
+
+
 if __name__ == "__main__":
     print()
     # preprocess_meiv2()
     # preprocess_oni()
 
+    # # Run once
     # c1c2_intime()
     # c3_intime(c1_const=0.6, c2_const=1.6)
     # c2_intime(c1_const=0.6, c3_const=0.15)
-    # filename = os.path.join("data", "enso_c", f"c2_0.6_0.15.csv")
+    # c2_intime_per_site(c1_const=0.6, c3_const=0.15)  # _site.csv
+
+    filename = os.path.join("data", "enso_c", f"c2_0.6_0.15_site.csv")
     # # plot_index(filename, save_name="tmp", c1=False, c3=False)
-    # df = pd.read_csv(filename, index_col=0)
+    df = pd.read_csv(filename, index_col=0, parse_dates=True)
 
-    # create_train()  # run once
-    df = get_train()  # retrieve and concatenate create_train csv files
-    df_train = df.copy(deep=True)
+    fig, ax = plt.subplots(figsize=(12, 4))
+    ax.grid(True, alpha=0.3)
+    for s, pdf in df.groupby(df.site):
+        analysis = pdf[["c2"]]
+        dd = seasonal_decompose(analysis, model="additive", period=12)
+        ax.plot(dd.trend, c=COLOR7_DICT[s], label=s)
+    ax.legend(ncol=7, frameon=False, bbox_to_anchor=(0, 1.01), loc="lower left")
+    ax.set_xlim(pdf.index[0], pdf.index[-1])
+    ax.xaxis.set_major_locator(mpl.dates.YearLocator())
+    ax.set_axisbelow(True)
+    plt.tight_layout()
+    plt.show()
 
-    df = create_monthly_df(df, keep_samples=1000, c1_const=0.6, c3_const=0.1)
+    fig, ax = plt.subplots(figsize=(12, 4))
+    ax.grid(True, alpha=0.3)
+    pdf = df.loc[df.site == "DRA"]
+    # ax.plot(pdf.index, pdf.avg_x, label="avg sqrt(pw)")
+    # ax.plot(pdf.index, pdf.c2 * pdf.avg_x, label="c2 * avg sqrt(pw)")
+    ax.plot(pdf.index, pdf.med_lw, label="median")
+    ax.plot(pdf.index, pdf.avg_lw, label="average")
+    ax.set_ylabel("LW [W/m$^2$]")
+    ax.set_xlim(pdf.index[0], pdf.index[-1])
+    ax.xaxis.set_major_locator(mpl.dates.YearLocator())
+    ax.set_axisbelow(True)
+    ax.set_title("DRA", loc="left")
+    ax.legend()
+    plt.tight_layout()
+    plt.show()
 
-    title = "Monthly average RH (all sites)"
-    plot_single_var(df, colname="avg_rh", title=title)
+    # # create_train()  # run once
+    # df = get_train()  # retrieve and concatenate create_train csv files
+    # df_train = df.copy(deep=True)
+    #
+    # df = create_monthly_df(df, keep_samples=1000, c1_const=0.6, c3_const=0.1)
+    #
+    # title = "Monthly average RH (all sites)"
+    # plot_single_var(df, colname="avg_rh", title=title)
 
 
 
