@@ -152,7 +152,7 @@ def c3_intime(c1_const, c2_const):
     for yr in years:
         df = create_training_set(
             year=[yr], temperature=False, cs_only=True,
-            filter_pct_clr=0.2, filter_npts_clr=0.2, drive="server4"
+            filter_pct_clr=0.05, filter_npts_clr=0.2, drive="server4"
         )
         df = reduce_to_equal_pts_per_site(df)
         df["y"] = df.y - (c1_const + (c2_const * df.x))
@@ -175,7 +175,7 @@ def c2_intime(c1_const, c3_const):
     i = 0
     for yr in years:
         df = create_training_set(
-            year=[yr], temperature=True, cs_only=True,
+            year=[yr], temperature=False, cs_only=True,
             filter_pct_clr=0.05, filter_npts_clr=0.2, drive="server4"
         )
         df = reduce_to_equal_pts_per_site(df)
@@ -454,7 +454,6 @@ if __name__ == "__main__":
     #
     # title = "Monthly average RH (all sites)"
     # plot_single_var(df, colname="avg_rh", title=title)
-
 
 
 
