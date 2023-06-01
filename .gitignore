@@ -14,6 +14,7 @@ data/asos*
 data/cs_compare/
 data/SURFRAD_raw/
 data/train_df/
+data/bsrn/
 
 randall_files
 
