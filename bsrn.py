@@ -5,6 +5,7 @@ import time
 import pandas as pd
 import numpy as np
 import pvlib
+import matplotlib.pyplot as plt
 
 from process import find_clearsky
 from main import get_pw
@@ -102,5 +103,8 @@ if __name__ == "__main__":
     lat = 66.439
     lon = 15.041
     alt = 416
-    folder = os.path.join("data", "bsrn", "gob")
-    process_data(site="gob", folder=folder, lat=66.439, lon=15.041, alt=416)
+    # folder = os.path.join("data", "bsrn", "gob")
+    # process_data(site="gob", folder=folder, lat=66.439, lon=15.041, alt=416)
+
+    filename = os.path.join("data", "bsrn", f"gob.csv")
+    df = pd.read_csv(filename, parse_dates=True, index_col=0)
