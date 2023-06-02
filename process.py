@@ -44,6 +44,8 @@ def find_clearsky(df, window=10, min_sample=2):
                 for j in range(sw.shape[0]):
                     # individually change each value in sliding window range
                     cs_array[i+j] = 1
+        if i % 1000 == 0:
+            print(i)
     df['cs_period'] = cs_array
     df["cs_period"] = df["cs_period"].astype('bool')
     df = df.drop(columns=["day"])  # drop the day label column
