@@ -54,12 +54,13 @@ def process_data(site, folder, lat, lon, alt):
         df = pd.read_csv(
             filename, parse_dates=True, index_col=0
         )
-        df = df[keep_cols]
-        df = df.rename(columns=dict(
-            temp_air="t_a", relative_humidity="rh", pressure="pa_hpa",
-            lwd="dw_ir", ghi="GHI", dni="DNI", dhi="DHI"
-        ))
-        tmp = pd.concat([tmp, df])
+        if not df.empty:  # if file is not empty
+            df = df[keep_cols]
+            df = df.rename(columns=dict(
+                temp_air="t_a", relative_humidity="rh", pressure="pa_hpa",
+                lwd="dw_ir", ghi="GHI", dni="DNI", dhi="DHI"
+            ))
+            tmp = pd.concat([tmp, df])
     df = tmp.copy()  # switch back to df
 
     df.t_a += 273.15  # convert celsius to kelvin
@@ -103,10 +104,10 @@ if __name__ == "__main__":
     print()
     # get_data(station_code="tam", years=np.arange(2009, 2017))
 
-    site = "gob"
-    lat = -23.5614
-    lon = 15.042
-    alt = 416
+    # site = "gob"
+    # lat = -23.5614
+    # lon = 15.042
+    # alt = 416
 
     # site = "tam"
     # lat = 22.7903
@@ -118,78 +119,99 @@ if __name__ == "__main__":
     # lon = -47.713
     # alt = 1023
 
-    # folder = os.path.join("data", "bsrn", site)
-    # process_data(site=site, folder=folder, lat=lat, lon=lon, alt=alt)
+    site = "dwn"
+    lat = -12.424
+    lon = 130.8925
+    alt = 32
 
-    # import and post process
-    filename = os.path.join("data", "bsrn", f"{site}.csv")
-    df = pd.read_csv(filename, parse_dates=True, index_col=0)
+    folder = os.path.join("data", "bsrn", site)
+    process_data(site=site, folder=folder, lat=lat, lon=lon, alt=alt)
 
-    filter_pct_clr = 0.05
-    filter_npts_clr = 0.20
-
-    # add solar time
-    dtime = pd.to_timedelta(df.eq_of_time + (4 * lon), unit="m")
-    df["solar_time"] = df.index + dtime
-
-    df = df.set_index("solar_time")
-    df = df.loc[df.index.hour > 8]  # filter solar time
-    df["csv2"] = (df.cs_period & df.reno_cs)
-
-    if filter_pct_clr is not None:
-        # apply daily percent clear filter
-        tmp_clr = df["csv2"].resample("D").mean()
-        df["clr_pct"] = tmp_clr.reindex(df.index, method="ffill")
-        df = df.loc[df.clr_pct >= filter_pct_clr].copy(deep=True)
-    if filter_npts_clr is not None:
-        # apply daily absolute number clear filter
-        tmp_clr = df["csv2"].resample("D").count()
-        thresh = np.quantile(
-            tmp_clr.loc[tmp_clr > 0].to_numpy(), filter_npts_clr
-        )
-        df["clr_num"] = tmp_clr.reindex(df.index, method="ffill")
-        df = df.loc[df.clr_num >= thresh].copy(deep=True)
-
-    # reduce to cs_only
-    df = df.loc[df.csv2].copy(deep=True)
-    df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
-    df["y"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))
-
-    c1_const = 0.6
-    c3_const = 0.15
-    df['correction'] = c3_const * (np.exp(-1 * df.elev / 8500) - 1)
-    df["e_act"] = df.y.to_numpy()
-    df["y"] = df.y + df.correction - c1_const
-
-    shape = df.shape[0]
-    df = df.dropna()
-    n_dropped = shape - df.shape[0]
-    print("Nrows with NA", n_dropped)
-
-    out = []
-    for yr, group1 in df.groupby(df.index.year):
-        for m, group2 in group1.groupby(group1.index.month):
-            n_pts = group2.shape[0]
-            train_y = group2.y.to_numpy().reshape(-1, 1)
-            _, c2 = fit_linear(group2, set_intercept=0)
-            pred_y = c2 * group2.x
-            rmse = np.sqrt(mean_squared_error(train_y, pred_y))
-            entry = dict(
-                year=yr, month=m, day=1, c2=c2,
-                rmse=rmse, n_pts=n_pts,
-            )
-            out.append(entry)
-    out = pd.DataFrame(out)
-    out["date"] = pd.to_datetime(out[["year", "month", "day"]])
-    out = out.set_index("date").sort_index()
-    out = out.drop(columns=["year", "month", "day"])
-
-    pdf = out.copy()
-
-    fig, ax = plt.subplots()
-    ax.grid(axis="y")
-    ax.plot(pdf.index, pdf.c2, ".-")
-    ax.set_ylim(0.5, 2.5)
-    ax.set_xlim(pdf.index[0], pdf.index[-1])
-    fig.autofmt_xdate()
-    plt.show()
+    # # import and post process
+    # filename = os.path.join("data", "bsrn", f"{site}.csv")
+    # df = pd.read_csv(filename, parse_dates=True, index_col=0)
+    #
+    # filter_pct_clr = 0.05
+    # filter_npts_clr = 0.20
+    #
+    # # add solar time
+    # dtime = pd.to_timedelta(df.eq_of_time + (4 * lon), unit="m")
+    # df["solar_time"] = df.index + dtime
+    #
+    # df = df.set_index("solar_time")
+    # df = df.loc[df.index.hour > 8]  # filter solar time
+    # df["csv2"] = (df.cs_period & df.reno_cs)
+    #
+    # if filter_pct_clr is not None:
+    #     # apply daily percent clear filter
+    #     tmp_clr = df["csv2"].resample("D").mean()
+    #     df["clr_pct"] = tmp_clr.reindex(df.index, method="ffill")
+    #     df = df.loc[df.clr_pct >= filter_pct_clr].copy(deep=True)
+    # if filter_npts_clr is not None:
+    #     # apply daily absolute number clear filter
+    #     tmp_clr = df["csv2"].resample("D").count()
+    #     thresh = np.quantile(
+    #         tmp_clr.loc[tmp_clr > 0].to_numpy(), filter_npts_clr
+    #     )
+    #     df["clr_num"] = tmp_clr.reindex(df.index, method="ffill")
+    #     df = df.loc[df.clr_num >= thresh].copy(deep=True)
+    #
+    # # reduce to cs_only
+    # df = df.loc[df.csv2].copy(deep=True)
+    # df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
+    # df["y"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))
+    #
+    # c1_const = 0.6
+    # c3_const = 0.15
+    # df['correction'] = c3_const * (np.exp(-1 * df.elev / 8500) - 1)
+    # df["e_act"] = df.y.to_numpy()
+    # df["y"] = df.y + df.correction - c1_const
+    #
+    # shape = df.shape[0]
+    # df = df.dropna()
+    # n_dropped = shape - df.shape[0]
+    # print("Nrows with NA", n_dropped)
+    #
+    # out = []
+    # for yr, group1 in df.groupby(df.index.year):
+    #     for m, group2 in group1.groupby(group1.index.month):
+    #         n_pts = group2.shape[0]
+    #         train_y = group2.y.to_numpy().reshape(-1, 1)
+    #         _, c2 = fit_linear(group2, set_intercept=0)
+    #         pred_y = c2 * group2.x
+    #         rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+    #         entry = dict(
+    #             year=yr, month=m, day=1, c2=c2,
+    #             rmse=rmse, n_pts=n_pts,
+    #             avg_x=group2.x.mean(), avg_y=group2.y.mean(),
+    #             avg_e=group2.e_act.mean(), avg_pw=group2.pw_hpa.mean(),
+    #             avg_t=group2.t_a.mean(), med_t=group2.t_a.median(),
+    #             avg_rh=group2.rh.mean(), med_rh=group2.rh.median(),
+    #             avg_lw=group2.dw_ir.mean(), med_lw=group2.dw_ir.median()
+    #         )
+    #         out.append(entry)
+    # out = pd.DataFrame(out)
+    # out["date"] = pd.to_datetime(out[["year", "month", "day"]])
+    # out = out.set_index("date").sort_index()
+    # out = out.drop(columns=["year", "month", "day"])
+    #
+    # pdf = out.copy()
+    #
+    # fig, ax = plt.subplots(figsize=(6, 3))
+    # ax.grid(alpha=0.3)
+    # ax.plot(pdf.index, pdf.c2, ".-")
+    # ax.set_ylim(1, 2)
+    # ax.set_xlim(pdf.index[0], pdf.index[-1])
+    # ax.set_title("BRB fitted c2 values for c1=0.6, c3=0.15", loc="left")
+    # fig.autofmt_xdate()
+    # plt.tight_layout()
+    # plt.show()
+    #
+    # fig, ax = plt.subplots(figsize=(6, 3))
+    # ax.grid(alpha=0.3)
+    # ax.plot(pdf.index, pdf.avg_lw, ".-")
+    # ax.set_xlim(pdf.index[0], pdf.index[-1])
+    # ax.set_title("BRB monthly average LW of clear sky samples", loc="left")
+    # fig.autofmt_xdate()
+    # plt.tight_layout()
+    # plt.show()
