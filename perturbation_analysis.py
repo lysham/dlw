@@ -5,6 +5,9 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from scipy import integrate
+from fraction import planck_lambda
+
 
 def plot_fig5_band(pw, h2o, co2, de_h2o, de_co2, title="B2"):
     # FOR PLOTTING
@@ -57,7 +60,7 @@ def plot_fig5_band(pw, h2o, co2, de_h2o, de_co2, title="B2"):
 
 if __name__ == "__main__":
 
-    p0 = np.linspace(0.001, 2.5/100, 50)
+    p0 = np.geomspace(0.001, 2.5/100, 100)
     frac_change_p = np.array([0.005, 0.01, 0.02, 0.03])
 
     b2_h2o = 0.1083 + 0.0748 * np.tanh(270.8944 * p0)
@@ -74,59 +77,93 @@ if __name__ == "__main__":
     de_b3_co2 = (-0.5262 * 0.1497) * np.power(p0, 0.1497 - 1)
     de_b4_co2 = (-0.1740 * 0.7268) * np.power(p0, 0.7268 - 1)
 
-    fig, ax = plt.subplots(figsize=(8, 5))
-    f2 = (p0 / b2_h2o) * de_b2_h2o
-    f3 = (p0 / b3_h2o) * de_b3_h2o
-    f4 = (p0 / b4_h2o) * de_b4_h2o
-    ax.plot(p0, f3 + f4 + f2, c="0.2", label="sum")
-    ax.plot(p0, f2, "--", label="B2")
-    ax.plot(p0, f3, "--", label="B3")
-    ax.plot(p0, f4, "--", label="B4")
-    ax.grid(alpha=0.3)
-    ax.legend(ncol=2)
-    ylabel = r"$p_0 / \epsilon_0$ (d$\epsilon$ / d$p_w$)"
-    ax.set_ylabel(ylabel)
-    ax.set_title("j = H2O", loc="left")
-    ax.set_xlabel("dimensionless water vapor (p$_0$)")
-    plt.tight_layout()
-    plt.show()
+    b2_ovl = 0.0003
+    b3_ovl = 17.0770 - 17.0907 * np.power(p0, 0.0002)
+    b4_ovl = 0.0227 - 0.2748 * np.power(p0, 0.7480)
+    de_b2_ovl = np.zeros(len(p0))
+    de_b3_ovl = (-17.0907 * 0.0002) * np.power(p0, 0.0002 - 1)
+    de_b4_ovl = (-0.2748 * 0.7480) * np.power(p0, 0.7480 - 1)
 
     # plot_fig5_band(p0, b2_h2o, b2_co2, de_b2_h2o, de_b2_co2, title="B2")
 
-    total2 = (de_b3_h2o / b3_h2o) + (de_b3_co2 / b3_co2) + \
-             (de_b4_co2 / b4_co2) + (de_b4_h2o / b4_h2o)
-    total = (de_b3_co2 / b3_co2) + (de_b3_h2o / b3_h2o) + \
-            (de_b4_co2 / b4_co2) + (de_b4_h2o / b4_h2o)
+    total = \
+        (de_b2_co2 / b2_co2) + (de_b3_co2 / b3_co2) + (de_b4_co2 / b4_co2) + \
+        (de_b2_h2o / b2_h2o) + (de_b3_h2o / b3_h2o) + (de_b4_h2o / b4_h2o) + \
+        (de_b2_ovl / b2_ovl) + (de_b3_ovl / b3_ovl) + (de_b4_ovl / b4_ovl)
 
-    fig, ax = plt.subplots()
-    ax.grid(alpha=0.3)
-    for f in frac_change_p:
-        frac_change_e = (f * p0) * total
-        ax.plot(p0, frac_change_e, label=f)
-    ax.legend(title="frac change in p$_w$")
-    ax.set_ylabel("fractional change in emissivity")
-    ax.set_xlabel("dimensionless water vapor (p$_0$)")
-    plt.show()
-
-    fig, axes = plt.subplots(2, 1, figsize=(5, 8), sharex=True)
+    fig, axes = plt.subplots(3, 1, figsize=(6, 10), sharex=True)
+    ylabel = r"$p_0$ ${\epsilon}_{ij}'$ $\epsilon_{ij}^{-1}$"
     ax = axes[0]
-    ax.plot(p0, (de_b2_h2o / b2_h2o), label="B2")
-    ax.plot(p0, (de_b3_h2o / b3_h2o), label="B3")
-    ax.plot(p0, (de_b4_h2o / b4_h2o), label="B4")
+    ax.plot(p0, p0 * (de_b2_h2o / b2_h2o), label="B2")
+    ax.plot(p0, p0 * (de_b3_h2o / b3_h2o), label="B3")
+    ax.plot(p0, p0 * (de_b4_h2o / b4_h2o), label="B4")
     ax.grid(alpha=0.3)
     ax.set_title("j = H2O", loc="left")
-    ax.set_ylabel("M$_{ij}$(p$_0$)")
+    ax.set_ylabel(ylabel)
     ax.legend()
     ax = axes[1]
-    ax.plot(p0, (de_b2_co2 / b2_co2), label="B2")
-    ax.plot(p0, (de_b3_co2 / b3_co2), label="B3")
-    ax.plot(p0, (de_b4_co2 / b4_co2), label="B4")
+    ax.plot(p0, p0 * (de_b2_co2 / b2_co2), label="B2")
+    ax.plot(p0, p0 * (de_b3_co2 / b3_co2), label="B3")
+    ax.plot(p0, p0 * (de_b4_co2 / b4_co2), label="B4")
     ax.grid(alpha=0.3)
     ax.set_title("j = CO2", loc="left")
-    ax.set_ylabel("M$_{ij}$(p$_0$)")
+    ax.set_ylabel(ylabel)
+    ax.legend()
+    ax = axes[2]
+    ax.plot(p0, p0 * (de_b2_ovl / b2_ovl), label="B2")
+    ax.plot(p0, p0 * (de_b3_ovl / b3_ovl), label="B3")
+    ax.plot(p0, p0 * (de_b4_ovl / b4_ovl), label="B4")
+    ax.grid(alpha=0.3)
+    ax.set_title("j = overlaps", loc="left")
+    ax.set_ylabel(ylabel)
     ax.legend()
     ax.set_xlabel("dimensionless water vapor (p$_0$)")
     plt.tight_layout()
     plt.show()
 
-    np.interp(0.01, p0, (de_b3_h2o / b3_h2o))
+    total_num = \
+        de_b2_co2 + de_b2_h2o + de_b2_ovl + \
+        de_b3_co2 + de_b3_h2o + de_b3_ovl + \
+        de_b4_co2 + de_b4_h2o + de_b4_ovl
+    total_denom = \
+        b2_co2 + b3_co2 + b4_co2 + b2_h2o + b3_h2o + \
+        b4_h2o + b2_ovl + b3_ovl + b4_ovl
+    t2_num = total_num - (de_b2_co2 + de_b3_co2 + de_b4_co2)
+    t2_denom = total_denom - (b2_co2 + b3_co2 + b4_co2)
+
+    y1 = p0 * (total_num / total_denom)
+    y2 = p0 * (t2_num / t2_denom)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(p0, y1, label="y1 where j=(H2O, CO2, overlaps)")
+    ax.plot(p0, y2, label="y2 where j=(H2O, overlaps)")
+    ax.plot(p0, y2 - y1, c="0.3", ls="--", label="y2 - y1")
+    ax.legend()
+    ax.set_ylim(bottom=0)
+    ax.set_xlim(0, p0[-1])
+    ax.set_xlabel("dimensionless water vapor (p$_0$)")
+    ax.grid(alpha=0.3)
+    ax.set_title("i=(B2, B3, B4)", loc="left")
+    plt.tight_layout()
+    plt.show()
+
+    y1 = p0 * (de_b3_co2 + de_b3_h2o + de_b3_ovl) / (b3_co2 + b3_h2o + b3_ovl)
+    y2 = p0 * (de_b3_h2o + de_b3_ovl) / (b3_h2o + b3_ovl)
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(p0, y1, label="y1 where j=(H2O, CO2, overlaps)")
+    ax.plot(p0, y2, label="y2 where j=(H2O, overlaps)")
+    ax.plot(p0, y2 - y1, c="0.3", ls="--", label="y2 - y1")
+    ax.legend()
+    ax.set_ylim(bottom=0)
+    ax.set_xlim(0, p0[-1])
+    ax.set_xlabel("dimensionless water vapor (p$_0$)")
+    ax.grid(alpha=0.3)
+    ax.set_title("i=B3", loc="left")
+    plt.tight_layout()
+    plt.show()
+
+    # # Reference
+    # np.interp(0.01, p0, (de_b3_h2o / b3_h2o))
+    #
+    # o2 = integrate.quad(func=planck_lambda, a=4, b=200, args=(288,))[0]
+    # o1 = integrate.quad(func=planck_lambda, a=13.3, b=17.2, args=(288,))[0]
