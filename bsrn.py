@@ -174,53 +174,66 @@ if __name__ == "__main__":
     df["e_act"] = df.y.to_numpy()
     df["y"] = df.y + df.correction - c1_const
 
-    shape = df.shape[0]
-    df = df.dropna()
-    n_dropped = shape - df.shape[0]
-    print("Nrows with NA", n_dropped)
+    # shape = df.shape[0]
+    # df = df.dropna()
+    # n_dropped = shape - df.shape[0]
+    # print("Nrows with NA", n_dropped)
 
-    out = []
+    mean_ir = []
     for yr, group1 in df.groupby(df.index.year):
         for m, group2 in group1.groupby(group1.index.month):
-            n_pts = group2.shape[0]
-            train_y = group2.y.to_numpy().reshape(-1, 1)
-            _, c2 = fit_linear(group2, set_intercept=0)
-            pred_y = c2 * group2.x
-            rmse = np.sqrt(mean_squared_error(train_y, pred_y))
-            entry = dict(
-                year=yr, month=m, day=1, c2=c2,
-                rmse=rmse, n_pts=n_pts,
-                avg_x=group2.x.mean(), avg_y=group2.y.mean(),
-                avg_e=group2.e_act.mean(), avg_pw=group2.pw_hpa.mean(),
-                avg_t=group2.t_a.mean(), med_t=group2.t_a.median(),
-                avg_rh=group2.rh.mean(), med_rh=group2.rh.median(),
-                avg_lw=group2.dw_ir.mean(), med_lw=group2.dw_ir.median()
-            )
-            out.append(entry)
-    out = pd.DataFrame(out)
-    out["date"] = pd.to_datetime(out[["year", "month", "day"]])
-    out = out.set_index("date").sort_index()
-    out = out.drop(columns=["year", "month", "day"])
+            mean_ir.append(group2.dw_ir.mean())
 
-    pdf = out.copy()
+    x = np.arange(len(mean_ir))
+    mean_ir = np.array(mean_ir)
 
-    fig, ax = plt.subplots(figsize=(6, 3))
+    fig, ax = plt.subplots()
     ax.grid(alpha=0.3)
-    ax.plot(pdf.index, pdf.c2, ".-")
-    ax.set_ylim(1, 2)
-    ax.set_xlim(pdf.index[0], pdf.index[-1])
-    title = f"{site.upper()} fitted c2 values for c1=0.6, c3=0.15"
-    ax.set_title(title, loc="left")
-    fig.autofmt_xdate()
-    plt.tight_layout()
+    ax.plot(x, mean_ir)
     plt.show()
 
-    fig, ax = plt.subplots(figsize=(6, 3))
-    ax.grid(alpha=0.3)
-    ax.plot(pdf.index, pdf.avg_lw, ".-")
-    ax.set_xlim(pdf.index[0], pdf.index[-1])
-    title = f"{site.upper()} monthly average LW of clear sky samples"
-    ax.set_title(title, loc="left")
-    fig.autofmt_xdate()
-    plt.tight_layout()
-    plt.show()
+    # out = []
+    # for yr, group1 in df.groupby(df.index.year):
+    #     for m, group2 in group1.groupby(group1.index.month):
+    #         n_pts = group2.shape[0]
+    #         train_y = group2.y.to_numpy().reshape(-1, 1)
+    #         _, c2 = fit_linear(group2, set_intercept=0)
+    #         pred_y = c2 * group2.x
+    #         rmse = np.sqrt(mean_squared_error(train_y, pred_y))
+    #         entry = dict(
+    #             year=yr, month=m, day=1, c2=c2,
+    #             rmse=rmse, n_pts=n_pts,
+    #             avg_x=group2.x.mean(), avg_y=group2.y.mean(),
+    #             avg_e=group2.e_act.mean(), avg_pw=group2.pw_hpa.mean(),
+    #             avg_t=group2.t_a.mean(), med_t=group2.t_a.median(),
+    #             avg_rh=group2.rh.mean(), med_rh=group2.rh.median(),
+    #             avg_lw=group2.dw_ir.mean(), med_lw=group2.dw_ir.median()
+    #         )
+    #         out.append(entry)
+    # out = pd.DataFrame(out)
+    # out["date"] = pd.to_datetime(out[["year", "month", "day"]])
+    # out = out.set_index("date").sort_index()
+    # out = out.drop(columns=["year", "month", "day"])
+    #
+    # pdf = out.copy()
+    #
+    # fig, ax = plt.subplots(figsize=(6, 3))
+    # ax.grid(alpha=0.3)
+    # ax.plot(pdf.index, pdf.c2, ".-")
+    # ax.set_ylim(1, 2)
+    # ax.set_xlim(pdf.index[0], pdf.index[-1])
+    # title = f"{site.upper()} fitted c2 values for c1=0.6, c3=0.15"
+    # ax.set_title(title, loc="left")
+    # fig.autofmt_xdate()
+    # plt.tight_layout()
+    # plt.show()
+    #
+    # fig, ax = plt.subplots(figsize=(6, 3))
+    # ax.grid(alpha=0.3)
+    # ax.plot(pdf.index, pdf.avg_lw, ".-")
+    # ax.set_xlim(pdf.index[0], pdf.index[-1])
+    # title = f"{site.upper()} monthly average LW of clear sky samples"
+    # ax.set_title(title, loc="left")
+    # fig.autofmt_xdate()
+    # plt.tight_layout()
+    # plt.show()
