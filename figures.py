@@ -8,8 +8,9 @@ import datetime as dt
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-from constants import ELEVATIONS, SEVEN_COLORS
-from corr26b import create_training_set, reduce_to_equal_pts_per_site
+from constants import ELEVATIONS, SEVEN_COLORS, P_ATM
+from corr26b import create_training_set, reduce_to_equal_pts_per_site, \
+    add_solar_time
 
 
 # set defaults
@@ -26,9 +27,13 @@ COLORS = {
     "persianindigo": "#391463"
 }
 
+C1_CONST = 0.6
+C2_CONST = 1.56
+C3_CONST = 0.15
+
 
 def pressure_temperature_per_site():
-    # variation on t0/p0 original, without season distinction
+    # variation on t0/p0 original, showing winter/summer, other
     overlay_profile = False
     filter_ta = False
     alpha_background = 0.2 if overlay_profile else 1.0
@@ -140,6 +145,48 @@ def pressure_temperature_per_site():
     return None
 
 
+def emissivity_vs_pw_data():
+    df = create_training_set(
+        year=[2010, 2011, 2012, 2014, 2015],
+        temperature=False, cs_only=True,
+        filter_pct_clr=FILTER_PCT_CLR,
+        filter_npts_clr=FILTER_NPTS_CLR, drive="server4"
+    )
+    df = df.sample(n=10000, random_state=24)
+    df = reduce_to_equal_pts_per_site(df)
+    ms = 15
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.grid(True, alpha=0.3)
+    i = 0
+    for site in ELEVATIONS:  # plot in sorted order
+        s = site[0]
+        group = df.loc[df.site == s]
+        ax.scatter(
+            group.pw_hpa, group.y, marker="o", s=ms,
+            alpha=0.8, c=SEVEN_COLORS[i], ec="0.5", lw=0.5, zorder=10
+        )
+        ax.scatter([], [], marker="o", s=3*ms, alpha=1, c=SEVEN_COLORS[i],
+                   ec="0.5", lw=0.5,  label=s)  # dummy for legend
+        i += 1
+    xmin, xmax = (0, 40)
+    x = np.linspace(0.00001, xmax, 20)
+    y = C1_CONST + C2_CONST * np.sqrt(x * 100 / P_ATM)
+    label = r"$c_1 + c_2 \sqrt{p_w}$"
+    ax.plot(x, y, c="0.2", lw=1.5, ls="--", label=label)
+
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(0.5, 1.0)
+    ax.set_xlabel("p$_w$ [hPa]")
+    ax.set_ylabel("emissivity [-]")
+    ax.legend(ncol=4, bbox_to_anchor=(0.99, 0.05), loc="lower right")
+    plt.tight_layout()
+    filename = os.path.join("figures", f"emissivity_vs_pw_data.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
 if __name__ == "__main__":
     print()
-    pressure_temperature_per_site()
+    # pressure_temperature_per_site()
+    emissivity_vs_pw_data()

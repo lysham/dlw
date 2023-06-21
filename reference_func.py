@@ -20,6 +20,7 @@ from constants import *
 from fig3 import get_atm_p
 from process import *
 from enso import get_train, import_oni_mei_data, create_monthly_df
+from figures import FILTER_NPTS_CLR, FILTER_PCT_CLR
 
 
 def look_at_jyj():
@@ -2172,6 +2173,70 @@ def plot_enso_plus_single_var():
 
     # filename = os.path.join("figures", f"enso_m{month_window}_2.png")
     # fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def e_vs_pw_12yrs():
+    # scatter plot of emissivity vs pw over 12 years of data for one site
+    site = "PSU"
+    ms = 15  # marker size
+    fig, axes = plt.subplots(4, 3, figsize=(8, 8), sharex=True, sharey=True)
+    for i in range(12):
+        df = create_training_set(
+            year=[2010 + i], sites=[site],
+            temperature=False, cs_only=True,
+            filter_pct_clr=FILTER_PCT_CLR,
+            filter_npts_clr=FILTER_NPTS_CLR,
+            drive="server4"
+        )
+        ax = axes[0 + i//3, 0 + i % 3]
+        ax.grid(alpha=0.3)
+        ax.scatter(df.pw_hpa, df.y, s=ms, alpha=0.2)
+        ax.set_title(f"{2010 + i}", loc="left", fontsize=10)
+    ax.set_ylim(0.5, 1)
+    ax.set_xlim(0, 25)
+    fig.suptitle(f"{site}", fontsize=14)
+    plt.tight_layout()
+    plt.show()
+    return None
+
+
+def one_day():
+    # EXPLORE SINGLE DAY
+    site = "SXF"
+    plot_date = dt.date(2021, 2, 28)  # date to plot
+
+    df = create_training_set(
+        year=[plot_date.year], sites=[site],
+        temperature=False, cs_only=True,
+        filter_pct_clr=FILTER_PCT_CLR,
+        filter_npts_clr=FILTER_NPTS_CLR, drive="server4"
+    )
+
+    # ff = df.loc[(df.pw_hpa < 5) & (df.y > 0.8)]
+    pdf = df.loc[df.index.date == plot_date].copy()
+    # FIGURE
+    fig, axes = plt.subplots(2, 1, figsize=(6, 6), height_ratios=[2, 1])
+    ax = axes[0]
+    ax.scatter(pdf.index, pdf.t_a, marker=".", alpha=0.5, color="blue")
+    ax2 = ax.twinx()
+    ax2.grid(True)
+    ax2.scatter(pdf.index, pdf.y, marker=".", c="0.5")
+    date_str = plot_date.strftime("%m-%d-%Y")
+    title = f"{site} {date_str}"
+    ax.set_title(title, loc="left")
+    ax.set_ylabel("T [K]", fontdict=dict(color="blue"))
+    ax2.set_ylabel("emissivity", fontdict=dict(color="0.5"))
+
+    ax = axes[1]
+    ax.plot(pdf.index, pdf.GHI_m, label="GHI")
+    ax.plot(pdf.index, pdf.DNI_m, label="DNI")
+    ax.plot(pdf.index, pdf.dw_ir, label="LW")
+    ax.legend(ncol=3)
+
+    fig.autofmt_xdate()
+    plt.tight_layout()
+    plt.show()
     return None
 
 

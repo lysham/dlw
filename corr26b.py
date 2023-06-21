@@ -348,10 +348,11 @@ def import_cs_compare_csv(csvname, site=None):
     return df
 
 
-def reduce_to_equal_pts_per_site(df):
+def reduce_to_equal_pts_per_site(df, min_pts=None):
     # keep equal number of points per site
     site_pts = df.groupby(df.site).t_a.count().sort_values().to_dict()
-    min_pts = df.groupby(df.site).t_a.count().values.min()
+    if min_pts is None:
+        min_pts = df.groupby(df.site).t_a.count().values.min()
     new_df = pd.DataFrame()
     for s in site_pts.keys():
         tmp = df.loc[df.site == s].copy()
@@ -463,6 +464,7 @@ def create_training_set(year=[2012, 2013], sites=SURF_SITE_CODES,
                         temperature=False, cs_only=True, filter_pct_clr=None,
                         filter_npts_clr=None, filter_solar_time=True,
                         drive="server4"):
+    # returns dataframe indexed in solar time per site
     if isinstance(sites, str):
         sites = [sites]
     keep_cols = [
