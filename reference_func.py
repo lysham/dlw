@@ -2176,28 +2176,44 @@ def plot_enso_plus_single_var():
     return None
 
 
-def e_vs_pw_12yrs():
-    # scatter plot of emissivity vs pw over 12 years of data for one site
+def data_12yr_e_vs_pw_site():
     site = "PSU"
-    ms = 15  # marker size
-    fig, axes = plt.subplots(4, 3, figsize=(8, 8), sharex=True, sharey=True)
+    ms = 10  # marker size
+    df_ref = create_training_set(
+        year=[2010 + i for i in range(12)], sites=[site],
+        temperature=False, cs_only=True,
+        filter_pct_clr=FILTER_PCT_CLR,
+        filter_npts_clr=FILTER_NPTS_CLR,
+        drive="server4"
+    )
+
+    cnorm = mpl.colors.Normalize(vmin=280, vmax=310)
+    cmap = mpl.cm.coolwarm
+
+    fig, axes = plt.subplots(4, 3, figsize=(7, 7), sharex=True, sharey=True)
     for i in range(12):
-        df = create_training_set(
-            year=[2010 + i], sites=[site],
-            temperature=False, cs_only=True,
-            filter_pct_clr=FILTER_PCT_CLR,
-            filter_npts_clr=FILTER_NPTS_CLR,
-            drive="server4"
-        )
+        df = df_ref.loc[df_ref.index.year == 2010 + i]
+        df = df.sample(n=1000)
         ax = axes[0 + i//3, 0 + i % 3]
         ax.grid(alpha=0.3)
-        ax.scatter(df.pw_hpa, df.y, s=ms, alpha=0.2)
+        cb = ax.scatter(
+            df.pw_hpa, df.y, c=df.t_a, cmap=cmap, norm=cnorm,
+            s=ms, alpha=0.5
+        )
         ax.set_title(f"{2010 + i}", loc="left", fontsize=10)
+        if i % 3 == 0:
+            ax.set_ylabel("emissivity [-]")
+        if i // 3 == 3:
+            ax.set_xlabel("p$_w$ [hPa]")
     ax.set_ylim(0.5, 1)
     ax.set_xlim(0, 25)
+    fig.subplots_adjust(right=0.85)
+    cbar_ax = fig.add_axes([0.91, 0.1, 0.03, 0.8])
+    cbar = fig.colorbar(cb, cax=cbar_ax, extend="both", label="T [K]")
+    cbar.solids.set(alpha=1)
     fig.suptitle(f"{site}", fontsize=14)
-    plt.tight_layout()
-    plt.show()
+    filename = os.path.join("figures", f"data_12yr_e_vs_pw_{site}.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 
 
