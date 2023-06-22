@@ -12,6 +12,18 @@ from fig3 import import_ijhmt_df
 
 
 def plot_fig5_band(pw, h2o, co2, de_h2o, de_co2, title="B2"):
+    p0 = np.geomspace(0.001, 2.5/100, 100)
+
+    # define relevant band correlations and their derivatives
+    b2_h2o, de_b2_h2o = get_e_and_de(p0, 0.1083, 0.0748, 270.8944, b2=True)
+    b3_h2o, de_b3_h2o = get_e_and_de(p0, -0.2308, 0.6484, 0.1280)
+    b4_h2o, de_b4_h2o = get_e_and_de(p0, 0.0289, 6.2436, 0.9010)
+
+    b2_co2 = 0.0002
+    de_b2_co2 = np.zeros(len(p0))
+    b3_co2, de_b3_co2 = get_e_and_de(p0, 0.3038, -0.5262, 0.1497)
+    b4_co2, de_b4_co2 = get_e_and_de(p0, 0.0144, -0.1740, 0.7268)
+
     # FOR PLOTTING
     fig, axes = plt.subplots(1, 2, figsize=(10, 5), sharex=True)
     ax = axes[0]
