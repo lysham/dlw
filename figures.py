@@ -8,7 +8,7 @@ import datetime as dt
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-from constants import ELEVATIONS, SEVEN_COLORS, P_ATM
+from constants import ELEVATIONS, SEVEN_COLORS, P_ATM, SIGMA
 from corr26b import create_training_set, reduce_to_equal_pts_per_site, \
     add_solar_time
 
@@ -152,8 +152,7 @@ def emissivity_vs_pw_data():
         filter_pct_clr=FILTER_PCT_CLR,
         filter_npts_clr=FILTER_NPTS_CLR, drive="server4"
     )
-    df = df.sample(n=10000, random_state=24)
-    df = reduce_to_equal_pts_per_site(df)
+    df = reduce_to_equal_pts_per_site(df, min_pts=200)
     ms = 15
 
     fig, ax = plt.subplots(figsize=(6, 4))
@@ -170,10 +169,10 @@ def emissivity_vs_pw_data():
                    ec="0.5", lw=0.5,  label=s)  # dummy for legend
         i += 1
     xmin, xmax = (0, 40)
-    x = np.linspace(0.00001, xmax, 20)
+    x = np.geomspace(0.00001, xmax, 40)
     y = C1_CONST + C2_CONST * np.sqrt(x * 100 / P_ATM)
     label = r"$c_1 + c_2 \sqrt{p_w}$"
-    ax.plot(x, y, c="0.2", lw=1.5, ls="--", label=label)
+    ax.plot(x, y, c="0.3", lw=1.5, ls="--", label=label, zorder=10)
 
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(0.5, 1.0)
@@ -186,7 +185,55 @@ def emissivity_vs_pw_data():
     return None
 
 
+def altitude_correction():
+    # histogram per site of lw_err with and without altitude correction
+    # dataframe should match exactly that of emissivity vs pw data plot
+    df = create_training_set(
+        year=[2010, 2011, 2012, 2014, 2015],
+        temperature=False, cs_only=True,
+        filter_pct_clr=FILTER_PCT_CLR,
+        filter_npts_clr=FILTER_NPTS_CLR, drive="server4"
+    )
+    df = reduce_to_equal_pts_per_site(df, min_pts=200)
+
+    df["e"] = C1_CONST + (C2_CONST * df.x)
+    df["e_corr"] = df.e + C3_CONST * (np.exp(-1 * df.elev / 8500) - 1)
+    df["lw_pred"] = df.e * SIGMA * np.power(df.t_a, 4)
+    df["lw_err"] = df.lw_pred - df.dw_ir
+    df["lw_pred_corr"] = df.e_corr * SIGMA * np.power(df.t_a, 4)
+    df["lw_err_corr"] = df.lw_pred_corr - df.dw_ir
+
+    fig, axes = plt.subplots(7, 1, figsize=(6, 10), sharex=True)
+    i = 0
+    lbl = r"$c_1 + c_2 \sqrt{p_w}$"
+    lbl_ = r"$c_1 + c_2 \sqrt{p_w} + c_3 (\exp{^{-z/H}} - 1)$"
+    for s, alt in ELEVATIONS:
+        ax = axes[i]
+        ax.grid(axis="x", alpha=0.3)
+        pdf = df.loc[df.site == s]
+        ax.hist(pdf.lw_err, bins=20, alpha=0.3, color="0.3",
+                label=lbl)
+        ax.hist(pdf.lw_err_corr, bins=20, alpha=0.4,
+                color=COLORS["persianindigo"], ec="0.3", label=lbl_)
+        ax.set_title(f"{s}", loc="left", fontsize=12)
+        ax.text(0.01, 0.93, s=f"(z = {alt:,} m)", va="top", ha="left",
+                fontsize="medium", transform=ax.transAxes, color="0.2")
+        i += 1
+        ax.set_axisbelow(True)
+        ax.set_ylim(0, 45)
+    axes[-1].set_xlabel("LW error [W/m$^2$]")
+    axes[0].legend(ncol=2, bbox_to_anchor=(1.0, 1.01), loc="lower right")
+    ax.set_xlim(-30, 30)
+    plt.tight_layout()
+    filename = os.path.join("figures", f"altitude_correction.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
 if __name__ == "__main__":
     print()
     # pressure_temperature_per_site()
-    emissivity_vs_pw_data()
+    # emissivity_vs_pw_data()
+    # altitude_correction()
+
+    # TODO solar time correction plot
