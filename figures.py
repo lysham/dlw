@@ -24,7 +24,11 @@ FILTER_NPTS_CLR = 0.20  # percentile below which to drop
 
 COLORS = {
     "cornflowerblue": "#6495ED",
-    "persianindigo": "#391463"
+    "persianindigo": "#391463",
+    "gunmetal": "#16262E",
+    "persianred": "#BC3838",
+    "viridian": "#BC3838",
+    "coquelicot": "#FF4000",  # very saturated
 }
 
 C1_CONST = 0.6
@@ -230,6 +234,49 @@ def altitude_correction():
     return None
 
 
+def compare():
+    # plot comparisons of selected corrletions
+    # WIP to express measurement uncertainty in result
+    x = np.geomspace(0.00001, 35, 40)
+    y = C1_CONST + C2_CONST * np.sqrt(x * 100 / P_ATM)  # emissivity
+    y_lbl = 0.6376 + 1.6026 * np.sqrt(x * 100 / P_ATM)  # emissivity
+    t = 288  # standard temperature for scaling measurement error
+    dlw = y * SIGMA * np.power(t, 4)  # approximate measured dlw
+    yerr = 5 / (SIGMA * np.power(t, 4))  # +/-5 W/m^2 error
+    yerr5 = (0.05 * dlw) / (SIGMA * np.power(t, 4))  # 5% error
+    y_mendoza = 0.624 * np.power(x, 0.083)
+    y_brunt = 0.52 + 0.065 * np.sqrt(x)
+    y_li = 0.6173 + 1.6940 * np.power(x * 100 / P_ATM, 0.5035)
+    y_17 = 0.5980 + 1.8140 * np.sqrt(x * 100 / P_ATM)
+
+    fig, ax = plt.subplots()
+    ax.grid(alpha=0.3)
+    ax.plot(x, y, lw=1.5, ls="--", c="0.2",
+            label="$0.6+1.56\sqrt{p_w}$")
+    ax.fill_between(x, y - yerr, y + yerr, alpha=0.5)
+    ax.fill_between(x, y - yerr5, y + yerr5, fc="0.7", alpha=0.4)
+    ax.plot(x, y_lbl, c="0.3", ls=":", lw=2,
+            label="LBL fit: $0.6376+1.6026\sqrt{p_w}$")
+    ax.plot(x, y_mendoza, c=COLORS["persianred"],
+            alpha=0.8, label="Mendoza 2017: $0.624P_w^{0.083}$")
+    ax.plot(x, y_brunt, c=COLORS["cornflowerblue"],
+            alpha=0.8, label="Brunt 1932: $0.52+0.065\sqrt{P_w}$")
+    ax.plot(x, y_li, c=COLORS["persianindigo"], ls=":", lw=2,
+            alpha=0.8, label="Li 2019: $0.6173+1.6940{p_w}^{0.5035}$")
+    ax.plot(x, y_17, c=COLORS["coquelicot"], ls=":", lw=2,
+            alpha=0.8, label="Li 2017: $0.598+1.814\sqrt{p_w}$")
+    # ax.set_xscale("log")
+    ax.set_xlim(0.2, 20)
+    ax.set_ylim(0.5, 0.9)
+    ax.legend()
+    ax.set_xlabel("p$_w$ [hPa]")
+    ax.set_ylabel("emissivity [-]")
+    ax.set_axisbelow(True)
+    filename = os.path.join("figures", f"compare.png")  # _log
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
 if __name__ == "__main__":
     print()
     # pressure_temperature_per_site()
@@ -237,5 +284,5 @@ if __name__ == "__main__":
     # altitude_correction()
 
     # TODO solar time correction plot
-    
+
 
