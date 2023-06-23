@@ -2177,7 +2177,8 @@ def plot_enso_plus_single_var():
 
 
 def data_12yr_e_vs_pw_site():
-    site = "PSU"
+    # e vs pw and dlw vs rh
+    site = "GWC"
     ms = 10  # marker size
     df_ref = create_training_set(
         year=[2010 + i for i in range(12)], sites=[site],
@@ -2189,12 +2190,17 @@ def data_12yr_e_vs_pw_site():
 
     cnorm = mpl.colors.Normalize(vmin=280, vmax=310)
     cmap = mpl.cm.coolwarm
+    cnorm2 = mpl.colors.Normalize(vmin=1, vmax=12)
+    cmap2 = mpl.cm.twilight
 
-    fig, axes = plt.subplots(4, 3, figsize=(7, 7), sharex=True, sharey=True)
+    # make both plots inside the for loop
+    fig, axes = plt.subplots(4, 3, figsize=(10, 10), sharex=True, sharey=True)
+    fig2, axes2 = plt.subplots(4, 3, figsize=(10, 10), sharex=True, sharey=True)
     for i in range(12):
         df = df_ref.loc[df_ref.index.year == 2010 + i]
         df = df.sample(n=1000)
         ax = axes[0 + i//3, 0 + i % 3]
+        ax2 = axes2[0 + i // 3, 0 + i % 3]
         ax.grid(alpha=0.3)
         cb = ax.scatter(
             df.pw_hpa, df.y, c=df.t_a, cmap=cmap, norm=cnorm,
@@ -2203,17 +2209,34 @@ def data_12yr_e_vs_pw_site():
         ax.set_title(f"{2010 + i}", loc="left", fontsize=10)
         if i % 3 == 0:
             ax.set_ylabel("emissivity [-]")
+            ax2.set_ylabel("DLW [W/m$^2$]")
         if i // 3 == 3:
             ax.set_xlabel("p$_w$ [hPa]")
+            ax2.set_xlabel("RH [%]")
+
+        ax2.grid(alpha=0.3)
+        cb2 = ax2.scatter(
+            df.rh, df.dw_ir, c=df.index.month, cmap=cmap2, norm=cnorm2,
+            s=ms, alpha=0.5
+        )
+        ax2.set_title(f"{2010 + i}", loc="left", fontsize=10)
     ax.set_ylim(0.5, 1)
     ax.set_xlim(0, 25)
     fig.subplots_adjust(right=0.85)
     cbar_ax = fig.add_axes([0.91, 0.1, 0.03, 0.8])
     cbar = fig.colorbar(cb, cax=cbar_ax, extend="both", label="T [K]")
     cbar.solids.set(alpha=1)
-    fig.suptitle(f"{site}", fontsize=14)
     filename = os.path.join("figures", f"data_12yr_e_vs_pw_{site}.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
+
+    ax2.set_ylim(100, 550)
+    ax2.set_xlim(0, 100)
+    fig2.subplots_adjust(right=0.85)
+    cbar_ax = fig2.add_axes([0.91, 0.1, 0.03, 0.8])
+    cbar = fig2.colorbar(cb2, cax=cbar_ax, label="month")
+    cbar.solids.set(alpha=1)
+    filename = os.path.join("figures", f"data_12yr_dlw_vs_rh_{site}.png")
+    fig2.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 
 
