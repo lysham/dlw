@@ -44,7 +44,7 @@ def find_clearsky(df, window=10, min_sample=2):
                 for j in range(sw.shape[0]):
                     # individually change each value in sliding window range
                     cs_array[i+j] = 1
-        if i % 1000 == 0:
+        if i % 10000 == 0:
             print(i)
     df['cs_period'] = cs_array
     df["cs_period"] = df["cs_period"].astype('bool')
@@ -203,8 +203,8 @@ def process_site(site, folder, yr="2012", min_sample=2):
 
     # Apply clear sky period filter
     df = find_clearsky(df, min_sample=min_sample)
-    # df = df.asfreq("1T")
-    # df["reno_cs"] = pvlib.clearsky.detect_clearsky(df.GHI_m, df.GHI_c)
+    df = df.asfreq("1T")
+    df["reno_cs"] = pvlib.clearsky.detect_clearsky(df.GHI_m, df.GHI_c)
 
     # need to apply clear sky filter before data is sampled
     # print("Clear sky filter applied.", time.time() - start_time)
@@ -383,28 +383,28 @@ if __name__ == "__main__":
     print()
     # filepath to folder SURFRAD data
     # directory = os.path.join("/Volumes", "LMM_drive", "SURFRAD")
-    # folder = os.path.join("data", "SURFRAD_raw")
+    folder = os.path.join("data", "SURFRAD_raw")
     # for year in np.arange(2008, 2022):
-    #     process_site_night(site="DRA", folder=folder, yr=f"{year}")
+    process_site(site="DRA", folder=folder, yr="2023")
 
-    df = pd.DataFrame()
-    for year in np.arange(2008, 2023):
-        filename = os.path.join("data", "SURFRAD", f"DRA_night_{year}.csv")
-        tmp = pd.read_csv(filename, index_col=0, parse_dates=True)
-        df = pd.concat([df, tmp])
-
-    mean_ir = []
-    for yr, group1 in df.groupby(df.index.year):
-        for m, group2 in group1.groupby(group1.index.month):
-            mean_ir.append(group2.dw_ir.mean())
-
-    x = np.arange(len(mean_ir))
-    mean_ir = np.array(mean_ir)
-
-    fig, ax = plt.subplots()
-    ax.grid(alpha=0.3)
-    ax.plot(x, mean_ir)
-    plt.show()
+    # df = pd.DataFrame()
+    # for year in np.arange(2008, 2023):
+    #     filename = os.path.join("data", "SURFRAD", f"DRA_night_{year}.csv")
+    #     tmp = pd.read_csv(filename, index_col=0, parse_dates=True)
+    #     df = pd.concat([df, tmp])
+    #
+    # mean_ir = []
+    # for yr, group1 in df.groupby(df.index.year):
+    #     for m, group2 in group1.groupby(group1.index.month):
+    #         mean_ir.append(group2.dw_ir.mean())
+    #
+    # x = np.arange(len(mean_ir))
+    # mean_ir = np.array(mean_ir)
+    #
+    # fig, ax = plt.subplots()
+    # ax.grid(alpha=0.3)
+    # ax.plot(x, mean_ir)
+    # plt.show()
 
     # start_time = time.time()
     # for s in SURF_SITE_CODES:
