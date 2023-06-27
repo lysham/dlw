@@ -51,7 +51,7 @@ def pressure_temperature_per_site():
         af_win = pd.read_csv(filename)
 
     df = create_training_set(
-        year=[2010, 2015, 2020], temperature=False, cs_only=True,
+        year=[2010, 2011, 2012, 2014, 2015], temperature=False, cs_only=True,
         filter_pct_clr=FILTER_PCT_CLR,
         filter_npts_clr=FILTER_NPTS_CLR, drive="server4"
     )
@@ -279,10 +279,9 @@ def compare():
 
 if __name__ == "__main__":
     print()
-    # pressure_temperature_per_site()
+    pressure_temperature_per_site()
     # emissivity_vs_pw_data()
     # altitude_correction()
 
     # TODO solar time correction plot
-
 

@@ -2279,5 +2279,42 @@ def one_day():
     return None
 
 
+def dra_multiplexer():
+    # compare DRA pre- and post- April 11 2023
+    site = "DRA"
+    ms = 10  # marker size
+    df_ref = create_training_set(
+        year=[2023], sites=[site],
+        temperature=False, cs_only=True,
+        filter_pct_clr=FILTER_PCT_CLR,
+        filter_npts_clr=FILTER_NPTS_CLR,
+        drive="server4"
+    )
+
+    date = dt.date(2023, 4, 11)
+    pre = df_ref.loc[df_ref.index.date < date]  # comparison not working
+    post = df_ref.loc[df_ref.index.date > date]
+
+    pre = pre.sample(1000, random_state=12)
+    post = post.sample(1000, random_state=12)
+
+    cnorm = mpl.colors.Normalize(vmin=280, vmax=310)
+    cmap = mpl.cm.coolwarm
+
+    fig, ax = plt.subplots(figsize=(5, 5), sharex=True, sharey=True)
+    ax.grid(alpha=0.3)
+    ax.scatter(pre.pw_hpa, pre.y, s=ms, alpha=0.5, label="pre-")
+    ax.scatter(post.pw_hpa, post.y, s=ms, alpha=0.5, label="post-")
+    ax.set_title("2023 clear sky samples pre- and post- April 11")
+    ax.legend()
+    ax.set_ylim(0.5, 1)
+    ax.set_xlim(0, 15)
+    ax.set_xlabel("p$_w$ [hPa]")
+    ax.set_ylabel("emissivity [-]")
+    ax.set_axisbelow(True)
+    plt.show()
+    return None
+
+
 if __name__ == "__main__":
     print()
