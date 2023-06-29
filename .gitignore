@@ -15,6 +15,7 @@ data/cs_compare/
 data/SURFRAD_raw/
 data/train_df/
 data/bsrn/
+data/training_data.csv
 
 randall_files
 

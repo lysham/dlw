@@ -32,8 +32,38 @@ COLORS = {
 }
 
 C1_CONST = 0.6
-C2_CONST = 1.56
+C2_CONST = 1.6528  # (2010-15 data, equal #/site, 5%, 20th)
 C3_CONST = 0.15
+
+
+def training_data(create=False):
+    """Function returns the training dataset.
+    Option to generate and save the dataframe if training dataset parameters
+    are adapted.
+
+    Parameters
+    ----------
+    create : bool, optional
+        If True, create the training dataset and save the csv.
+
+    Returns
+    -------
+    df : DataFrame
+    """
+    filename = os.path.join("data", "training_data.csv")
+    if create:
+        df = create_training_set(
+            year=[2010, 2011, 2012, 2014, 2015],
+            temperature=False, cs_only=True,
+            filter_pct_clr=FILTER_PCT_CLR,
+            filter_npts_clr=FILTER_NPTS_CLR, drive="server4"
+        )
+        df = reduce_to_equal_pts_per_site(df)  # min_pts = 200
+        df['correction'] = C3_CONST * (np.exp(-1 * df.elev / 8500) - 1)
+        df.to_csv(filename)
+    else:
+        df = pd.read_csv(filename)
+    return df
 
 
 def pressure_temperature_per_site():
@@ -50,12 +80,7 @@ def pressure_temperature_per_site():
         filename = os.path.join("data", "afgl_midlatitude_winter.csv")
         af_win = pd.read_csv(filename)
 
-    df = create_training_set(
-        year=[2010, 2011, 2012, 2014, 2015], temperature=False, cs_only=True,
-        filter_pct_clr=FILTER_PCT_CLR,
-        filter_npts_clr=FILTER_NPTS_CLR, drive="server4"
-    )
-    df = reduce_to_equal_pts_per_site(df)
+    df = training_data()
 
     if filter_ta:
         df = df.loc[abs(df.t_a - df.afgl_t0) <= 2].copy()
@@ -150,12 +175,7 @@ def pressure_temperature_per_site():
 
 
 def emissivity_vs_pw_data():
-    df = create_training_set(
-        year=[2010, 2011, 2012, 2014, 2015],
-        temperature=False, cs_only=True,
-        filter_pct_clr=FILTER_PCT_CLR,
-        filter_npts_clr=FILTER_NPTS_CLR, drive="server4"
-    )
+    df = training_data()  # import data
     df = reduce_to_equal_pts_per_site(df, min_pts=200)
     ms = 15
 
@@ -192,12 +212,7 @@ def emissivity_vs_pw_data():
 def altitude_correction():
     # histogram per site of lw_err with and without altitude correction
     # dataframe should match exactly that of emissivity vs pw data plot
-    df = create_training_set(
-        year=[2010, 2011, 2012, 2014, 2015],
-        temperature=False, cs_only=True,
-        filter_pct_clr=FILTER_PCT_CLR,
-        filter_npts_clr=FILTER_NPTS_CLR, drive="server4"
-    )
+    df = training_data()  # import data
     df = reduce_to_equal_pts_per_site(df, min_pts=200)
 
     df["e"] = C1_CONST + (C2_CONST * df.x)
@@ -207,6 +222,9 @@ def altitude_correction():
     df["lw_pred_corr"] = df.e_corr * SIGMA * np.power(df.t_a, 4)
     df["lw_err_corr"] = df.lw_pred_corr - df.dw_ir
 
+    xmin, xmax = (-30, 30)
+    bins = np.arange(xmin, xmax + 1, 2.5)
+
     fig, axes = plt.subplots(7, 1, figsize=(6, 10), sharex=True)
     i = 0
     lbl = r"$c_1 + c_2 \sqrt{p_w}$"
@@ -215,9 +233,9 @@ def altitude_correction():
         ax = axes[i]
         ax.grid(axis="x", alpha=0.3)
         pdf = df.loc[df.site == s]
-        ax.hist(pdf.lw_err, bins=20, alpha=0.3, color="0.3",
+        ax.hist(pdf.lw_err, bins=bins, alpha=0.3, color="0.3",
                 label=lbl)
-        ax.hist(pdf.lw_err_corr, bins=20, alpha=0.4,
+        ax.hist(pdf.lw_err_corr, bins=bins, alpha=0.4,
                 color=COLORS["persianindigo"], ec="0.3", label=lbl_)
         ax.set_title(f"{s}", loc="left", fontsize=12)
         ax.text(0.01, 0.93, s=f"(z = {alt:,} m)", va="top", ha="left",
@@ -227,8 +245,9 @@ def altitude_correction():
         ax.set_ylim(0, 45)
     axes[-1].set_xlabel("LW error [W/m$^2$]")
     axes[0].legend(ncol=2, bbox_to_anchor=(1.0, 1.01), loc="lower right")
-    ax.set_xlim(-30, 30)
+    ax.set_xlim(xmin, xmax)
     plt.tight_layout()
+    plt.show()
     filename = os.path.join("figures", f"altitude_correction.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
@@ -245,14 +264,15 @@ def compare():
     yerr = 5 / (SIGMA * np.power(t, 4))  # +/-5 W/m^2 error
     yerr5 = (0.05 * dlw) / (SIGMA * np.power(t, 4))  # 5% error
     y_mendoza = 0.624 * np.power(x, 0.083)
-    y_brunt = 0.52 + 0.065 * np.sqrt(x)
+    y_brunt = 0.605 + 0.048 * np.sqrt(x)
     y_li = 0.6173 + 1.6940 * np.power(x * 100 / P_ATM, 0.5035)
     y_17 = 0.5980 + 1.8140 * np.sqrt(x * 100 / P_ATM)
 
+    sqrt_pw = "$\sqrt{p_w}$"
     fig, ax = plt.subplots()
     ax.grid(alpha=0.3)
     ax.plot(x, y, lw=1.5, ls="--", c="0.2",
-            label="$0.6+1.56\sqrt{p_w}$")
+            label=f"{C1_CONST}+{C2_CONST}{sqrt_pw}")
     ax.fill_between(x, y - yerr, y + yerr, alpha=0.5)
     ax.fill_between(x, y - yerr5, y + yerr5, fc="0.7", alpha=0.4)
     ax.plot(x, y_lbl, c="0.3", ls=":", lw=2,
@@ -260,7 +280,7 @@ def compare():
     ax.plot(x, y_mendoza, c=COLORS["persianred"],
             alpha=0.8, label="Mendoza 2017: $0.624P_w^{0.083}$")
     ax.plot(x, y_brunt, c=COLORS["cornflowerblue"],
-            alpha=0.8, label="Brunt 1932: $0.52+0.065\sqrt{P_w}$")
+            alpha=0.8, label="Brunt 1932: $0.605+0.048\sqrt{P_w}$")
     ax.plot(x, y_li, c=COLORS["persianindigo"], ls=":", lw=2,
             alpha=0.8, label="Li 2019: $0.6173+1.6940{p_w}^{0.5035}$")
     ax.plot(x, y_17, c=COLORS["coquelicot"], ls=":", lw=2,
@@ -279,9 +299,59 @@ def compare():
 
 if __name__ == "__main__":
     print()
-    pressure_temperature_per_site()
+    # pressure_temperature_per_site()
     # emissivity_vs_pw_data()
     # altitude_correction()
 
     # TODO solar time correction plot
+    df = training_data()
+    df = reduce_to_equal_pts_per_site(df, min_pts=200)
+    ms = 15
+    df['y'] = df.y - df.correction
+
+    xmin, xmax = (0.2, 20)
+    x = np.geomspace(xmin+0.00001, xmax, 40)
+    y = C1_CONST + C2_CONST * np.sqrt(x * 100 / P_ATM)
+    y_lbl = 0.6376 + 1.6026 * np.sqrt(x * 100 / P_ATM)  # emissivity
+    y_mendoza = 0.624 * np.power(x, 0.083)
+    y_brunt = 0.605 + 0.048 * np.sqrt(x)
+    # y_brunt = 0.52 + 0.065 * np.sqrt(x)
+    y_li = 0.6173 + 1.6940 * np.power(x * 100 / P_ATM, 0.5035)
+    y_17 = 0.5980 + 1.8140 * np.sqrt(x * 100 / P_ATM)
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.grid(True, alpha=0.3)
+    i = 0
+    for site in ELEVATIONS:  # plot in sorted order
+        s = site[0]
+        group = df.loc[df.site == s]
+        ax.scatter(
+            group.pw_hpa, group.y, marker="o", s=ms,
+            alpha=0.2, c=SEVEN_COLORS[i], ec="0.5", lw=0.5, zorder=10
+        )
+        ax.scatter([], [], marker="o", s=3*ms, alpha=1, c=SEVEN_COLORS[i],
+                   ec="0.5", lw=0.5,  label=s)  # dummy for legend
+        i += 1
+    label = r"$c_1 + c_2 \sqrt{p_w}$"
+    ax.plot(x, y, c="0.3", lw=3, ls="--", label=label, zorder=10)
+    ax.plot(x, y_lbl, c="0.2", ls="-", lw=1.5, zorder=10,
+            label="LBL fit: $0.6376+1.6026\sqrt{p_w}$")
+    ax.plot(x, y_mendoza, c=COLORS["persianred"], zorder=10, lw=1.5,
+            alpha=0.8, label="Mendoza 2017: $0.624P_w^{0.083}$")
+    ax.plot(x, y_brunt, c=COLORS["cornflowerblue"], zorder=10, lw=1.5,
+            alpha=0.8, label="Brunt 1932: $0.605+0.048\sqrt{P_w}$")
+    ax.plot(x, y_li, c=COLORS["persianindigo"], ls=":", lw=2, zorder=10,
+            alpha=0.8, label="Li 2019: $0.6173+1.6940{p_w}^{0.5035}$")
+    ax.plot(x, y_17, c=COLORS["coquelicot"], ls=":", lw=2, zorder=10,
+            alpha=0.8, label="Li 2017: $0.598+1.814\sqrt{p_w}$")
+
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(0.5, 1.0)
+    ax.set_xlabel("p$_w$ [hPa]")
+    ax.set_ylabel("emissivity [-]")
+    ax.legend(ncol=1, bbox_to_anchor=(1.01, 0.05), loc="lower left")
+    plt.tight_layout()
+    filename = os.path.join("figures", f"compare_with_data.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+
 
