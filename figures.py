@@ -32,7 +32,7 @@ COLORS = {
 }
 
 C1_CONST = 0.6
-C2_CONST = 1.6528  # (2010-15 data, equal #/site, 5%, 20th)
+C2_CONST = 1.653  # (2010-15 data, equal #/site, 5%, 20th)
 C3_CONST = 0.15
 
 
@@ -253,48 +253,91 @@ def altitude_correction():
     return None
 
 
-def compare():
-    # plot comparisons of selected corrletions
-    # WIP to express measurement uncertainty in result
-    x = np.geomspace(0.00001, 35, 40)
+def compare(with_data=True):
+    # plot comparisons of selected correlations with and without sample data
+    if with_data:
+        df = training_data()
+        df = reduce_to_equal_pts_per_site(df, min_pts=200)
+        df['y'] = df.y - df.correction  # bring all sample to sea level
+        ms = 15  # marker size for data samples
+        filename = os.path.join("figures", f"compare_with_data.png")
+    else:
+        t = 288  # standard temperature for scaling measurement error
+        yerr = 5 / (SIGMA * np.power(t, 4))  # +/-5 W/m^2 error
+        filename = os.path.join("figures", f"compare.png")
+    figsize = (8, 4)
+    # set axis bounds of both figures
+    xmin, xmax = (0.2, 35)
+    ymin, ymax = (0.5, 1.0)
+
+    # define fitted correlation
+    x = np.geomspace(xmin+0.00001, xmax, 40)  # hPa
     y = C1_CONST + C2_CONST * np.sqrt(x * 100 / P_ATM)  # emissivity
-    y_lbl = 0.6376 + 1.6026 * np.sqrt(x * 100 / P_ATM)  # emissivity
-    t = 288  # standard temperature for scaling measurement error
-    dlw = y * SIGMA * np.power(t, 4)  # approximate measured dlw
-    yerr = 5 / (SIGMA * np.power(t, 4))  # +/-5 W/m^2 error
-    yerr5 = (0.05 * dlw) / (SIGMA * np.power(t, 4))  # 5% error
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax = _add_common_features(ax, x, y)
+    if with_data:  # with data
+        i = 0
+        for site in ELEVATIONS:  # plot in sorted order
+            s = site[0]
+            group = df.loc[df.site == s]
+            ax.scatter(
+                group.pw_hpa, group.y, marker="o", s=ms,
+                alpha=0.2, c=SEVEN_COLORS[i], ec="0.5", lw=0.5, zorder=0
+            )
+            # ax.scatter([], [], marker="o", s=3 * ms, alpha=1, c=SEVEN_COLORS[i],
+            #            ec="0.5", lw=0.5, label=s)  # dummy for legend
+            i += 1
+    else:  # clean
+        ax.fill_between(x, y - yerr, y + yerr, alpha=0.5, label="+/- 5 W/m$^2$")
+        # ax.fill_between(x, y - yerr5, y + yerr5, fc="0.7", alpha=0.4)
+
+    ax.legend(ncol=1, bbox_to_anchor=(1.01, 0.05),
+              loc="lower left")
+
+    # ax.set_xscale("log")
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymin, ymax)
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def _add_common_features(ax, x, y):
+    # Helper function for compare.
+    # #Adds select correlations, axis labels, and grid
+
+    # dlw = y * SIGMA * np.power(t, 4)  # approximate measured dlw
+    # # yerr5 = (0.05 * dlw) / (SIGMA * np.power(t, 4))  # 5% error
     y_mendoza = 0.624 * np.power(x, 0.083)
     y_brunt = 0.605 + 0.048 * np.sqrt(x)
-    y_li = 0.6173 + 1.6940 * np.power(x * 100 / P_ATM, 0.5035)
-    y_17 = 0.5980 + 1.8140 * np.sqrt(x * 100 / P_ATM)
+    y_li = 0.617 + 1.694 * np.power(x * 100 / P_ATM, 0.504)
+    y_17 = 0.598 + 1.814 * np.sqrt(x * 100 / P_ATM)
+    y_berdahl = 0.564 + 0.059 * np.sqrt(x)
 
-    sqrt_pw = "$\sqrt{p_w}$"
-    fig, ax = plt.subplots()
+    # fit: -./:, lw=1.5
+    # lbl: -, lw=1, colors
+    # main_fit: -, lw=2.5, gray
+
+    ax.plot(x, y, lw=1.5, ls="-", c="0.2", zorder=2,
+            label="$0.600+1.653\sqrt{p_w}$")
+    # LBL models
+    ax.plot(x, y_mendoza, lw=1, ls="-", c=COLORS["persianred"], zorder=8,
+            label="$0.624P_w^{0.083}$ (Mendoza)")
+    ax.plot(x, y_li, lw=1, ls="-", c=COLORS["persianindigo"], zorder=8,
+            label="$0.6173+1.6940{p_w}^{0.5035}$ (Li 2019)")
+    # empirical for comparison
+    ax.plot(x, y_brunt, lw=1.5, ls="--", c=COLORS["cornflowerblue"], zorder=5,
+            label="$0.605+0.048\sqrt{P_w}$ (Brunt/Sellers)")
+    ax.plot(x, y_17, c=COLORS["coquelicot"], ls="-.", lw=1.5, zorder=5,
+            label="$0.598+1.814\sqrt{p_w}$ (Li 2017)")
+    ax.plot(x, y_berdahl, c=COLORS["viridian"], ls=":", lw=1.5, zorder=5,
+            label="$0.605+0.048\sqrt{P_w}$ (Berdahl and Martin)")
+    # misc
     ax.grid(alpha=0.3)
-    ax.plot(x, y, lw=1.5, ls="--", c="0.2",
-            label=f"{C1_CONST}+{C2_CONST}{sqrt_pw}")
-    ax.fill_between(x, y - yerr, y + yerr, alpha=0.5)
-    ax.fill_between(x, y - yerr5, y + yerr5, fc="0.7", alpha=0.4)
-    ax.plot(x, y_lbl, c="0.3", ls=":", lw=2,
-            label="LBL fit: $0.6376+1.6026\sqrt{p_w}$")
-    ax.plot(x, y_mendoza, c=COLORS["persianred"],
-            alpha=0.8, label="Mendoza 2017: $0.624P_w^{0.083}$")
-    ax.plot(x, y_brunt, c=COLORS["cornflowerblue"],
-            alpha=0.8, label="Brunt 1932: $0.605+0.048\sqrt{P_w}$")
-    ax.plot(x, y_li, c=COLORS["persianindigo"], ls=":", lw=2,
-            alpha=0.8, label="Li 2019: $0.6173+1.6940{p_w}^{0.5035}$")
-    ax.plot(x, y_17, c=COLORS["coquelicot"], ls=":", lw=2,
-            alpha=0.8, label="Li 2017: $0.598+1.814\sqrt{p_w}$")
-    # ax.set_xscale("log")
-    ax.set_xlim(0.2, 20)
-    ax.set_ylim(0.5, 0.9)
-    ax.legend()
     ax.set_xlabel("p$_w$ [hPa]")
     ax.set_ylabel("emissivity [-]")
     ax.set_axisbelow(True)
-    filename = os.path.join("figures", f"compare.png")  # _log
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
-    return None
+    return ax
 
 
 if __name__ == "__main__":
@@ -304,54 +347,6 @@ if __name__ == "__main__":
     # altitude_correction()
 
     # TODO solar time correction plot
-    df = training_data()
-    df = reduce_to_equal_pts_per_site(df, min_pts=200)
-    ms = 15
-    df['y'] = df.y - df.correction
 
-    xmin, xmax = (0.2, 20)
-    x = np.geomspace(xmin+0.00001, xmax, 40)
-    y = C1_CONST + C2_CONST * np.sqrt(x * 100 / P_ATM)
-    y_lbl = 0.6376 + 1.6026 * np.sqrt(x * 100 / P_ATM)  # emissivity
-    y_mendoza = 0.624 * np.power(x, 0.083)
-    y_brunt = 0.605 + 0.048 * np.sqrt(x)
-    # y_brunt = 0.52 + 0.065 * np.sqrt(x)
-    y_li = 0.6173 + 1.6940 * np.power(x * 100 / P_ATM, 0.5035)
-    y_17 = 0.5980 + 1.8140 * np.sqrt(x * 100 / P_ATM)
-
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.grid(True, alpha=0.3)
-    i = 0
-    for site in ELEVATIONS:  # plot in sorted order
-        s = site[0]
-        group = df.loc[df.site == s]
-        ax.scatter(
-            group.pw_hpa, group.y, marker="o", s=ms,
-            alpha=0.2, c=SEVEN_COLORS[i], ec="0.5", lw=0.5, zorder=10
-        )
-        ax.scatter([], [], marker="o", s=3*ms, alpha=1, c=SEVEN_COLORS[i],
-                   ec="0.5", lw=0.5,  label=s)  # dummy for legend
-        i += 1
-    label = r"$c_1 + c_2 \sqrt{p_w}$"
-    ax.plot(x, y, c="0.3", lw=3, ls="--", label=label, zorder=10)
-    ax.plot(x, y_lbl, c="0.2", ls="-", lw=1.5, zorder=10,
-            label="LBL fit: $0.6376+1.6026\sqrt{p_w}$")
-    ax.plot(x, y_mendoza, c=COLORS["persianred"], zorder=10, lw=1.5,
-            alpha=0.8, label="Mendoza 2017: $0.624P_w^{0.083}$")
-    ax.plot(x, y_brunt, c=COLORS["cornflowerblue"], zorder=10, lw=1.5,
-            alpha=0.8, label="Brunt 1932: $0.605+0.048\sqrt{P_w}$")
-    ax.plot(x, y_li, c=COLORS["persianindigo"], ls=":", lw=2, zorder=10,
-            alpha=0.8, label="Li 2019: $0.6173+1.6940{p_w}^{0.5035}$")
-    ax.plot(x, y_17, c=COLORS["coquelicot"], ls=":", lw=2, zorder=10,
-            alpha=0.8, label="Li 2017: $0.598+1.814\sqrt{p_w}$")
-
-    ax.set_xlim(xmin, xmax)
-    ax.set_ylim(0.5, 1.0)
-    ax.set_xlabel("p$_w$ [hPa]")
-    ax.set_ylabel("emissivity [-]")
-    ax.legend(ncol=1, bbox_to_anchor=(1.01, 0.05), loc="lower left")
-    plt.tight_layout()
-    filename = os.path.join("figures", f"compare_with_data.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
 
 
