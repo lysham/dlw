@@ -44,8 +44,8 @@ def find_clearsky(df, window=10, min_sample=2):
                 for j in range(sw.shape[0]):
                     # individually change each value in sliding window range
                     cs_array[i+j] = 1
-        if i % 10000 == 0:
-            print(i)
+        # if i % 10000 == 0:
+        #     print(i)
     df['cs_period'] = cs_array
     df["cs_period"] = df["cs_period"].astype('bool')
     df = df.drop(columns=["day"])  # drop the day label column
@@ -177,7 +177,7 @@ def process_site(site, folder, yr="2012", min_sample=2):
     df = tmp.copy()  # switch back to df
     # print("Data collected.", time.time() - start_time)
 
-    # Do some clean-up
+    # Check quality control flags
     df = df[
         (df.qc1 == 0) & (df.qc3 == 0) &
         (df.qc4 == 0) & (df.qc5 == 0) &
@@ -204,21 +204,8 @@ def process_site(site, folder, yr="2012", min_sample=2):
     # Apply clear sky period filter
     df = find_clearsky(df, min_sample=min_sample)
     df = df.asfreq("1T")
+    df["cs_period"] = df.cs_period.fillna(False)  # ensure boolean column
     df["reno_cs"] = pvlib.clearsky.detect_clearsky(df.GHI_m, df.GHI_c)
-
-    # need to apply clear sky filter before data is sampled
-    # print("Clear sky filter applied.", time.time() - start_time)
-
-    # # Reduce sample size TODO remove later(?) (orig 1%)
-    # df = df.sample(frac=0.05, random_state=96)
-
-    # # Determine T_sky values, and correct for 3-50 micron range
-    # f = pd.read_csv(os.path.join("data", "tsky_table_3_50.csv"))
-    # t_sky = np.interp(df.dw_ir.values, f['ir_meas'].values, f['tsky'].values)
-    # dlw = SIGMA * np.power(t_sky, 4)
-    # df['t_sky'] = t_sky
-    # df['lw_s'] = dlw
-    # print("T_sky determined.", time.time() - start_time)
 
     if not os.path.exists(os.path.join("data", "SURFRAD")):
         os.makedirs(os.path.join("data", "SURFRAD"))
@@ -355,7 +342,35 @@ def import_site_year(site, year, drive="hdd"):
 
     filename = os.path.join(folder, f"{site}_{year}.csv")
 
-    df = pd.read_csv(filename, index_col=0, parse_dates=True)
+    column_dtypes = {
+        'zen': 'float64',
+        'GHI_m': 'float64',
+        'DNI_m': 'float64',
+        'diffuse': 'float64',
+        'dw_ir': 'float64',
+        'temp': 'float64',
+        'rh': 'float64',
+        'pa_hpa': 'float64',
+        'dw_casetemp': 'float64',
+        'dw_dometemp': 'float64',
+        'uw_ir': 'float64',
+        'uw_castemp': 'float64',
+        'uw_dometemp': 'float64',
+        'uvb': 'float64',
+        'par': 'float64',
+        'windspd': 'float64',
+        'winddir': 'float64',
+        't_a': 'float64',
+        'GHI_c': 'float64',
+        'DNI_c': 'float64',
+        'dhi': 'float64',
+        'cs_period': 'bool',
+        'reno_cs': 'bool',
+    }
+
+    df = pd.read_csv(
+        filename, index_col=0, parse_dates=True, dtype=column_dtypes
+    )
     df.sort_index(inplace=True)
     df = df.tz_localize("UTC")
     # drop rows with missing values in parameter columns
@@ -384,8 +399,13 @@ if __name__ == "__main__":
     # filepath to folder SURFRAD data
     # directory = os.path.join("/Volumes", "LMM_drive", "SURFRAD")
     folder = os.path.join("data", "SURFRAD_raw")
-    # for year in np.arange(2008, 2022):
-    process_site(site="DRA", folder=folder, yr="2023")
+    for site in SURF_SITE_CODES:
+        start_time = time.time()
+        for year in np.arange(2010, 2016):
+            process_site(site=site, folder=folder, yr=f"{year}")
+        print(site, time.time() - start_time, "\n")
+
+    # process_site(site="BON", folder=folder, yr="2010", min_sample=5)
 
     # df = pd.DataFrame()
     # for year in np.arange(2008, 2023):
