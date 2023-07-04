@@ -469,7 +469,7 @@ def create_training_set(year=[2012, 2013], sites=SURF_SITE_CODES,
         sites = [sites]
     keep_cols = [
         'zen', 'GHI_m', 'DNI_m', 'diffuse', 'dw_ir', 'temp', 'rh', 'pa_hpa',
-        't_a', 'GHI_c', 'DNI_c', 'dhi', 'cs_period', 'reno_cs'
+        't_a', 'GHI_c', 'DNI_c', 'dhi', 'cs_period', 'reno_cs', 'site'
     ]
 
     df = pd.DataFrame()
@@ -493,6 +493,9 @@ def create_training_set(year=[2012, 2013], sites=SURF_SITE_CODES,
                 if filter_solar_time:
                     tmp = tmp.loc[tmp.index.hour > 8]  # filter solar time
 
+                # ensure both clear sky filter columns are boolean
+                tmp.cs_period.astype(bool)
+                tmp.reno_cs.astype(bool)
                 tmp["csv2"] = (tmp.cs_period & tmp.reno_cs)
                 # tmp["csv2"] = tmp.reno_cs
 
@@ -599,39 +602,42 @@ if __name__ == "__main__":
     test = reduce_to_equal_pts_per_site(test)
     # train = df.loc[df.index.year != 2012].copy()
     # test = df.loc[df.index.year == 2012].copy()  # make test set
+    test.y = test.y - (0.15 * test.correction) - 0.6
 
-    c1_x = np.linspace(0.3, 0.8, 25)  # 100
-    c2_x = np.linspace(1, 3, 50)  # 200
-    c3 = 0.15
+    fit_linear(test, set_intercept=0.6, print_out=True)
 
-    z = np.zeros((len(c1_x), len(c2_x)))
-    for i in range(len(c1_x)):
-        for j in range(len(c2_x)):
-            pred_y = c1_x[i] + c2_x[j] * test.x
-            correction = c3 * test.correction
-            z[i, j] = np.sqrt(mean_squared_error(test.y, pred_y + correction))
-
-    # cnorm = mpl.colors.LogNorm(vmin=0.01, vmax=1)
-    xi, yi = np.unravel_index(z.argmin(), z.shape)
-    cnorm = mpl.colors.Normalize(vmin=0, vmax=0.4)
-    fig, ax = plt.subplots()
-    ax.grid(alpha=0.3)
-    cb = ax.contourf(
-        c2_x, c1_x, z, cmap=mpl.cm.coolwarm, norm=cnorm
-    )
-    ax.scatter(c2_x[yi], c1_x[xi], c="k", marker="^")
-    text = f"({c1_x[xi]:.4f}, {c2_x[yi]:.4f}, {c3})"
-    ax.text(c2_x[yi] + .05, c1_x[xi] + 0.01, text)
-    fig.colorbar(cb, label="RMSE")
-    ax.set_ylabel(f"c1 [{c1_x[0]}, {c1_x[-1]}]")
-    ax.set_xlabel(f"c2 [{c2_x[0]}, {c2_x[-1]}]")
-    ax.xaxis.set_major_locator(mpl.ticker.LinearLocator(5))
-    ax.xaxis.set_major_formatter('{x:.02f}')
-    ax.yaxis.set_major_locator(mpl.ticker.LinearLocator(6))
-    ax.yaxis.set_major_formatter('{x:.02f}')
-    title = f"c3={c3} (RMSE: min={z.min():.3f}, avg={z.mean():.3f})"
-    ax.set_title(title, loc="left")
-    plt.tight_layout()
-    plt.show()
+    # c1_x = np.linspace(0.3, 0.8, 25)  # 100
+    # c2_x = np.linspace(1, 3, 50)  # 200
+    # c3 = 0.15
+    #
+    # z = np.zeros((len(c1_x), len(c2_x)))
+    # for i in range(len(c1_x)):
+    #     for j in range(len(c2_x)):
+    #         pred_y = c1_x[i] + c2_x[j] * test.x
+    #         correction = c3 * test.correction
+    #         z[i, j] = np.sqrt(mean_squared_error(test.y, pred_y + correction))
+    #
+    # # cnorm = mpl.colors.LogNorm(vmin=0.01, vmax=1)
+    # xi, yi = np.unravel_index(z.argmin(), z.shape)
+    # cnorm = mpl.colors.Normalize(vmin=0, vmax=0.4)
+    # fig, ax = plt.subplots()
+    # ax.grid(alpha=0.3)
+    # cb = ax.contourf(
+    #     c2_x, c1_x, z, cmap=mpl.cm.coolwarm, norm=cnorm
+    # )
+    # ax.scatter(c2_x[yi], c1_x[xi], c="k", marker="^")
+    # text = f"({c1_x[xi]:.4f}, {c2_x[yi]:.4f}, {c3})"
+    # ax.text(c2_x[yi] + .05, c1_x[xi] + 0.01, text)
+    # fig.colorbar(cb, label="RMSE")
+    # ax.set_ylabel(f"c1 [{c1_x[0]}, {c1_x[-1]}]")
+    # ax.set_xlabel(f"c2 [{c2_x[0]}, {c2_x[-1]}]")
+    # ax.xaxis.set_major_locator(mpl.ticker.LinearLocator(5))
+    # ax.xaxis.set_major_formatter('{x:.02f}')
+    # ax.yaxis.set_major_locator(mpl.ticker.LinearLocator(6))
+    # ax.yaxis.set_major_formatter('{x:.02f}')
+    # title = f"c3={c3} (RMSE: min={z.min():.3f}, avg={z.mean():.3f})"
+    # ax.set_title(title, loc="left")
+    # plt.tight_layout()
+    # plt.show()
 
 

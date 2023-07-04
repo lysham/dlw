@@ -401,11 +401,9 @@ if __name__ == "__main__":
     folder = os.path.join("data", "SURFRAD_raw")
     for site in SURF_SITE_CODES:
         start_time = time.time()
-        for year in np.arange(2010, 2016):
+        for year in np.arange(2004, 2009):
             process_site(site=site, folder=folder, yr=f"{year}")
         print(site, time.time() - start_time, "\n")
-
-    # process_site(site="BON", folder=folder, yr="2010", min_sample=5)
 
     # df = pd.DataFrame()
     # for year in np.arange(2008, 2023):
@@ -425,14 +423,6 @@ if __name__ == "__main__":
     # ax.grid(alpha=0.3)
     # ax.plot(x, mean_ir)
     # plt.show()
-
-    # start_time = time.time()
-    # for s in SURF_SITE_CODES:
-    #     if s != "SXF":
-    #         for year in np.arange(2000, 2023):
-    #             process_site(s, folder, yr=f"{year}", min_sample=2)
-    #             add_pvlib_cs(s, year=year, drive="server4")
-    #     print(s, time.time() - start_time)
 
     # start_time = time.time()
     # for s in SURF_SITE_CODES:
