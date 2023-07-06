@@ -539,3 +539,66 @@ if __name__ == "__main__":
     x = np.linspace(xmin + 0.00001, xmax, 40) * 100 / P_ATM
     y = 0.6173 + 1.6940 * np.power(x, 0.5035)
 
+    # import data
+    plot_tau = True  # True plot tau, False plot emissivity
+    if plot_tau:
+        filename = os.path.join('data', 'tab2_tau.csv')
+        ylabel = "optical depth [-]"
+        figname = "fig5_tau.png"
+    else:
+        filename = os.path.join('data', 'tab2.csv')
+        ylabel = "emissivity [-]"
+        figname = "fig5.png"
+
+    df = pd.read_csv(filename, na_values=["-"])
+    gases = df.columns[2:-1]
+
+    x = np.geomspace(0.1, 25, 40) * 100  # Pa
+    pw = x / P_ATM
+    xticks = [0.5, 1.0, 1.5, 2.0]
+
+    fig, axes = plt.subplots(1, 7, figsize=(10, 4), sharey=True, sharex=True)
+    plt.subplots_adjust(wspace=0)
+    i = 0
+    for band, group in df.groupby(df.band):
+        ax = axes[i]
+        ax.set_xlabel("$p_w$ x 100")
+        ax.set_title(band.upper(), loc="left")
+        y_ref = np.zeros(len(pw))
+        for gas in gases:
+            c1, c2, c3 = group[gas].values
+            if np.isnan(c2) and np.isnan(c3):
+                if not np.isnan(c1):  # c1 is constant
+                    y = c1 * np.ones(len(pw))
+                    # tau_constant = -1 * np.log(1 - c1)
+                    # print(band, gas, tau_constant.round(4))
+                else:
+                    y = np.zeros(len(pw))
+            else:
+                if plot_tau:
+                    y = c1 + c2 * np.power(pw, c3)
+                else:
+                    if band == "b2":
+                        y = c1 + c2 * np.tanh(c3 * pw)
+                    else:
+                        y = c1 + c2 * np.power(pw, c3)
+            ax.plot(pw*100, y_ref + y, label=gas)  # plot emissivity
+            ax.set_xticks(xticks)
+            ax.set_xticklabels(xticks, fontsize=8)
+            y_ref += y
+        i += 1
+    ax.legend(fontsize="8")
+    ax.set_ylim(bottom=-0.05)
+    ax.set_xlim(0.1, 2.49)
+    axes[0].set_ylabel(ylabel)
+    filename = os.path.join("figures", figname)
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+
+    # # need to run fits
+    # band, gas = ("b2", "total")
+    # c1, c2, c3 = df.loc[(df.band == band), gas].values
+    # e = c1 + c2 * np.tanh(c3 * pw)
+    # # e = c1 + c2 * np.power(pw, c3)
+    # tau = -1 * np.log(1 - e)
+    # fit_df = pd.DataFrame(dict(x=np.sqrt(pw), y=tau))
+    # fit_linear(fit_df, print_out=True)
