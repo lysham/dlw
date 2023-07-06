@@ -8,9 +8,10 @@ import datetime as dt
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-from constants import ELEVATIONS, SEVEN_COLORS, P_ATM, SIGMA
+from constants import ELEVATIONS, SEVEN_COLORS, P_ATM, SIGMA, SURFRAD
 from corr26b import create_training_set, reduce_to_equal_pts_per_site, \
     add_solar_time
+from fig3 import shakespeare
 
 
 # set defaults
@@ -347,6 +348,72 @@ if __name__ == "__main__":
     # altitude_correction()
 
     # TODO solar time correction plot
+
+    t = 288  # standard temperature for scaling measurement error
+    yerr = 5 / (SIGMA * np.power(t, 4))  # +/-5 W/m^2 error
+    figsize = (8, 4)
+    # set axis bounds of both figures
+    xmin, xmax = (0.2, 35)
+    ymin, ymax = (0.5, 1.0)
+
+    # define fitted correlation
+    x = np.geomspace(xmin+0.00001, xmax, 40)  # hPa
+    y = C1_CONST + C2_CONST * np.sqrt(x * 100 / P_ATM)  # emissivity
+    y_mendoza = 0.624 * np.power(x, 0.083)
+    y_brunt = 0.605 + 0.048 * np.sqrt(x)
+    y_li = 0.619 + 1.665 * np.sqrt(x * 100 / P_ATM)
+    y_17 = 0.598 + 1.814 * np.sqrt(x * 100 / P_ATM)
+    y_berdahl = 0.564 + 0.059 * np.sqrt(x)
+
+    e_tau_p0 = np.zeros(len(x))
+    site = "GWC"
+    lat1 = SURFRAD[site]["lat"]
+    lon1 = SURFRAD[site]["lon"]
+    h1, spline = shakespeare(lat1, lon1)
+    pw = (x * 100)  # Pa, partial pressure of water vapor
+    w = 0.62198 * pw / (P_ATM - pw)
+    q = w / (1 + w)  # kg/kg
+    he_p0 = (h1 / np.cos(40.3 * np.pi / 180))
+    for i in range((len(x))):
+        tau = spline.ev(q[i], he_p0).item()
+        e_tau_p0[i] = 1 - np.exp(-1 * tau)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    # ax = _add_common_features(ax, x, y)
+
+    ax.plot(x, y, lw=1.5, ls="-", c="0.2", zorder=2,
+            label="$0.600+1.653\sqrt{p_w}$")
+    # LBL models
+    ax.plot(x, y_mendoza, lw=1, ls="-", c=COLORS["persianred"], zorder=8,
+            label="$0.624P_w^{0.083}$ (Mendoza 2017)")
+    ax.plot(x, y_li, lw=1, ls="-", c=COLORS["persianindigo"], zorder=8,
+            label="$0.619+1.665\sqrt{p_w}$ (Li 2019)")
+    # empirical for comparison
+    # ax.plot(x, y_brunt, lw=1.5, ls="--", c=COLORS["cornflowerblue"], zorder=5,
+    #         label="$0.605+0.048\sqrt{P_w}$ (Brunt/Sellers)")
+    # ax.plot(x, y_17, c=COLORS["coquelicot"], ls="-.", lw=1.5, zorder=5,
+    #         label="$0.598+1.814\sqrt{p_w}$ (Li 2017)")
+    # ax.plot(x, y_berdahl, c=COLORS["viridian"], ls=":", lw=1.5, zorder=5,
+    #         label="$0.564+0.059\sqrt{P_w}$ (Berdahl and Martin)")
+
+    ax.plot(x, e_tau_p0, label="tau")
+    # misc
+    ax.grid(alpha=0.3)
+    ax.set_xlabel("p$_w$ [hPa]")
+    ax.set_ylabel("emissivity [-]")
+    ax.set_axisbelow(True)
+
+    # ax.fill_between(x, y - yerr, y + yerr, alpha=0.5, label="+/- 5 W/m$^2$")
+    # ax.fill_between(x, y - yerr5, y + yerr5, fc="0.7", alpha=0.4)
+
+    ax.legend(ncol=1, bbox_to_anchor=(1.01, 0.05),
+              loc="lower left")
+
+    # ax.set_xscale("log")
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymin, ymax)
+    plt.tight_layout()
+    plt.show()
 
 
 

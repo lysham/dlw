@@ -99,12 +99,12 @@ def get_emissivity_i(p_w, sp="H2O"):
 def plot_fig3_shakespeare_comparison():
     species = list(LI_TABLE1.keys())
 
-    pw_x = np.linspace(0.1, 2.3, 20)
+    pw_x = np.geomspace(0.1, 2.3, 20)
     e_broad = np.zeros((len(pw_x), N_SPECIES))
 
     e_tau = np.zeros(len(pw_x))
     e_tau_p0 = np.zeros(len(pw_x))
-    site = "BON"
+    site = "GWC"
     lat1 = SURFRAD[site]["lat"]
     lon1 = SURFRAD[site]["lon"]
     h1, spline = shakespeare(lat1, lon1)
@@ -507,3 +507,35 @@ if __name__ == "__main__":
     #     yr=[2015], tau=False,
     #     temperature=False, pct_clr_min=0.05, pressure_bins=10, violin=True
     # )
+
+    xmin, xmax = (0.1, 30)  # hPa
+    x = np.geomspace(xmin+0.00001, xmax, 40) * 100 / P_ATM  # normalized
+    b2 = 0.1170 + 0.0662 * np.tanh(270.4686 * x)
+    b3 = 0.1457 + 0.0417 * np.power(x, 0.0992)
+    b4 = 0.1057 + 5.8689 * np.power(x, 0.9633)
+    b157 = 0.1725 + 0.0766 + 0.0019 + 0.0026
+    y = b2 + b3 + b4 + b157
+
+    y_fit = 0.6173 + 1.681 * np.sqrt(x)
+    y_fit_geom = 0.6192 + 1.6651 * np.sqrt(x)
+
+    fig, ax = plt.subplots()
+    ax.grid(axis="y")
+    ax.plot(x * 100, y, c="k", ls=":")
+    ax.plot(x * 100, y_fit, c="g", alpha=0.5)
+    ax.plot(x * 100, y_fit_geom, c="r", alpha=0.4)
+    ax2 = ax.twinx()
+    ax2.axhline(0, c="0.7")
+    ax2.plot(x * 100, y_fit - y, c="g", ls="--")
+    ax2.plot(x * 100, y_fit_geom - y, c="r", ls="--")
+    plt.show()
+
+    model = LinearRegression(fit_intercept=True)
+    model.fit(np.sqrt(x.reshape(-1, 1)), y.reshape(-1, 1))
+    c2 = model.coef_[0].round(4)
+    c1 = model.intercept_.round(4)
+    print(c1, c2)
+
+    x = np.linspace(xmin + 0.00001, xmax, 40) * 100 / P_ATM
+    y = 0.6173 + 1.6940 * np.power(x, 0.5035)
+
