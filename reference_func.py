@@ -2361,9 +2361,28 @@ def epri_presentation():
         filter_npts_clr=FILTER_NPTS_CLR, drive="server4"
     )
     df['correction'] = 0.15 * (np.exp(-1 * df.elev / 8500) - 1)
-
     df = reduce_to_equal_pts_per_site(df, min_pts=200)
     df['y'] = df.y - df.correction
+
+    # --- evaluate error before and after accounting for 2020 data
+    df20 = df.copy()
+    # get main training set for comparison
+    dfx = training_data()
+    dfx = reduce_to_equal_pts_per_site(dfx, min_pts=200)
+    dfx['y'] = dfx.y - dfx.correction  # bring all sample to sea level
+    # evaluate comparative LW error
+    emissivity = 0.619 + 1.512 * np.sqrt(df20.pw_hpa * 100 / P_ATM)
+    act = df20.dw_ir.to_numpy().reshape(-1, 1)
+    lw = emissivity * np.power(df20.t_a, 4) * SIGMA
+    rmse = np.sqrt(mean_squared_error(act, lw.to_numpy().reshape(-1, 1)))
+    print("w/2020 RMSE: ", rmse)
+    emissivity = 0.604 + 1.605 * np.sqrt(dfx.pw_hpa * 100 / P_ATM)
+    act = dfx.dw_ir.to_numpy().reshape(-1, 1)
+    lw = emissivity * np.power(dfx.t_a, 4) * SIGMA
+    rmse = np.sqrt(mean_squared_error(act, lw.to_numpy().reshape(-1, 1)))
+    print("w/o 2020 RMSE: ", rmse)
+    # ---
+
     ms = 15
 
     fig, ax = plt.subplots(figsize=(5, 4))
