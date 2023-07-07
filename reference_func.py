@@ -20,7 +20,7 @@ from constants import *
 from fig3 import get_atm_p
 from process import *
 from enso import get_train, import_oni_mei_data, create_monthly_df
-from figures import FILTER_NPTS_CLR, FILTER_PCT_CLR
+from figures import FILTER_NPTS_CLR, FILTER_PCT_CLR, training_data, COLORS
 
 
 def look_at_jyj():
@@ -2313,6 +2313,125 @@ def dra_multiplexer():
     ax.set_ylabel("emissivity [-]")
     ax.set_axisbelow(True)
     plt.show()
+    return None
+
+
+def epri_presentation():
+    df = training_data()
+    df = reduce_to_equal_pts_per_site(df, min_pts=100)
+    df['y'] = df.y - df.correction  # bring all sample to sea level
+    ms = 15  # marker size for data samples
+
+    t = 288  # standard temperature for scaling measurement error
+    yerr = 5 / (SIGMA * np.power(t, 4))  # +/-5 W/m^2 error
+    figsize = (10, 4)
+    # set axis bounds of both figures
+    xmin, xmax = (0.2, 35)
+    ymin, ymax = (0.5, 1.0)
+
+    # define fitted correlation
+    x = np.geomspace(xmin+0.00001, xmax, 40)  # hPa
+    y = 0.6 + 1.653 * np.sqrt(x * 100 / P_ATM)  # emissivity
+
+    fig, ax = plt.subplots(figsize=(5, 4))
+    ax.grid(alpha=0.3)
+    ax.set_xlim(0, xmax)
+    ax.set_ylim(ymin, ymax)
+    ax.scatter(
+        df.pw_hpa, df.y, marker="o", s=ms,
+        alpha=0.3, c="0.3", ec="0.5", lw=0.5, zorder=0
+    )
+    ax.plot(x, y, lw=1.5, ls="--", c="0.0", zorder=2,
+            label="$c_1+c_2\sqrt{p_w}$")
+    ax.legend(ncol=1, loc="lower right", fontsize=14)
+    ax.set_axisbelow(True)
+    ax.set_xlabel("p$_w$ [hPa]")
+    ax.set_ylabel("emissivity [-]")
+    plt.show()
+    filename = os.path.join("figures", f"example.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+
+    # ---- polished figure of e vs pw with and without 2020 DRA
+
+    # df = training_data()  # import data
+    df = create_training_set(
+        year=[2010, 2015, 2020],
+        temperature=False, cs_only=True,
+        filter_pct_clr=FILTER_PCT_CLR,
+        filter_npts_clr=FILTER_NPTS_CLR, drive="server4"
+    )
+    df['correction'] = 0.15 * (np.exp(-1 * df.elev / 8500) - 1)
+
+    df = reduce_to_equal_pts_per_site(df, min_pts=200)
+    df['y'] = df.y - df.correction
+    ms = 15
+
+    fig, ax = plt.subplots(figsize=(5, 4))
+    ax.grid(True, alpha=0.3)
+    i = 0
+    for site in ELEVATIONS:  # plot in sorted order
+        s = site[0]
+        group = df.loc[df.site == s]
+        if s == "SXF":
+            # for 2010-2015-2020 plot (remove 2/3/2010 and 11/23/2010 for SXF)
+            group = group.loc[group.index.date != dt.date(2010, 2, 3)]
+            group = group.loc[group.index.date != dt.date(2010, 11, 23)]
+        ax.scatter(
+            group.pw_hpa, group.y, marker="o", s=ms,
+            alpha=0.8, c=SEVEN_COLORS[i], ec="0.5", lw=0.5, zorder=10
+        )
+        ax.scatter([], [], marker="o", s=3*ms, alpha=1, c=SEVEN_COLORS[i],
+                   ec="0.5", lw=0.5,  label=s)  # dummy for legend
+        i += 1
+    xmin, xmax = (0, 35)
+    x = np.geomspace(0.00001, xmax, 40)
+    y = 0.6 + 1.653 * np.sqrt(x * 100 / P_ATM)
+    label = r"$c_1 + c_2 \sqrt{p_w}$"
+    ax.plot(x, y, c="0.3", lw=1.5, ls="--", label=label, zorder=10)
+
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(0.5, 1.0)
+    ax.set_xlabel("p$_w$ [hPa]")
+    ax.set_ylabel("emissivity [-]")
+    ax.legend(ncol=4, bbox_to_anchor=(0.99, 0.05), loc="lower right", fontsize=8)
+    plt.tight_layout()
+    filename = os.path.join("figures", f"e_response_2020.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+
+    # ---- DRA plot
+    site = "DRA"
+    ms = 10  # marker size
+    df_ref = create_training_set(
+        year=[2023], sites=[site],
+        temperature=False, cs_only=True,
+        filter_pct_clr=FILTER_PCT_CLR,
+        filter_npts_clr=FILTER_NPTS_CLR,
+        drive="server4"
+    )
+
+    date = dt.date(2023, 4, 11)
+    pre = df_ref.loc[df_ref.index.date < date]
+    post = df_ref.loc[df_ref.index.date > date]
+
+    pre = pre.sample(800, random_state=12)
+    post = post.sample(800, random_state=12)
+
+    fig, ax = plt.subplots(figsize=(5, 4), sharex=True, sharey=True)
+    ax.grid(alpha=0.3)
+    ax.scatter(pre.pw_hpa, pre.y, s=ms, c="0.3", alpha=0.3,
+               label="pre- April 11")
+    ax.scatter(post.pw_hpa, post.y, s=ms, c=COLORS["cornflowerblue"],
+               alpha=0.5, label="post- April 11")
+    ax.set_title("2023 clear sky samples", loc="left")
+    ax.legend()
+    ax.set_ylim(0.5, 1)
+    ax.set_xlim(0, 12)
+    ax.set_xlabel("p$_w$ [hPa]")
+    ax.set_ylabel("emissivity [-]")
+    ax.set_axisbelow(True)
+    plt.tight_layout()
+    filename = os.path.join("figures", "dra_multiplexer.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 
 
