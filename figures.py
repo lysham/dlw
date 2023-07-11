@@ -273,19 +273,20 @@ def compare(with_data=True):
     yerr = 5 / (SIGMA * np.power(t, 4))  # +/-5 W/m^2 error
     figsize = (10, 4)
     # set axis bounds of both figures
-    xmin, xmax = (0.2, 35)
+    xmin, xmax = (0.1, 35)  # hpa
     ymin, ymax = (0.5, 1.0)
 
     # define fitted correlation
-    x = np.geomspace(xmin+0.00001, xmax, 40)  # hPa
-    y = C1_CONST + C2_CONST * np.sqrt(x * 100 / P_ATM)  # emissivity
+    x = np.geomspace(xmin+0.00001, xmax, 50)  # hPa
+    x = x * 100 / P_ATM  # normalized
+    y = C1_CONST + C2_CONST * np.sqrt(x)  # emissivity
 
     e_tau_p0 = np.zeros(len(x))
     site = "GWC"
     lat1 = SURFRAD[site]["lat"]
     lon1 = SURFRAD[site]["lon"]
     h1, spline = shakespeare(lat1, lon1)
-    pw = (x * 100)  # Pa, partial pressure of water vapor
+    pw = (x * P_ATM)  # Pa, partial pressure of water vapor
     w = 0.62198 * pw / (P_ATM - pw)
     q = w / (1 + w)  # kg/kg
     he_p0 = (h1 / np.cos(40.3 * np.pi / 180))
@@ -295,18 +296,18 @@ def compare(with_data=True):
 
     fig, ax = plt.subplots(figsize=figsize)
     axins = inset_axes(ax, width="50%", height="42%", loc=4, borderpad=1.7)
-    ax.set_xlim(xmin, xmax)
+    ax.set_xlim(xmin * 100 / P_ATM, xmax * 100 / P_ATM)
     ax.set_ylim(ymin, ymax)
-    axins.set_xlim(xmin, 10)
+    axins.set_xlim(xmin * 100 / P_ATM, 0.01)
     axins.set_ylim(0.6, 0.8)
     ax, axins = _add_common_features(ax, axins, x, y, e_tau_p0)
     if with_data:  # with data
         ax.scatter(
-            df.pw_hpa, df.y, marker="o", s=ms,
+            (df.pw_hpa * 100) / P_ATM, df.y, marker="o", s=ms,
             alpha=0.3, c="0.3", ec="0.5", lw=0.5, zorder=0
         )
         axins.scatter(
-            df.pw_hpa, df.y, marker="o", s=ms,
+            (df.pw_hpa * 100) / P_ATM, df.y, marker="o", s=ms,
             alpha=0.3, c="0.3", ec="0.5", lw=0.5, zorder=0
         )
     # ax.fill_between(x, y - yerr, y + yerr, alpha=0.5, label="+/- 5 W/m$^2$")
@@ -322,11 +323,10 @@ def _add_common_features(ax, axins, x, y, e_tau_p0):
 
     # dlw = y * SIGMA * np.power(t, 4)  # approximate measured dlw
     # # yerr5 = (0.05 * dlw) / (SIGMA * np.power(t, 4))  # 5% error
-    y_mendoza = 0.624 * np.power(x, 0.083)
-    y_brunt = 0.605 + 0.048 * np.sqrt(x)
-    y_li = 0.619 + 1.665 * np.sqrt(x * 100 / P_ATM)
-    y_17 = 0.598 + 1.814 * np.sqrt(x * 100 / P_ATM)
-    y_berdahl = 0.564 + 0.059 * np.sqrt(x)
+    y_mendoza = 1.108 * np.power(x, 0.083)
+    y_brunt = 0.605 + 1.528 * np.sqrt(x)
+    y_li = 0.619 + 1.665 * np.sqrt(x)
+    y_berdahl = 0.564 + 1.878 * np.sqrt(x)
 
     # fit: -./:, lw=1, gray, change ls only
     # lbl: -, lw=1, colors
@@ -336,14 +336,14 @@ def _add_common_features(ax, axins, x, y, e_tau_p0):
             label="$0.600+1.653\sqrt{p_w}$")
     # LBL models
     ax.plot(x, y_mendoza, lw=1, ls="-", c=COLORS["viridian"], zorder=8,
-            label="$0.624P_w^{0.083}$ (Mendoza 2017)")
+            label="$1.108p_w^{0.083}$ (Mendoza 2017)")
     ax.plot(x, y_li, lw=1, ls="-", c=COLORS["persianred"], zorder=8,
             label="$0.619+1.665\sqrt{p_w}$ (Li 2019)")
     # empirical for comparison
     ax.plot(x, y_brunt, lw=1, ls="--", c="0.5", zorder=5,
-            label="$0.605+0.048\sqrt{P_w}$ (Brunt/Sellers)")
+            label="$0.605+1.528\sqrt{p_w}$ (Brunt/Sellers)")
     ax.plot(x, y_berdahl, c="0.5", ls=":", lw=1, zorder=5,
-            label="$0.564+0.059\sqrt{P_w}$ (Berdahl 1984)")
+            label="$0.564+1.878\sqrt{p_w}$ (Berdahl 1984)")
     # tau model
     ax.plot(x, e_tau_p0, lw=1, ls="-", c=COLORS["cornflowerblue"], zorder=5,
             label=r"$1-e^{-\tau(p_w,H_e)}$ (Shakespeare 2021)")
@@ -365,7 +365,7 @@ def _add_common_features(ax, axins, x, y, e_tau_p0):
 
     # misc
     ax.grid(alpha=0.3)
-    ax.set_xlabel("p$_w$ [hPa]")
+    ax.set_xlabel("p$_w$ [-]")
     ax.set_ylabel("emissivity [-]")
     ax.set_axisbelow(True)
     return ax, axins
@@ -378,8 +378,3 @@ if __name__ == "__main__":
     # altitude_correction()
 
     # TODO solar time correction plot
-
-
-
-
-
