@@ -273,11 +273,11 @@ def compare(with_data=True):
     yerr = 5 / (SIGMA * np.power(t, 4))  # +/-5 W/m^2 error
     figsize = (10, 4)
     # set axis bounds of both figures
-    xmin, xmax = (0.1, 35)  # hpa
+    xmin, xmax = (0.01, 35.5)  # hpa
     ymin, ymax = (0.5, 1.0)
 
     # define fitted correlation
-    x = np.geomspace(xmin+0.00001, xmax, 50)  # hPa
+    x = np.geomspace(xmin+0.00001, xmax, 100)  # hPa
     x = x * 100 / P_ATM  # normalized
     y = C1_CONST + C2_CONST * np.sqrt(x)  # emissivity
 
@@ -295,8 +295,8 @@ def compare(with_data=True):
         e_tau_p0[i] = 1 - np.exp(-1 * tau)
 
     fig, ax = plt.subplots(figsize=figsize)
-    axins = inset_axes(ax, width="50%", height="42%", loc=4, borderpad=1.7)
-    ax.set_xlim(xmin * 100 / P_ATM, xmax * 100 / P_ATM)
+    axins = inset_axes(ax, width="50%", height="42%", loc=4, borderpad=1.8)
+    ax.set_xlim(0, 0.035)
     ax.set_ylim(ymin, ymax)
     axins.set_xlim(xmin * 100 / P_ATM, 0.01)
     axins.set_ylim(0.6, 0.8)
@@ -357,7 +357,7 @@ def _add_common_features(ax, axins, x, y, e_tau_p0):
     axins.plot(x, e_tau_p0, lw=1, ls="-", c=COLORS["cornflowerblue"])
     axins.grid(alpha=0.3)
     axins.set_axisbelow(True)
-    _, connects = ax.indicate_inset_zoom(axins, edgecolor="black")
+    _, connects = ax.indicate_inset_zoom(axins, edgecolor="#969696")
     connects[0].set_visible(True)  # bottom left
     connects[1].set_visible(False)  # top left
     connects[2].set_visible(False)  # bottom right
@@ -365,7 +365,7 @@ def _add_common_features(ax, axins, x, y, e_tau_p0):
 
     # misc
     ax.grid(alpha=0.3)
-    ax.set_xlabel("p$_w$ [-]")
+    ax.set_xlabel("$p_w$ [-]")
     ax.set_ylabel("emissivity [-]")
     ax.set_axisbelow(True)
     return ax, axins
@@ -378,3 +378,4 @@ if __name__ == "__main__":
     # altitude_correction()
 
     # TODO solar time correction plot
+    compare(with_data=True)
