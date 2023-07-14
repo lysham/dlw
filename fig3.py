@@ -510,7 +510,12 @@ if __name__ == "__main__":
     print()
     df = import_ijhmt_df("fig3_esky_i.csv")
     df = df.set_index("pw")
-    gases = df.columns
+    lbl = [
+        'H2O', 'CO2', 'O3', 'Aerosols', 'N2O', 'CH4', 'O2', 'N2', 'Overlaps'
+    ]
+
+    cmap = mpl.colormaps["Paired"]
+    cmaplist = [cmap(i) for i in range(len(lbl))]
 
     # 1
     df1 = 1 - df  # each column now aggregated transmissivities
@@ -520,20 +525,75 @@ if __name__ == "__main__":
     # last value is the cumulative product of all previous values
     df1["total"] = df1.cumprod(axis=1).iloc[:, -1]
 
-    # print constants for transmissivity
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5), sharex=True)
     x = df1.index.to_numpy()
-    y = df1["total"].to_numpy()
-    fit_df = pd.DataFrame(dict(x=x, y=np.log(y)))
-    fit_linear(fit_df, print_out=True)
+    i = 0
+    y_ref = np.ones(len(x))
+    for s in lbl:
+        col = s if i == 0 else f"p{s}"
+        ax1.plot(x, df1[col], label=s, c=cmaplist[i])
+        ax2.plot(x, y_ref * df1[col], label=s, c=cmaplist[i])
+        y_ref = y_ref * df1[col]
+        i += 1
+    ax1.plot(x, y_ref, label="total", c="0.0", ls="--")
+    ax2.plot(x, y_ref, label="total", c="0.0", ls="--")
+    ax1.set_title("Individual contributions", loc="left")
+    ax2.set_title("Cumulative transmissivity", loc="left")
+    ax1.set_xlim(x[0], x[-1])
+    ax1.set_xlabel("$p_w$ [-]")
+    ax2.set_xlabel("$p_w$ [-]")
+    ax1.set_ylabel("transmissivity [-]")
+    ax2.set_ylabel("transmissivity [-]")
+    ax1.set_ylim(0, 1.1)
+    ax2.set_ylim(0, 0.5)
+    ax2.grid(alpha=0.3)
+    ax1.grid(alpha=0.3)
+    ax2.legend(ncol=2, loc="upper right")
+    filename = os.path.join("figures", "fig3_tau.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
 
-    # print constants for emissivity
-    x = df.index.to_numpy()
-    y = df["pOverlaps"].to_numpy()
-    fit_df = pd.DataFrame(dict(x=np.sqrt(x), y=y))
-    fit_linear(fit_df, print_out=True)
+    # transmissivity
+    site = "GWC"
+    lat1 = SURFRAD[site]["lat"]
+    lon1 = SURFRAD[site]["lon"]
+    h1, spline = shakespeare(lat1, lon1)
+    pw = x * P_ATM  # Pa
+    w = 0.62198 * pw / (P_ATM - pw)
+    q = w / (1 + w)
+    p_rep = P_ATM * np.exp(-1 * SURFRAD[site]["alt"] / 8500)
+    p_ratio = p_rep / P_ATM
+    he = (h1 / np.cos(40.3 * np.pi / 180)) * np.power(p_ratio, 1.8)
+    d_opt = spline.ev(q, he)
+    tau_shp = np.exp(-1 * d_opt)
 
-    model = LinearRegression(fit_intercept=True)
-    model.fit(np.sqrt(x.reshape(-1, 1)), y.reshape(-1, 1))
-    c2 = model.coef_.round(3)[0][0]
-    c1 = model.intercept_.round(3)[0]
-    print(c1, c2)
+    fig, ax = plt.subplots()
+    ax.plot(x, df1.total.to_numpy(), c="0.0", ls="--", label="Li")
+    ax.plot(x, tau_shp, c="#6495ED", label="Shakespeare")
+    ax.set_xlim(x[0], x[-1])
+    ax.set_ylim(0, 0.5)
+    ax.grid(alpha=0.3)
+    ax.legend()
+    ax.set_xlabel("$p_w$ [-]")
+    ax.set_ylabel("transmissivity [-]")
+    # ax.set_xscale("log")
+    # plt.show()
+    filename = os.path.join("figures", "fig3_tau_compare.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+
+    # # print constants for transmissivity
+    # x = df1.index.to_numpy()
+    # y = df1["total"].to_numpy()
+    # fit_df = pd.DataFrame(dict(x=x, y=np.log(y)))
+    # fit_linear(fit_df, print_out=True)
+    #
+    # # print constants for emissivity
+    # x = df.index.to_numpy()
+    # y = df["pOverlaps"].to_numpy()
+    # fit_df = pd.DataFrame(dict(x=np.sqrt(x), y=y))
+    # fit_linear(fit_df, print_out=True)
+    #
+    # model = LinearRegression(fit_intercept=True)
+    # model.fit(np.sqrt(x.reshape(-1, 1)), y.reshape(-1, 1))
+    # c2 = model.coef_.round(3)[0][0]
+    # c1 = model.intercept_.round(3)[0]
+    # print(c1, c2)
