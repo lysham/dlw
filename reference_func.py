@@ -17,7 +17,7 @@ from fraction import fe_lt, fi_lt
 from statsmodels.tsa.seasonal import seasonal_decompose
 
 from constants import *
-from fig3 import get_atm_p
+from fig3 import get_atm_p, import_ijhmt_df
 from process import *
 from enso import get_train, import_oni_mei_data, create_monthly_df
 from figures import FILTER_NPTS_CLR, FILTER_PCT_CLR, training_data, COLORS
@@ -2451,6 +2451,144 @@ def epri_presentation():
     plt.tight_layout()
     filename = os.path.join("figures", "dra_multiplexer.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def from_fig3_compare_linspace_geomspace():
+    xmin, xmax = (0.1, 30)  # hPa
+    x = np.geomspace(xmin+0.00001, xmax, 40) * 100 / P_ATM  # normalized
+    b2 = 0.1170 + 0.0662 * np.tanh(270.4686 * x)
+    b3 = 0.1457 + 0.0417 * np.power(x, 0.0992)
+    b4 = 0.1057 + 5.8689 * np.power(x, 0.9633)
+    b157 = 0.1725 + 0.0766 + 0.0019 + 0.0026
+    y = b2 + b3 + b4 + b157
+
+    y_fit = 0.6173 + 1.681 * np.sqrt(x)
+    y_fit_geom = 0.6192 + 1.6651 * np.sqrt(x)
+
+    fig, ax = plt.subplots()
+    ax.grid(axis="y")
+    ax.plot(x * 100, y, c="k", ls=":")
+    ax.plot(x * 100, y_fit, c="g", alpha=0.5)
+    ax.plot(x * 100, y_fit_geom, c="r", alpha=0.4)
+    ax2 = ax.twinx()
+    ax2.axhline(0, c="0.7")
+    ax2.plot(x * 100, y_fit - y, c="g", ls="--")
+    ax2.plot(x * 100, y_fit_geom - y, c="r", ls="--")
+    plt.show()
+    return None
+
+
+def fig5_e_tau():
+    # create figure 5 type plot for emissivity and optical depth (tau)
+
+    # import data
+    plot_tau = True  # True plot tau, False plot emissivity
+    if plot_tau:
+        filename = os.path.join('data', 'tab2_tau.csv')
+        ylabel = "optical depth [-]"
+        figname = "fig5_tau.png"
+    else:
+        filename = os.path.join('data', 'tab2.csv')
+        ylabel = "emissivity [-]"
+        figname = "fig5.png"
+
+    df = pd.read_csv(filename, na_values=["-"])
+    gases = df.columns[2:-1]
+
+    x = np.geomspace(0.1, 25, 40) * 100  # Pa
+    pw = x / P_ATM
+    xticks = [0.5, 1.0, 1.5, 2.0]
+
+    fig, axes = plt.subplots(1, 7, figsize=(10, 4), sharey=True, sharex=True)
+    plt.subplots_adjust(wspace=0)
+    i = 0
+    for band, group in df.groupby(df.band):
+        ax = axes[i]
+        ax.set_xlabel("$p_w$ x 100")
+        ax.set_title(band.upper(), loc="left")
+        y_ref = np.zeros(len(pw))
+        for gas in gases:
+            c1, c2, c3 = group[gas].values
+            if np.isnan(c2) and np.isnan(c3):
+                if not np.isnan(c1):  # c1 is constant
+                    y = c1 * np.ones(len(pw))
+                    # tau_constant = -1 * np.log(1 - c1)
+                    # print(band, gas, tau_constant.round(4))
+                else:
+                    y = np.zeros(len(pw))
+            else:
+                if plot_tau:
+                    y = c1 + c2 * np.power(pw, c3)
+                else:
+                    if band == "b2":
+                        y = c1 + c2 * np.tanh(c3 * pw)
+                    else:
+                        y = c1 + c2 * np.power(pw, c3)
+            ax.plot(pw*100, y_ref + y, label=gas)  # plot emissivity
+            ax.set_xticks(xticks)
+            ax.set_xticklabels(xticks, fontsize=8)
+            y_ref += y
+        i += 1
+    ax.legend(fontsize="8")
+    ax.set_ylim(bottom=-0.05)
+    ax.set_xlim(0.1, 2.49)
+    axes[0].set_ylabel(ylabel)
+    filename = os.path.join("figures", figname)
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def define_tau_method_1_vs_2():
+    df = import_ijhmt_df("fig3_esky_i.csv")
+    df = df.set_index("pw")
+    gases = df.columns
+
+    # method 1: convert to additive transmissivity then disaggregate
+    # method 2: disaggregate emissivity then convert to transmissivity
+
+    # 1
+    df1 = 1 - df  # each column now aggregated transmissivities
+    col1 = df1.H2O.to_numpy()
+    df1 = df1.div(df1.shift(axis=1), axis=1)  # shift axis 1 then divide
+    df1["H2O"] = col1
+
+    # 2
+    col1 = df.H2O.to_numpy()
+    df2 = df.diff(axis=1)  # each column is individual emissivity
+    df2["H2O"] = col1  # first column already individual emissivity
+    df2 = 1 - df2
+
+    pdf = df2.copy()
+    title = "method 2"
+
+    cmap = mpl.colormaps["Paired"]
+    cmaplist = [cmap(i) for i in range(N_SPECIES)]
+    fig, ax = plt.subplots()
+    ax.grid(alpha=0.3)
+    x = pdf.index.to_numpy()
+    species = list(LI_TABLE1.keys())
+    # species = species[::-1]  # plot in reverse
+    j = 0
+    y_ref = np.ones(len(x))
+    for i in species:
+        if i == "H2O":
+            y = i
+        elif i == "aerosols" or i == "overlaps":
+            y = f"p{i[0].upper() + i[1:]}"
+        else:
+            y = f"p{i}"
+        ax.plot(x, pdf[y].to_numpy(), label=i, c=cmaplist[-(j + 1)])
+        y_ref = y_ref * pdf[y].to_numpy()
+        j += 1
+    ax.plot(x, y_ref, label="total", c="0.0", ls="--")
+    ax.set_xlim(x[0], x[-1])
+    ax.set_ylim(0, 1.05)
+    ax.set_xlabel("pw [-]")
+    ax.set_ylabel("transmissivity")
+    ax.set_title(title)
+    ax.legend()
+    plt.show()
     return None
 
 
