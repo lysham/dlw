@@ -399,12 +399,12 @@ def fit_linear(df, set_intercept=None, print_out=False):
     else:
         model = LinearRegression(fit_intercept=True)
     model.fit(train_x, train_y)
-    c2 = model.coef_[0].round(4)
+    c2 = model.coef_[0].round(3)
     if set_intercept is not None:  # use given c1
         c1 = set_intercept
         pred_y = c2 * df.x
     else:  # use model-fitted c1
-        c1 = model.intercept_.round(4)
+        c1 = model.intercept_.round(3)
         pred_y = c1 + (c2 * df.x)
     if isinstance(c1, np.ndarray):
         c1 = c1[0]
