@@ -568,6 +568,8 @@ if __name__ == "__main__":
 
     fig, ax = plt.subplots()
     ax.plot(x, df1.total.to_numpy(), c="0.0", ls="--", label="Li")
+    ax.plot(x, df1.H2O.to_numpy() * df1.pCO2.to_numpy(), c="0.2", ls=":",
+            label="Li (H2O and CO2 only)")
     ax.plot(x, tau_shp, c="#6495ED", label="Shakespeare")
     ax.set_xlim(x[0], x[-1])
     ax.set_ylim(0, 0.5)
@@ -576,7 +578,7 @@ if __name__ == "__main__":
     ax.set_xlabel("$p_w$ [-]")
     ax.set_ylabel("transmissivity [-]")
     # ax.set_xscale("log")
-    # plt.show()
+    plt.show()
     filename = os.path.join("figures", "fig3_tau_compare.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
 
