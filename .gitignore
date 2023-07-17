@@ -16,6 +16,7 @@ data/SURFRAD_raw/
 data/train_df/
 data/bsrn/
 data/training_data.csv
+data/shp_files/
 
 randall_files
 
