@@ -78,5 +78,5 @@ LI_TABLE1 = {
     "CH4": [0.0245, -0.0313, 0.0790],
     "overlaps": [0.0524, -0.1423, 0.2998]
 }
-N_SPECIES = 7  # number of contributing components (from TABLE 1)
+N_SPECIES = len(LI_TABLE1)  # number of contributing components (from TABLE 1)
 N_BANDS = 7  # number of bands

@@ -492,6 +492,115 @@ def violin_figure(x, y, y2, xq, yq, c1, c2, c3, title, filename,
     return None
 
 
+def ijhmt_to_tau(filename="fig3_esky_i.csv"):
+    df = import_ijhmt_df(filename=filename)
+    df = df.set_index("pw")
+    # (method 1) convert to aggregated tau, then disaggregate
+    df = 1 - df  # each column now represents aggregated transmissivities
+    col1 = df.H2O.to_numpy()  # preserve first column
+    df = df.div(df.shift(axis=1), axis=1)  # shift axis 1 then divide
+    df["H2O"] = col1  # replace first col of NaNs with H2O transmissivities
+    # last value is the cumulative product of all previous values
+    df["total"] = df.cumprod(axis=1).iloc[:, -1]
+
+    # remove the first p in the column names
+    for c in df.columns:
+        if c[0] == "p":
+            df = df.rename(columns={c: c[1:]})
+    return df
+
+
+def ijhmt_to_individual_e(filename="fig3_esky_i.csv"):
+    df = import_ijhmt_df(filename=filename)
+    df = df.set_index("pw")
+    col1 = df.H2O.to_numpy()
+    df = df.diff(axis=1)  # each column is individual emissivity
+    df["H2O"] = col1  # first column already individual emissivity
+    df["total"] = df.cumsum(axis=1).iloc[:, -1]
+
+    # remove the first p in the column names
+    for c in df.columns:
+        if c[0] == "p":
+            df = df.rename(columns={c: c[1:]})
+    return df
+
+
+def plot_fig3_tau():
+    # two subplots showing wideband individual and cumulative contributions
+    lbl = [
+        'H2O', 'CO2', 'O3', 'Aerosols', 'N2O', 'CH4', 'O2', 'N2', 'Overlaps'
+    ]
+    cmap = mpl.colormaps["Paired"]
+    cmaplist = [cmap(i) for i in range(len(lbl))]
+
+    df = ijhmt_to_tau("fig3_esky_i.csv")  # tau, first p removed
+    x = df.index.to_numpy()
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5), sharex=True)
+    i = 0
+    y_ref = np.ones(len(x))
+    for s in lbl:
+        col = s if i == 0 else f"p{s}"
+        ax1.plot(x, df[col], label=s, c=cmaplist[i])
+        ax2.plot(x, y_ref * df[col], label=s, c=cmaplist[i])
+        y_ref = y_ref * df[col]
+        i += 1
+    ax1.plot(x, y_ref, label="total", c="0.0", ls="--")
+    ax2.plot(x, y_ref, label="total", c="0.0", ls="--")
+    ax1.set_title("Individual contributions", loc="left")
+    ax2.set_title("Cumulative transmissivity", loc="left")
+    ax1.set_xlim(x[0], x[-1])
+    ax1.set_xlabel("$p_w$ [-]")
+    ax2.set_xlabel("$p_w$ [-]")
+    ax1.set_ylabel("transmissivity [-]")
+    ax2.set_ylabel("transmissivity [-]")
+    ax1.set_ylim(0, 1.1)
+    ax2.set_ylim(0, 0.5)
+    ax2.grid(alpha=0.3)
+    ax1.grid(alpha=0.3)
+    ax2.legend(ncol=2, loc="upper right")
+    # plt.show()
+    filename = os.path.join("figures", "fig3_tau.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def plot_fig3_tau_compare():
+    df = ijhmt_to_tau("fig3_esky_i.csv")  # tau, first p removed
+    x = df.index.to_numpy()
+
+    # transmissivity - plot total tau against Shakespeare
+    site = "GWC"
+    lat1 = SURFRAD[site]["lat"]
+    lon1 = SURFRAD[site]["lon"]
+    h1, spline = shakespeare(lat1, lon1)
+    pw = x * P_ATM  # Pa
+    w = 0.62198 * pw / (P_ATM - pw)
+    q = w / (1 + w)
+    p_rep = P_ATM * np.exp(-1 * SURFRAD[site]["alt"] / 8500)
+    p_ratio = p_rep / P_ATM
+    he = (h1 / np.cos(40.3 * np.pi / 180)) * np.power(p_ratio, 1.8)
+    d_opt = spline.ev(q, he)
+    tau_shp = np.exp(-1 * d_opt)
+
+    fig, ax = plt.subplots()
+    ax.plot(x, df.total.to_numpy(), c="0.0", ls="--", label="Li")
+    ax.plot(x, df.H2O.to_numpy() * df.pCO2.to_numpy(), c="0.2", ls=":",
+            label="Li (H2O and CO2 only)")
+    ax.plot(x, tau_shp, c="#6495ED", label="Shakespeare")
+    ax.set_xlim(x[0], x[-1])
+    ax.set_ylim(0, 0.5)
+    ax.grid(alpha=0.3)
+    ax.legend()
+    ax.set_xlabel("$p_w$ [-]")
+    ax.set_ylabel("transmissivity [-]")
+    # ax.set_xscale("log")
+    # plt.show()
+    filename = os.path.join("figures", "fig3_tau_compare.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
 if __name__ == "__main__":
     print()
     # t_a = 294.2  # [K]
@@ -508,94 +617,28 @@ if __name__ == "__main__":
     #     temperature=False, pct_clr_min=0.05, pressure_bins=10, violin=True
     # )
     print()
-    df = import_ijhmt_df("fig3_esky_i.csv")
-    df = df.set_index("pw")
-    lbl = [
-        'H2O', 'CO2', 'O3', 'Aerosols', 'N2O', 'CH4', 'O2', 'N2', 'Overlaps'
-    ]
+    # df = import_ijhmt_df("fig3_esky_i.csv")  # original
+    # df = ijhmt_to_tau("fig5_esky_ij_b2.csv")  # tau, first p removed
+    df = ijhmt_to_individual_e("fig5_esky_ij_b2.csv")  # e, disaggregated
 
-    cmap = mpl.colormaps["Paired"]
-    cmaplist = [cmap(i) for i in range(len(lbl))]
+    # # regression fit
+    x = df.index.to_numpy()
+    y = df["H2O"].to_numpy()
+    fit_df = pd.DataFrame(dict(x=np.tanh(x), y=y))
+    fit_linear(fit_df, print_out=True)
 
-    # 1
-    df1 = 1 - df  # each column now aggregated transmissivities
-    col1 = df1.H2O.to_numpy()
-    df1 = df1.div(df1.shift(axis=1), axis=1)  # shift axis 1 then divide
-    df1["H2O"] = col1
-    # last value is the cumulative product of all previous values
-    df1["total"] = df1.cumprod(axis=1).iloc[:, -1]
+    # print regression fit for each column (columns should not be cumulative)
+    x = df.index.to_numpy()
+    for s in df.columns.to_list():
+        if (s != "O2") & (s != "N2"):
+            y = df[s].to_numpy()
+            # note whether x=x or x=sqrt(x), y=y or y=-1*log(y)
+            fit_df = pd.DataFrame(dict(x=x, y=-1 * np.log(y)))
+            print("\n", s)
+            fit_linear(fit_df, print_out=True)
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5), sharex=True)
-    x = df1.index.to_numpy()
-    i = 0
-    y_ref = np.ones(len(x))
-    for s in lbl:
-        col = s if i == 0 else f"p{s}"
-        ax1.plot(x, df1[col], label=s, c=cmaplist[i])
-        ax2.plot(x, y_ref * df1[col], label=s, c=cmaplist[i])
-        y_ref = y_ref * df1[col]
-        i += 1
-    ax1.plot(x, y_ref, label="total", c="0.0", ls="--")
-    ax2.plot(x, y_ref, label="total", c="0.0", ls="--")
-    ax1.set_title("Individual contributions", loc="left")
-    ax2.set_title("Cumulative transmissivity", loc="left")
-    ax1.set_xlim(x[0], x[-1])
-    ax1.set_xlabel("$p_w$ [-]")
-    ax2.set_xlabel("$p_w$ [-]")
-    ax1.set_ylabel("transmissivity [-]")
-    ax2.set_ylabel("transmissivity [-]")
-    ax1.set_ylim(0, 1.1)
-    ax2.set_ylim(0, 0.5)
-    ax2.grid(alpha=0.3)
-    ax1.grid(alpha=0.3)
-    ax2.legend(ncol=2, loc="upper right")
-    filename = os.path.join("figures", "fig3_tau.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
-
-    # transmissivity
-    site = "GWC"
-    lat1 = SURFRAD[site]["lat"]
-    lon1 = SURFRAD[site]["lon"]
-    h1, spline = shakespeare(lat1, lon1)
-    pw = x * P_ATM  # Pa
-    w = 0.62198 * pw / (P_ATM - pw)
-    q = w / (1 + w)
-    p_rep = P_ATM * np.exp(-1 * SURFRAD[site]["alt"] / 8500)
-    p_ratio = p_rep / P_ATM
-    he = (h1 / np.cos(40.3 * np.pi / 180)) * np.power(p_ratio, 1.8)
-    d_opt = spline.ev(q, he)
-    tau_shp = np.exp(-1 * d_opt)
-
-    fig, ax = plt.subplots()
-    ax.plot(x, df1.total.to_numpy(), c="0.0", ls="--", label="Li")
-    ax.plot(x, df1.H2O.to_numpy() * df1.pCO2.to_numpy(), c="0.2", ls=":",
-            label="Li (H2O and CO2 only)")
-    ax.plot(x, tau_shp, c="#6495ED", label="Shakespeare")
-    ax.set_xlim(x[0], x[-1])
-    ax.set_ylim(0, 0.5)
-    ax.grid(alpha=0.3)
-    ax.legend()
-    ax.set_xlabel("$p_w$ [-]")
-    ax.set_ylabel("transmissivity [-]")
-    # ax.set_xscale("log")
-    plt.show()
-    filename = os.path.join("figures", "fig3_tau_compare.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
-
-    # # print constants for transmissivity
-    # x = df1.index.to_numpy()
-    # y = df1["total"].to_numpy()
-    # fit_df = pd.DataFrame(dict(x=x, y=np.log(y)))
-    # fit_linear(fit_df, print_out=True)
-    #
-    # # print constants for emissivity
-    # x = df.index.to_numpy()
-    # y = df["pOverlaps"].to_numpy()
-    # fit_df = pd.DataFrame(dict(x=np.sqrt(x), y=y))
-    # fit_linear(fit_df, print_out=True)
-    #
     # model = LinearRegression(fit_intercept=True)
-    # model.fit(np.sqrt(x.reshape(-1, 1)), y.reshape(-1, 1))
+    # model.fit(x.reshape(-1, 1), y.reshape(-1, 1))
     # c2 = model.coef_.round(3)[0][0]
     # c1 = model.intercept_.round(3)[0]
     # print(c1, c2)
