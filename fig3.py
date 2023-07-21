@@ -565,6 +565,47 @@ def plot_fig3_tau():
     return None
 
 
+def plot_fit3_dopt():
+    # single plot showing d_opt vs pw
+    lbl = [
+        'H2O', 'CO2', 'O3', 'Aerosols', 'N2O', 'CH4', 'O2', 'N2', 'Overlaps'
+    ]
+    labels = [
+        'H$_2$O', 'CO$_2$', 'O$_3$', 'aerosols',
+        'N$_2$O', 'CH$_4$', 'O$_2$', 'N$_2$', 'overlaps'
+    ]
+    cmap = mpl.colormaps["Paired"]
+    cmaplist = [cmap(i) for i in range(len(lbl))]
+
+    df = ijhmt_to_tau("fig5_esky_ij_b4.csv")  # tau, first p removed
+    # df = ijhmt_to_individual_e("fig3_esky_i.csv")
+    x = df.index.to_numpy()
+
+    fig, ax = plt.subplots(figsize=(5, 5), sharex=True)
+    i = 0
+    y_ref = np.zeros(len(x))
+    # y_ref = np.ones(len(x))
+    for s in lbl:
+        y = -1 * np.log(df[s])
+        # y = df[s]
+        ax.plot(x, y, label=labels[i], c=cmaplist[i])
+        y_ref = y_ref * y
+        # y_ref += y
+        i += 1
+    ax.plot(x, y_ref, label="total", c="0.0", ls="--")
+    ax.set_title("Individual contributions", loc="left")
+    ax.set_xlim(x[0], x[-1])
+    ax.set_xlabel("$p_w$ [-]")
+    ax.set_ylabel(r"$d_{\rm{opt}}$ [-]")
+    # ax.set_ylabel("emissivity [-]")
+    ax.set_ylim(0, 0.02)
+    ax.grid(alpha=0.3)
+    ax.legend(ncol=2, loc="upper right")
+    plt.tight_layout()
+    plt.show()
+    return None
+
+
 def plot_fig3_tau_compare():
     df = ijhmt_to_tau("fig3_esky_i.csv")  # tau, first p removed
     x = df.index.to_numpy()
@@ -618,23 +659,59 @@ if __name__ == "__main__":
     # )
     print()
     # df = import_ijhmt_df("fig3_esky_i.csv")  # original
-    # df = ijhmt_to_tau("fig5_esky_ij_b2.csv")  # tau, first p removed
-    df = ijhmt_to_individual_e("fig5_esky_ij_b2.csv")  # e, disaggregated
+    df = ijhmt_to_tau("fig5_esky_ij_b4.csv")  # tau, first p removed
+    df = ijhmt_to_individual_e("fig3_esky_i.csv")  # e, disaggregated
 
-    # # regression fit
     x = df.index.to_numpy()
-    y = df["H2O"].to_numpy()
-    fit_df = pd.DataFrame(dict(x=np.tanh(x), y=y))
+    fig, ax = plt.subplots()
+    for i in np.arange(1, 8):
+        df = ijhmt_to_tau(f"fig5_esky_ij_b{i}.csv")
+        y = df["O3"].to_numpy()
+        ax.plot(x, -1 * np.log(y), label=f"band {i}")
+    ax.set_ylabel(r"$d_{\rm{opt}}$ [-]")
+    ax.set_xlabel("$p_w$ [-]")
+    ax.legend()
+    plt.show()
+
+
+    # regression fit
+    df = ijhmt_to_tau("fig5_esky_ij_b4.csv")
+    x = df.index.to_numpy()
+    yb4 = df["O3"].to_numpy()
+
+    df = ijhmt_to_tau("fig3_esky_i.csv")
+    y = df["O3"].to_numpy()
+
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    ax1.plot(x, y, label="O$_3$ wide-band")
+    ax1.plot(x, yb4, label="O$_3$ B4")
+    ax2.plot(x, -1 * np.log(y))
+    ax2.plot(x, -1 * np.log(yb4))
+    ax1.set_xlabel("$p_w$ [-]")
+    ax2.set_xlabel("$p_w$ [-]")
+    ax1.set_ylabel("transmissivity [-]")
+    ax2.set_ylabel(r"$d_{\rm{opt}}$ [-]")
+    ax1.grid()
+    ax2.grid()
+    ax1.legend()
+    plt.tight_layout()
+    plt.show()
+    # plt.plot(x, -1 * np.log(y))
+    # plt.show()
+    fit_df = pd.DataFrame(dict(x=x, y=-1 * np.log(y)))
     fit_linear(fit_df, print_out=True)
 
     # print regression fit for each column (columns should not be cumulative)
     x = df.index.to_numpy()
     for s in df.columns.to_list():
-        if (s != "O2") & (s != "N2"):
-            y = df[s].to_numpy()
-            # note whether x=x or x=sqrt(x), y=y or y=-1*log(y)
+        # if (s != "O2") & (s != "N2"):
+        y = df[s].to_numpy()
+        print("\n", s)
+        if np.std(y) < 0.001:  # make constant
+            print(f"c1={np.mean(y).round(3)}")
+        else:
+            # note whether x=x or x=sqrt(x), y=y or y=-1*np.log(y)
             fit_df = pd.DataFrame(dict(x=x, y=-1 * np.log(y)))
-            print("\n", s)
             fit_linear(fit_df, print_out=True)
 
     # model = LinearRegression(fit_intercept=True)
