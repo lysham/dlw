@@ -624,11 +624,16 @@ def plot_fig3_tau_compare():
     d_opt = spline.ev(q, he)
     tau_shp = np.exp(-1 * d_opt)
 
+    y_fit = 0.6 + 1.653 * np.sqrt(x)
+    y_fit = 1 - y_fit
+    y_tar = df.total.to_numpy()
+
     fig, ax = plt.subplots()
     ax.plot(x, df.total.to_numpy(), c="0.0", ls="--", label="Li")
-    ax.plot(x, df.H2O.to_numpy() * df.pCO2.to_numpy(), c="0.2", ls=":",
+    ax.plot(x, df.H2O.to_numpy() * df.CO2.to_numpy(), c="0.2", ls=":",
             label="Li (H2O and CO2 only)")
     ax.plot(x, tau_shp, c="#6495ED", label="Shakespeare")
+    ax.plot(x, y_fit, label="fit")
     ax.set_xlim(x[0], x[-1])
     ax.set_ylim(0, 0.5)
     ax.grid(alpha=0.3)
@@ -636,7 +641,7 @@ def plot_fig3_tau_compare():
     ax.set_xlabel("$p_w$ [-]")
     ax.set_ylabel("transmissivity [-]")
     # ax.set_xscale("log")
-    # plt.show()
+    plt.show()
     filename = os.path.join("figures", "fig3_tau_compare.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
@@ -673,20 +678,40 @@ if __name__ == "__main__":
     ax.legend()
     plt.show()
 
-
     # regression fit
-    df = ijhmt_to_tau("fig5_esky_ij_b4.csv")
-    x = df.index.to_numpy()
-    yb4 = df["O3"].to_numpy()
-
+    # df = ijhmt_to_tau("fig3_esky_i.csv")
     df = ijhmt_to_tau("fig3_esky_i.csv")
-    y = df["O3"].to_numpy()
+    x = df.index.to_numpy()
+    y = df["CO2"].to_numpy()
+    # fit_df = pd.DataFrame(dict(x=x, y=-1 * np.log(y)))
+    # fit_linear(fit_df, print_out=True)
+
+    gas = "Overlaps"
+    df = ijhmt_to_tau("fig3_esky_i.csv")
+    t = df[gas].to_numpy()
+    df = ijhmt_to_individual_e("fig3_esky_i.csv")
+    y = df[gas].to_numpy()
+
+    fig, ax = plt.subplots()
+    ax.plot(x, t, c="0.0")
+    ax2 = ax.twinx()
+    ax2.plot(x, y, ls="--", marker="s", label="emissivity")
+    ax2.plot(x, -1 * np.log(t), ls=":", label="d_opt")
+    ax2.legend()
+    ax.set_title(gas)
+    plt.show()
+
 
     fig, (ax1, ax2) = plt.subplots(1, 2)
-    ax1.plot(x, y, label="O$_3$ wide-band")
-    ax1.plot(x, yb4, label="O$_3$ B4")
+    # ax1.set_title("O$_3$ transmissivity", loc="left")
+    # ax2.set_title("O$_3$ optical depth", loc="left")
+    ax1.plot(x, y, label="wide-band")
     ax2.plot(x, -1 * np.log(y))
-    ax2.plot(x, -1 * np.log(yb4))
+    for i in [4, 5, 6]:
+        df = ijhmt_to_tau(f"fig5_esky_ij_b{i}.csv")
+        yb = df["CO2"].to_numpy()
+        ax1.plot(x, yb, label=f"B{i}")
+        ax2.plot(x, -1 * np.log(yb))
     ax1.set_xlabel("$p_w$ [-]")
     ax2.set_xlabel("$p_w$ [-]")
     ax1.set_ylabel("transmissivity [-]")
@@ -696,23 +721,19 @@ if __name__ == "__main__":
     ax1.legend()
     plt.tight_layout()
     plt.show()
-    # plt.plot(x, -1 * np.log(y))
-    # plt.show()
-    fit_df = pd.DataFrame(dict(x=x, y=-1 * np.log(y)))
-    fit_linear(fit_df, print_out=True)
 
-    # print regression fit for each column (columns should not be cumulative)
-    x = df.index.to_numpy()
-    for s in df.columns.to_list():
-        # if (s != "O2") & (s != "N2"):
-        y = df[s].to_numpy()
-        print("\n", s)
-        if np.std(y) < 0.001:  # make constant
-            print(f"c1={np.mean(y).round(3)}")
-        else:
-            # note whether x=x or x=sqrt(x), y=y or y=-1*np.log(y)
-            fit_df = pd.DataFrame(dict(x=x, y=-1 * np.log(y)))
-            fit_linear(fit_df, print_out=True)
+    # # print regression fit for each column (columns should not be cumulative)
+    # x = df.index.to_numpy()
+    # for s in df.columns.to_list():
+    #     # if (s != "O2") & (s != "N2"):
+    #     y = df[s].to_numpy()
+    #     print("\n", s)
+    #     if np.std(y) < 0.001:  # make constant
+    #         print(f"c1={np.mean(y).round(3)}")
+    #     else:
+    #         # note whether x=x or x=sqrt(x), y=y or y=-1*np.log(y)
+    #         fit_df = pd.DataFrame(dict(x=x, y=-1 * np.log(y)))
+    #         fit_linear(fit_df, print_out=True)
 
     # model = LinearRegression(fit_intercept=True)
     # model.fit(x.reshape(-1, 1), y.reshape(-1, 1))
