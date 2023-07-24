@@ -606,47 +606,6 @@ def plot_fit3_dopt():
     return None
 
 
-def plot_fig3_tau_compare():
-    df = ijhmt_to_tau("fig3_esky_i.csv")  # tau, first p removed
-    x = df.index.to_numpy()
-
-    # transmissivity - plot total tau against Shakespeare
-    site = "GWC"
-    lat1 = SURFRAD[site]["lat"]
-    lon1 = SURFRAD[site]["lon"]
-    h1, spline = shakespeare(lat1, lon1)
-    pw = x * P_ATM  # Pa
-    w = 0.62198 * pw / (P_ATM - pw)
-    q = w / (1 + w)
-    p_rep = P_ATM * np.exp(-1 * SURFRAD[site]["alt"] / 8500)
-    p_ratio = p_rep / P_ATM
-    he = (h1 / np.cos(40.3 * np.pi / 180)) * np.power(p_ratio, 1.8)
-    d_opt = spline.ev(q, he)
-    tau_shp = np.exp(-1 * d_opt)
-
-    y_fit = 0.6 + 1.653 * np.sqrt(x)
-    y_fit = 1 - y_fit
-    y_tar = df.total.to_numpy()
-
-    fig, ax = plt.subplots()
-    ax.plot(x, df.total.to_numpy(), c="0.0", ls="--", label="Li")
-    ax.plot(x, df.H2O.to_numpy() * df.CO2.to_numpy(), c="0.2", ls=":",
-            label="Li (H2O and CO2 only)")
-    ax.plot(x, tau_shp, c="#6495ED", label="Shakespeare")
-    ax.plot(x, y_fit, label="fit")
-    ax.set_xlim(x[0], x[-1])
-    ax.set_ylim(0, 0.5)
-    ax.grid(alpha=0.3)
-    ax.legend()
-    ax.set_xlabel("$p_w$ [-]")
-    ax.set_ylabel("transmissivity [-]")
-    # ax.set_xscale("log")
-    plt.show()
-    filename = os.path.join("figures", "fig3_tau_compare.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
-    return None
-
-
 def print_out_coefs():
     # print regression fit for each column (columns should not be cumulative)
     df = ijhmt_to_tau("fig3_esky_i.csv")  # adjust fit_df definition
@@ -685,8 +644,8 @@ if __name__ == "__main__":
     # df = ijhmt_to_individual_e("fig3_esky_i.csv")  # e, disaggregated
 
     # regression fit
-    df = ijhmt_to_tau("fig3_esky_i.csv")
-    x = df.index.to_numpy()
-    y = df["CO2"].to_numpy()
+    # df = ijhmt_to_tau("fig3_esky_i.csv")
+    # x = df.index.to_numpy()
+    # y = df["CO2"].to_numpy()
     # fit_df = pd.DataFrame(dict(x=x, y=-1 * np.log(y)))
     # fit_linear(fit_df, print_out=True)

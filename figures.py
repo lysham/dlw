@@ -12,7 +12,7 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from constants import ELEVATIONS, SEVEN_COLORS, P_ATM, SIGMA, SURFRAD
 from corr26b import create_training_set, reduce_to_equal_pts_per_site, \
     add_solar_time
-from fig3 import shakespeare
+from fig3 import shakespeare, ijhmt_to_tau, ijhmt_to_individual_e
 
 
 # set defaults
@@ -332,24 +332,24 @@ def _add_common_features(ax, axins, x, y, e_tau_p0):
     # lbl: -, lw=1, colors
     # main_fit: -, lw=1.5, black
 
-    ax.plot(x, y, lw=1.5, ls="-", c="0.0", zorder=2,
+    ax.plot(x, y, lw=2, ls="-", c="0.0", zorder=2,
             label="$0.600+1.653\sqrt{p_w}$")
     # LBL models
     ax.plot(x, y_mendoza, lw=1, ls="-", c=COLORS["viridian"], zorder=8,
-            label="$1.108p_w^{0.083}$ (Mendoza 2017)")
+            label="$1.108p_w^{0.083}$ (MVGS2017)")
     ax.plot(x, y_li, lw=1, ls="-", c=COLORS["persianred"], zorder=8,
-            label="$0.619+1.665\sqrt{p_w}$ (Li 2019)")
+            label="$0.619+1.665\sqrt{p_w}$ (LC2019)")
     # empirical for comparison
     ax.plot(x, y_brunt, lw=1, ls="--", c="0.5", zorder=5,
-            label="$0.605+1.528\sqrt{p_w}$ (Brunt/Sellers)")
+            label="$0.605+1.528\sqrt{p_w}$ (S1965)")
     ax.plot(x, y_berdahl, c="0.5", ls=":", lw=1, zorder=5,
-            label="$0.564+1.878\sqrt{p_w}$ (Berdahl 1984)")
+            label="$0.564+1.878\sqrt{p_w}$ (B1984)")
     # tau model
     ax.plot(x, e_tau_p0, lw=1, ls="-", c=COLORS["cornflowerblue"], zorder=5,
-            label=r"$1-e^{-d_{\rm opt}(p_w,H_e)}$ (Shakespeare 2021)")
+            label=r"$1-e^{-d_{\rm opt}(p_w,H_e)}$ (SR2021)")
 
     # inset
-    axins.plot(x, y, lw=1.5, ls="-", c="0.0", zorder=2)
+    axins.plot(x, y, lw=2, ls="-", c="0.0", zorder=2)
     axins.plot(x, y_mendoza, lw=1, ls="-", c=COLORS["viridian"])
     axins.plot(x, y_li, lw=1, ls="-", c=COLORS["persianred"])
     axins.plot(x, y_brunt, lw=1, ls="--", c="0.5")
@@ -371,13 +371,74 @@ def _add_common_features(ax, axins, x, y, e_tau_p0):
     return ax, axins
 
 
+def tau_lc_vs_sr():
+    df = ijhmt_to_tau("fig3_esky_i.csv")  # tau, first p removed
+    x = df.index.to_numpy()
+
+    # transmissivity - plot total tau against Shakespeare
+    site = "GWC"
+    lat1 = SURFRAD[site]["lat"]
+    lon1 = SURFRAD[site]["lon"]
+    h1, spline = shakespeare(lat1, lon1)
+    pw = x * P_ATM  # Pa
+    w = 0.62198 * pw / (P_ATM - pw)
+    q = w / (1 + w)
+    p_rep = P_ATM * np.exp(-1 * SURFRAD[site]["alt"] / 8500)
+    p_ratio = p_rep / P_ATM
+    he = (h1 / np.cos(40.3 * np.pi / 180)) * np.power(p_ratio, 1.8)
+    d_opt = spline.ev(q, he)
+    tau_shp = np.exp(-1 * d_opt)
+
+    y_fit = C1_CONST + C2_CONST * np.sqrt(x)
+    y_fit = 1 - y_fit
+
+    fig, ax = plt.subplots(figsize=(5.25, 3))
+    ax.plot(x, df.total.to_numpy(), c=COLORS["persianred"], ls="-",
+            label="LC2019", zorder=2)
+    ax.plot(
+        x, df.H2O.to_numpy() * df.CO2.to_numpy(), c=COLORS["persianred"],
+        ls="--", label="LC2019 H$_2$O and CO$_2$", zorder=4
+    )
+    ax.plot(x, tau_shp, c=COLORS["cornflowerblue"],
+            label="SR2021", zorder=5)
+    ax.plot(x, y_fit, lw=2, ls="-", c="0.0",
+            label="$0.600+1.653\sqrt{p_w}$", zorder=0)
+    ax.set_xlim(x[0], x[-1])
+    ax.set_ylim(0, 0.5)
+    ax.grid(alpha=0.3)
+    ax.set_xlabel("$p_w$ [-]")
+    ax.set_ylabel("transmissivity [-]")
+    ax2 = ax.secondary_xaxis("top", functions=(pw2rh, rh2pw))
+    ax2.set_xlabel("RH [%] at 294.2 K")
+
+    ax.legend(ncol=2, bbox_to_anchor=(0.5, -0.2), loc="upper center")
+    filename = os.path.join("figures", "tau_lc_vs_sr.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def pw2rh(pw, t=294.2):
+    # non-dimensional pw to relative humidity
+    p_sat = 610.94 * np.exp(17.625*(t - 273.15)/(t - 30.11))
+    rh = 100 * (pw * P_ATM) / p_sat
+    return rh
+
+
+def rh2pw(rh, t=294.2):
+    # inverse of pw2rh()
+    p_sat = 610.94 * np.exp(17.625 * (t - 273.15) / (t - 30.11))
+    pw = (rh / 100) * p_sat * (1/P_ATM)
+    return pw
+
+
 if __name__ == "__main__":
     print()
     # pressure_temperature_per_site()
     # emissivity_vs_pw_data()
     # altitude_correction()
-    compare(with_data=True)
-    compare(with_data=False)
+    # compare(with_data=True)
+    # compare(with_data=False)
+    tau_lc_vs_sr()
 
     # TODO solar time correction plot
     # need data before solar time filter, use create_training_set code
@@ -466,3 +527,7 @@ if __name__ == "__main__":
     #     ax.scatter(group.foo, group.lw_err, c=group.t_a - group.tdp, norm=cnorm)
     #     i += 1
     # plt.show()
+    print()
+
+
+
