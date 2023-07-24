@@ -17,7 +17,7 @@ from fraction import fe_lt, fi_lt
 from statsmodels.tsa.seasonal import seasonal_decompose
 
 from constants import *
-from fig3 import get_atm_p, import_ijhmt_df
+from fig3 import get_atm_p, import_ijhmt_df, ijhmt_to_tau
 from process import *
 from enso import get_train, import_oni_mei_data, create_monthly_df
 from figures import FILTER_NPTS_CLR, FILTER_PCT_CLR, training_data, COLORS
@@ -2587,6 +2587,44 @@ def define_tau_method_1_vs_2():
     ax.set_xlabel("pw [-]")
     ax.set_ylabel("transmissivity")
     ax.set_title(title)
+    ax.legend()
+    plt.show()
+    return None
+
+
+def plot_band_tau_vs_dopt():
+    df = ijhmt_to_tau("fig3_esky_i.csv")
+    x = df.index.to_numpy()
+    y = df["CO2"].to_numpy()
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    # ax1.set_title("O$_3$ transmissivity", loc="left")
+    # ax2.set_title("O$_3$ optical depth", loc="left")
+    ax1.plot(x, y, label="wide-band")
+    ax2.plot(x, -1 * np.log(y))
+    for i in [4, 5, 6]:
+        df = ijhmt_to_tau(f"fig5_esky_ij_b{i}.csv")
+        yb = df["CO2"].to_numpy()
+        ax1.plot(x, yb, label=f"B{i}")
+        ax2.plot(x, -1 * np.log(yb))
+    ax1.set_xlabel("$p_w$ [-]")
+    ax2.set_xlabel("$p_w$ [-]")
+    ax1.set_ylabel("transmissivity [-]")
+    ax2.set_ylabel(r"$d_{\rm{opt}}$ [-]")
+    ax1.grid()
+    ax2.grid()
+    ax1.legend()
+    plt.tight_layout()
+    plt.show()
+
+    # plot optical depth for one gas per band
+    fig, ax = plt.subplots()
+    for i in np.arange(1, 8):
+        df = ijhmt_to_tau(f"fig5_esky_ij_b{i}.csv")
+        x = df.index.to_numpy()
+        y = df["O3"].to_numpy()
+        ax.plot(x, -1 * np.log(y), label=f"band {i}")
+    ax.set_ylabel(r"$d_{\rm{opt}}$ [-]")
+    ax.set_xlabel("$p_w$ [-]")
     ax.legend()
     plt.show()
     return None
