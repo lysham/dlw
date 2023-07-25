@@ -33,8 +33,8 @@ for i in SURFRAD:
     LON_DICT[i] = SURFRAD[i]["lon"]
 ELEVATIONS = sorted(ELEV_DICT.items(), key=lambda x: x[1])  # sorted list
 
-
-SEVEN_COLORS = ["#156064", "#00C49A", "#F8E16C", "#FFC2B4",
+# "#F8E16C" old SXF: "#FFC2B4",
+SEVEN_COLORS = ["#156064", "#00C49A", "#EAC50B", "#99201E",
                 "#FB8F67", "#437C90", "#7E2E84"]
 COLOR7_DICT = {}
 for i in range(len(ELEVATIONS)):

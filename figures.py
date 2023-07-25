@@ -8,10 +8,12 @@ import datetime as dt
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, r2_score
 
 from constants import ELEVATIONS, SEVEN_COLORS, P_ATM, SIGMA, SURFRAD
 from corr26b import create_training_set, reduce_to_equal_pts_per_site, \
-    add_solar_time
+    add_solar_time, fit_linear
 from fig3 import shakespeare, ijhmt_to_tau, ijhmt_to_individual_e
 
 
@@ -35,13 +37,18 @@ COLORS = {
     "giantsorange": "#f46036",
 }
 
+# (2010-15 data, equal #/site, 5%, 20th, 1,000 pts set aside for validation)
 C1_CONST = 0.6
-C2_CONST = 1.653  # (2010-15 data, equal #/site, 5%, 20th)
+C2_CONST = 1.648
 C3_CONST = 0.15
 
 
-def training_data(create=False):
-    """Function returns the training dataset.
+def training_data(create=False, import_full_train=False, import_val=False):
+    """Function returns the training dataset of which there are three options
+    to return: training, tra, val. Training is the full training dataset,
+    val is the 1000 sample validation, tra is the remaining training set
+    reduced to equal # of samples per site. Essentially tra+val~=training.
+
     Option to generate and save the dataframe if training dataset parameters
     are adapted.
 
@@ -54,7 +61,6 @@ def training_data(create=False):
     -------
     df : DataFrame
     """
-    filename = os.path.join("data", "training_data.csv")
     if create:
         df = create_training_set(
             year=[2010, 2011, 2012, 2014, 2015],
@@ -64,10 +70,35 @@ def training_data(create=False):
         )
         df = reduce_to_equal_pts_per_site(df)  # min_pts = 200
         df['correction'] = C3_CONST * (np.exp(-1 * df.elev / 8500) - 1)
+        filename = os.path.join("data", "training_data.csv")
         df.to_csv(filename)
+    elif import_full_train:
+        filename = os.path.join("data", "training_data.csv")
+        df = pd.read_csv(filename, index_col=0, parse_dates=True)
+    elif import_val:
+        filename = os.path.join("data", "val.csv")
+        df = pd.read_csv(filename, index_col=0, parse_dates=True)
     else:
+        filename = os.path.join("data", "tra.csv")
         df = pd.read_csv(filename, index_col=0, parse_dates=True)
     return df
+
+
+def create_tra_val_sets():
+    # from training data, create training and validation sets
+    # using train_test_split to create idx split
+    df = training_data(import_full_train=True)  # equal # samples per site
+    # split training_data into train and validation (1,000)
+    tra_idx, val_idx = train_test_split(
+        np.arange(df.shape[0]), test_size=1000, random_state=43)
+
+    filename = os.path.join("data", "val.csv")
+    df.iloc[val_idx].to_csv(filename)
+
+    filename = os.path.join("data", "tra.csv")
+    df = reduce_to_equal_pts_per_site(df.iloc[tra_idx])
+    df.to_csv(filename)
+    return None
 
 
 def pressure_temperature_per_site():
@@ -77,6 +108,7 @@ def pressure_temperature_per_site():
     alpha_background = 0.2 if overlay_profile else 1.0
     pm_p_mb = 20  # plus minus pressure (mb)
     ms = 15  # marker size
+    ec = "0.2"  # marker edge color
 
     if overlay_profile:
         filename = os.path.join("data", "afgl_midlatitude_summer.csv")
@@ -84,7 +116,7 @@ def pressure_temperature_per_site():
         filename = os.path.join("data", "afgl_midlatitude_winter.csv")
         af_win = pd.read_csv(filename)
 
-    df = training_data()
+    df = training_data(import_full_train=True)
 
     if filter_ta:
         df = df.loc[abs(df.t_a - df.afgl_t0) <= 2].copy()
@@ -123,34 +155,44 @@ def pressure_temperature_per_site():
 
         x = np.linspace(group.t_a.min(), group.t_a.max(), 2)
         ax.fill_between(
-            x, afgl_p - pm_p_mb, afgl_p + pm_p_mb,
+            x, group.pa_hpa.min() * np.ones(len(x)), group.pa_hpa.max()* np.ones(len(x)),
             fc=SEVEN_COLORS[i], alpha=0.1 * alpha_background, zorder=0)
-        ax.axhline(afgl_p, c=SEVEN_COLORS[i], label=s, zorder=1,
-                   alpha=alpha_background)
-        ax.axvline(afgl_t, c=SEVEN_COLORS[i], zorder=1,
-                   alpha=alpha_background)
+        # ax.fill_between(
+        #     x, afgl_p - pm_p_mb, afgl_p + pm_p_mb,
+        #     fc=SEVEN_COLORS[i], alpha=0.1 * alpha_background, zorder=0)
+        lbl_s = "TBL" if s == "BOU" else s
+        # run once as light color outside the box and dark inside
+        ax.plot(x, afgl_p * np.ones(len(x)), c=SEVEN_COLORS[i],
+                label=lbl_s, zorder=1, alpha=alpha_background)
+        t_line = np.linspace(group.pa_hpa.min(), group.pa_hpa.max(), 2)
+        ax.plot(afgl_t * np.ones(len(t_line)), t_line, c=SEVEN_COLORS[i],
+                zorder=1, alpha=alpha_background)
+        ax.axhline(afgl_p, c=SEVEN_COLORS[i], zorder=0,
+                   alpha=0.2 * alpha_background)
+        ax.axvline(afgl_t, c=SEVEN_COLORS[i], zorder=0,
+                   alpha=0.2 * alpha_background)
 
         ax.scatter(
             group.loc[group.season == "fall"].t_a,
             group.loc[group.season == "fall"].pa_hpa, marker="o", s=ms,
             alpha=0.8 * alpha_background * 0.5,
-            c=SEVEN_COLORS[i], ec="0.5", zorder=10)
+            c=SEVEN_COLORS[i], ec=ec, zorder=10)
         ax.scatter(
             group.loc[group.season == "spring"].t_a,
             group.loc[group.season == "spring"].pa_hpa, marker="o", s=ms,
             alpha=0.8 * alpha_background * 0.5,
-            c=SEVEN_COLORS[i], ec="0.5", zorder=10)
+            c=SEVEN_COLORS[i], ec=ec, zorder=10)
 
         ax.scatter(
             group.loc[group.season == "summer"].t_a,
             group.loc[group.season == "summer"].pa_hpa, marker="^", s=ms,
             alpha=0.8 * alpha_background,
-            c=SEVEN_COLORS[i], ec="0.5", zorder=10)
+            c=SEVEN_COLORS[i], ec=ec, zorder=10)
         ax.scatter(
             group.loc[group.season == "winter"].t_a,
             group.loc[group.season == "winter"].pa_hpa, marker="s", s=ms,
             alpha=0.8 * alpha_background,
-            c=SEVEN_COLORS[i], ec="0.5", zorder=10)
+            c=SEVEN_COLORS[i], ec=ec, zorder=10)
         i += 1
     ymin, ymax = ax.get_ylim()
     if overlay_profile:
@@ -167,12 +209,14 @@ def pressure_temperature_per_site():
     ax.plot([], [], marker="^", color="0.2", ls="none", label="summer")
     ax.plot([], [], marker="s", color="0.2", ls="none", label="winter")
     lgd = ax.legend(ncol=5, bbox_to_anchor=(0.5, 1.01), loc="lower center")
-    for lh in lgd.legend_handles:
+    # for lh in lgd.legend_handles:  # running on linux
+    for lh in lgd.legendHandles:  # running on Mac
         lh.set_alpha(1)
     ax.set_xlabel("T$_a$ [K]")
     ax.set_ylabel("P [mb]")
     ax.invert_yaxis()
     plt.tight_layout()
+    # plt.show()
     filename = os.path.join("figures", f"pressure_temperature_per_site.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
@@ -193,21 +237,22 @@ def emissivity_vs_pw_data():
             group.pw_hpa, group.y, marker="o", s=ms,
             alpha=0.8, c=SEVEN_COLORS[i], ec="0.5", lw=0.5, zorder=10
         )
+        lbl_s = "TBL" if s == "BOU" else s
         ax.scatter([], [], marker="o", s=3*ms, alpha=1, c=SEVEN_COLORS[i],
-                   ec="0.5", lw=0.5,  label=s)  # dummy for legend
+                   ec="0.5", lw=0.5,  label=lbl_s)  # dummy for legend
         i += 1
     xmin, xmax = (0, 40)
     x = np.geomspace(0.00001, xmax, 40)
     y = C1_CONST + C2_CONST * np.sqrt(x * 100 / P_ATM)
-    label = r"$c_1 + c_2 \sqrt{p_w}$"
-    ax.plot(x, y, c="0.3", lw=1.5, ls="--", label=label, zorder=10)
+    # label = r"$c_1 + c_2 \sqrt{p_w}$"
+    fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
+    ax.plot(x, y, c="0.3", lw=1.5, ls="--", label=fit_label, zorder=10)
 
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(0.5, 1.0)
     ax.set_xlabel("p$_w$ [hPa]")
     ax.set_ylabel("emissivity [-]")
-    ax.legend(ncol=4, bbox_to_anchor=(0.99, 0.05), loc="lower right")
-    plt.tight_layout()
+    ax.legend(ncol=3, bbox_to_anchor=(0.99, 0.05), loc="lower right")
     filename = os.path.join("figures", f"emissivity_vs_pw_data.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
@@ -229,32 +274,79 @@ def altitude_correction():
     xmin, xmax = (-30, 30)
     bins = np.arange(xmin, xmax + 1, 2.5)
 
-    fig, axes = plt.subplots(7, 1, figsize=(6, 10), sharex=True)
-    i = 0
-    lbl = r"$c_1 + c_2 \sqrt{p_w}$"
-    lbl_ = r"$c_1 + c_2 \sqrt{p_w} + c_3 (\exp{^{-z/H}} - 1)$"
-    for s, alt in ELEVATIONS:
-        ax = axes[i]
-        ax.grid(axis="x", alpha=0.3)
-        pdf = df.loc[df.site == s]
-        ax.hist(pdf.lw_err, bins=bins, alpha=0.3, color="0.3",
-                label=lbl)
-        ax.hist(pdf.lw_err_corr, bins=bins, alpha=0.4,
-                color=COLORS["persianindigo"], ec="0.3", label=lbl_)
-        ax.set_title(f"{s}", loc="left", fontsize=12)
-        ax.text(0.01, 0.93, s=f"(z = {alt:,} m)", va="top", ha="left",
-                fontsize="medium", transform=ax.transAxes, color="0.2")
+    fig, axes = plt.subplots(4, 2, figsize=(6, 4), sharey=True)
+    plt.subplots_adjust(hspace=0.05, wspace=0.05)
+    lbl = r"$\tilde{\varepsilon}_{\rm{sky,c}}$"
+    lbl_ = r"$\tilde{\varepsilon}_{\rm{sky,c}} + c_3 (\exp{^{-z/H}} - 1)$"
+    i = 0  # plot counter
+    j = 0  # site counter
+    for i in range(len(ELEVATIONS) + 1):  # hacky
+        ax = axes[i // 2, i % 2]  # zig zag downward
+        s, alt = ELEVATIONS[j]
+        if i == 1:
+            # format empty subplot at lower right, legend only
+            ax.hist([], color="0.3", alpha=0.3, label=lbl)
+            ax.hist([], ec="0.3", alpha=0.3, color=COLORS["persianindigo"],
+                    label=lbl_)
+            ax.legend(frameon=False, bbox_to_anchor=(0.5, 1.0),
+                      loc="upper center")
+            ax.tick_params(labelbottom=False, labelleft=False, bottom=False,
+                           left=False)
+            ax.spines.right.set_visible(False)
+            ax.spines.left.set_visible(False)
+            ax.spines.top.set_visible(False)
+            ax.spines.bottom.set_visible(False)
+        else:
+            ax.grid(axis="x", alpha=0.3)
+            pdf = df.loc[df.site == s]
+            ax.hist(pdf.lw_err, bins=bins, alpha=0.3, color="0.3",
+                    label=lbl)
+            ax.hist(pdf.lw_err_corr, bins=bins, alpha=0.4,
+                    color=COLORS["persianindigo"], ec="0.3", label=lbl_)
+            if s == "BOU":
+                s = "TBL"
+            note = f"{s} (z={alt:,}m)"
+            # ax.set_title(title, loc="left")
+            ax.text(0.01, 0.93, s=note, va="top", ha="left",
+                    fontsize="small", transform=ax.transAxes, color="0.0")
+            ax.set_axisbelow(True)
+            ax.set_ylim(0, 45)
+            ax.set_xlim(xmin, xmax)
+            j += 1
         i += 1
-        ax.set_axisbelow(True)
-        ax.set_ylim(0, 45)
-    axes[-1].set_xlabel("LW error [W/m$^2$]")
-    axes[0].legend(ncol=2, bbox_to_anchor=(1.0, 1.01), loc="lower right")
-    ax.set_xlim(xmin, xmax)
-    plt.tight_layout()
-    plt.show()
+    axes[3, 0].set_xlabel("$L_d$ error [W/m$^2$]")
+    axes[3, 1].set_xlabel("$L_d$ error [W/m$^2$]")
     filename = os.path.join("figures", f"altitude_correction.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
+
+
+def evaluate_sr2021(x, site_array=None):
+    # return transmissivity (tau) values evaluated at lowest elevation site
+    tau = np.zeros(len(x))
+    pw = (x * P_ATM)  # Pa, partial pressure of water vapor
+    w = 0.62198 * pw / (P_ATM - pw)
+    q = w / (1 + w)  # kg/kg
+
+    if site_array is None:
+        site = "GWC"
+        lat1 = SURFRAD[site]["lat"]
+        lon1 = SURFRAD[site]["lon"]
+        h1, spline = shakespeare(lat1, lon1)
+        he_p0 = (h1 / np.cos(40.3 * np.pi / 180))
+        for i in range((len(x))):
+            d_opt = spline.ev(q[i], he_p0).item()
+            tau[i] = np.exp(-1 * d_opt)
+    else:  # not optimized
+        for i in range(len(x)):
+            site = site_array[i]
+            lat1 = SURFRAD[site]["lat"]
+            lon1 = SURFRAD[site]["lon"]
+            h1, spline = shakespeare(lat1, lon1)
+            he_p0 = (h1 / np.cos(40.3 * np.pi / 180))
+            d_opt = spline.ev(q[i], he_p0).item()
+            tau[i] = np.exp(-1 * d_opt)
+    return tau
 
 
 def compare(with_data=True):
@@ -281,18 +373,8 @@ def compare(with_data=True):
     x = x * 100 / P_ATM  # normalized
     y = C1_CONST + C2_CONST * np.sqrt(x)  # emissivity
 
-    e_tau_p0 = np.zeros(len(x))
-    site = "GWC"
-    lat1 = SURFRAD[site]["lat"]
-    lon1 = SURFRAD[site]["lon"]
-    h1, spline = shakespeare(lat1, lon1)
-    pw = (x * P_ATM)  # Pa, partial pressure of water vapor
-    w = 0.62198 * pw / (P_ATM - pw)
-    q = w / (1 + w)  # kg/kg
-    he_p0 = (h1 / np.cos(40.3 * np.pi / 180))
-    for i in range((len(x))):
-        tau = spline.ev(q[i], he_p0).item()
-        e_tau_p0[i] = 1 - np.exp(-1 * tau)
+    tau = evaluate_sr2021(x)
+    e_tau_p0 = 1 - tau
 
     fig, ax = plt.subplots(figsize=figsize)
     axins = inset_axes(ax, width="50%", height="42%", loc=4, borderpad=1.8)
@@ -332,8 +414,9 @@ def _add_common_features(ax, axins, x, y, e_tau_p0):
     # lbl: -, lw=1, colors
     # main_fit: -, lw=1.5, black
 
+    fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
     ax.plot(x, y, lw=2, ls="-", c="0.0", zorder=2,
-            label="$0.600+1.653\sqrt{p_w}$")
+            label=fit_label)
     # LBL models
     ax.plot(x, y_mendoza, lw=1, ls="-", c=COLORS["viridian"], zorder=8,
             label="$1.108p_w^{0.083}$ (MVGS2017)")
@@ -401,8 +484,9 @@ def tau_lc_vs_sr():
     )
     ax.plot(x, tau_shp, c=COLORS["cornflowerblue"],
             label="SR2021", zorder=5)
-    ax.plot(x, y_fit, lw=2, ls="-", c="0.0",
-            label="$0.600+1.653\sqrt{p_w}$", zorder=0)
+    fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
+    ax.plot(x, y_fit, lw=2, ls="-", c="0.0", zorder=0,
+            label=fit_label)
     ax.set_xlim(x[0], x[-1])
     ax.set_ylim(0, 0.5)
     ax.grid(alpha=0.3)
@@ -431,15 +515,47 @@ def rh2pw(rh, t=294.2):
     return pw
 
 
+def print_results_table():
+    # print validation results
+    df = pd.read_csv(os.path.join("data", "val.csv"))
+    df["y_corr"] = df.y - df.correction
+
+    x = df.x.to_numpy().reshape(-1, 1)
+    y = df.y.to_numpy().reshape(-1, 1)  # non-adjusted y
+    y_corr = df.y_corr.to_numpy().reshape(-1, 1)  # elevation-adjusted
+
+    _print_metrics(y_corr, 0.600 + 1.648 * x)  #
+    _print_metrics(y, 0.605 + 1.528 * x)  # S1965
+    _print_metrics(y, 0.619 + 1.665 * x)  # LC2019
+    _print_metrics(y, 0.564 + 1.878 * x)  # B2021
+
+    # Note: MVGS2017 and SR2021 take pw as input instead of sqrt(pw)
+    x2 = np.power(x, 2)
+    _print_metrics(y, 1.108 * np.power(x2, 0.083))  # MVGS2017
+    tau = evaluate_sr2021(x2, site_array=df.site.to_numpy())
+    e_sr2021 = 1 - tau
+    _print_metrics(y, e_sr2021)
+    return None
+
+
+def _print_metrics(actual, model):
+    rmse = np.sqrt(mean_squared_error(actual, model))
+    r2 = r2_score(actual, model)
+    mbe = np.nanmean((model - actual), axis=0)
+    print(f"RMSE: {rmse.round(5)} | MBE: {mbe[0].round(5)} | R2: {r2.round(5)}")
+    return None
+
+
 if __name__ == "__main__":
     print()
     # pressure_temperature_per_site()
-    # emissivity_vs_pw_data()
+    emissivity_vs_pw_data()
     # altitude_correction()
     # compare(with_data=True)
     # compare(with_data=False)
-    tau_lc_vs_sr()
-
+    # tau_lc_vs_sr()
+    # print_results_table()
+    print()
     # TODO solar time correction plot
     # need data before solar time filter, use create_training_set code
 
@@ -528,6 +644,8 @@ if __name__ == "__main__":
     #     i += 1
     # plt.show()
     print()
-
+    # df = pd.read_csv(os.path.join("data", "tra.csv"))
+    # df["y"] = df.y - df.correction - 0.6
+    # fit_linear(df, set_intercept=0.6, print_out=True)
 
 
