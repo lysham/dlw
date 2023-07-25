@@ -546,6 +546,99 @@ def _print_metrics(actual, model):
     return None
 
 
+def solar_time(create_csv=False):
+    if create_csv:
+        df = create_training_set(
+            year=[2010, 2011, 2012],
+            temperature=True, cs_only=True,
+            filter_pct_clr=FILTER_PCT_CLR,
+            filter_npts_clr=FILTER_NPTS_CLR,
+            filter_solar_time=False,
+            drive="server4"
+        )
+        df = reduce_to_equal_pts_per_site(df, min_pts=300)
+        df['correction'] = C3_CONST * (np.exp(-1 * df.elev / 8500) - 1)
+        df['e'] = C1_CONST + C2_CONST * df.x
+        tmp = np.log(df.pw_hpa * 100 / 610.94)
+        df["tdp"] = 273.15 + ((243.04 * tmp) / (17.625 - tmp))
+        df["dtdp"] = df.t_a - df.tdp
+        filename = os.path.join("data", "specific_figure", "solar_time.csv")
+        df.to_csv(filename)
+    else:
+        filename = os.path.join("data", "specific_figure", "solar_time.csv")
+        df = pd.read_csv(filename, index_col=0, parse_dates=True)
+    # df["y"] = df.y - 0.6
+    # fit_df = pd.DataFrame(dict(x=df.x.to_numpy(), y=df.y.to_numpy()))
+    c1, c2 = fit_linear(df)
+
+    # pdf = df.loc[df.site == "SXF"].copy()
+    df['e'] = c1 + c2 * df.x
+    df["lw_pred"] = (df.e + df.correction) * SIGMA * np.power(df.t_a, 4)
+    df["lw_err"] = df.lw_pred - df.dw_ir  # error
+
+    # boxplot by hour
+    fig, axes = plt.subplots(2, 1, figsize=(6, 6), sharex=True)
+    plt.subplots_adjust(hspace=0.1)
+    ax = axes[0]
+    data = []
+    for s in np.arange(6, 19):
+        data.append(df.loc[df.index.hour == s, "lw_err"].to_numpy())
+    ax.grid(alpha=0.3)
+    ax.axhline(0, c="0.7", ls="--")
+    ax.boxplot(
+        data, labels=np.arange(6, 19), patch_artist=True,
+        boxprops={'fill': True, 'facecolor': 'white'},
+        medianprops={'color': "black"},
+        showfliers=False, zorder=10
+    )
+    ax.set_ylabel(r"$L_{d,\rm{pred}} - L_{d,\rm{meas}}$ [W/m$^2$]")
+    ax.set_axisbelow(True)
+    ax.set_ylim(-30, 20)
+
+    ax = axes[1]
+    data = []
+    for s in np.arange(6, 19):
+        data.append(df.loc[df.index.hour == s, "dtdp"].to_numpy())
+    ax.grid(alpha=0.3)
+    ax.boxplot(
+        data, labels=np.arange(6, 19), patch_artist=True,
+        boxprops={'fill': True, 'facecolor': 'white'},
+        medianprops={'color': "black"},
+        showfliers=False, zorder=10
+    )
+    ax.set_ylabel(r"$T_{a} - T_{dp}$ [K]")
+    ax.set_xlabel("Solar hour of day")
+    ax.set_axisbelow(True)
+    ax.set_ylim(0, 40)
+
+    filename = os.path.join("figures", "solar_time_boxplot.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+
+    # DRAFT - switch boxplot to fill between with 25-75th percentile
+    # hours = np.arange(6, 19)
+    # rh = np.zeros((3, len(hours)))
+    # dtdp = np.zeros((3, len(hours)))
+    # i = 0
+    # for s in np.arange(6, 19):
+    #     group = df.loc[df.index.hour == s].copy()
+    #     rh[0, i] = group.rh.median()
+    #     rh[1, i] = group.rh.quantile(0.25)
+    #     rh[2, i] = group.rh.quantile(0.75)
+    #     dtdp[0, i] = group.dtdp.median()
+    #     dtdp[1, i] = group.dtdp.quantile(0.25)
+    #     dtdp[2, i] = group.dtdp.quantile(0.75)
+    #     i += 1
+    # fig, ax = plt.subplots()
+    # ax.grid(alpha=0.3)
+    # ax.plot(hours, rh[0, :])
+    # ax.fill_between(hours, rh[1, :], rh[2, :], alpha=0.5)
+    # ax2 = ax.twinx()
+    # ax2.plot(hours, dtdp[0, :])
+    # ax2.fill_between(hours, dtdp[1, :], dtdp[2, :], alpha=0.5)
+    # plt.show()
+    return None
+
+
 if __name__ == "__main__":
     print()
     # create_tra_val_sets()
@@ -556,98 +649,7 @@ if __name__ == "__main__":
     # compare(with_data=False)
     # tau_lc_vs_sr()
     # print_results_table()
+    # solar_time(create_csv=False)
     print()
-    # TODO solar time correction plot
-    # need data before solar time filter, use create_training_set code
-
-    df = create_training_set(
-        year=[2010, 2011, 2012],
-        temperature=True, cs_only=True,
-        filter_pct_clr=FILTER_PCT_CLR,
-        filter_npts_clr=FILTER_NPTS_CLR,
-        filter_solar_time=False,
-        drive="server4"
-    )
-    filename = os.path.join("data", specific_figure)
-    df = reduce_to_equal_pts_per_site(df)  # min_pts = 200
-    df['correction'] = C3_CONST * (np.exp(-1 * df.elev / 8500) - 1)
-    df['e'] = C1_CONST + C2_CONST * np.sqrt(df.pw_hpa * 100 / P_ATM)
-
-    # pdf = df.loc[df.site == "SXF"].copy()
-    df["lw_pred"] = (df.e + df.correction) * SIGMA * np.power(df.t_a, 4)
-    df["lw_err"] = df.lw_pred - df.dw_ir  # error
-
-    # boxplot by hour
-
-    data = []
-    for s in np.arange(6, 19):
-        data.append(df.loc[df.index.hour == s, "lw_err"].to_numpy())
-
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.grid(alpha=0.3)
-    ax.axhline(0, c="0.6", ls="--")
-    ax.boxplot(
-        data, labels=np.arange(6, 19), patch_artist=True,
-        boxprops={'fill': True, 'facecolor': 'white'},
-        medianprops={'color': 'black'}, showfliers=True, zorder=10
-    )
-    ax.set_ylabel("Error in DLW [W/m$^2$]")
-    ax.set_xlabel("Hour of day")
-    ax.set_axisbelow(True)
-    # ax.set_ylim(-30, 30)
-    plt.show()
-    filename = os.path.join("figures", "error_by_hod.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
-
-    fig, ax = plt.subplots()
-    ax.scatter(df.lw_pred, df.dw_ir, alpha=0.05)
-    ax.axline((220, 220), (400, 400), c="0.0", zorder=10)
-    plt.show()
-
-    pdf = df.loc[df.site == "BON"].copy()
-    pdf["lw_pred"] = (pdf.e + pdf.correction) * SIGMA * np.power(pdf.t_a, 4)
-    pdf["lw_err"] = np.sqrt(pdf.lw_pred - pdf.dw_ir)
-
-    pdf["solar_time"] = pdf.index.hour + (pdf.index.minute / 60)
-    term1 = 243.04 * np.log(pdf.pw_hpa * 100 / 610.94)
-    term2 = 17.625 - np.log(pdf.pw_hpa * 100 / 610.94)
-    pdf["tdp"] = 273.15 + (term1/term2)
-
-    df1 = pdf.copy()
-    df1 = df1.sample(1000)
-
-    fig, ax = plt.subplots()
-    cbar = ax.scatter(df1.solar_time, df1.lw_err, c=df1.t_a - df1.tdp,
-                      norm=mpl.colors.Normalize(vmin=0, vmax=10))
-    fig.colorbar(cbar)
-    plt.show()
-
-    # df = training_data()
-    # df = reduce_to_equal_pts_per_site(df, min_pts=500)
-    # prediction e then bring to site elevation
-    df['correction'] = C3_CONST * (np.exp(-1 * df.elev / 8500) - 1)
-    df["e"] = (C1_CONST + C2_CONST * np.sqrt(df.pw_hpa * 100 / P_ATM)) - df.correction
-    df["lw_pred"] = df.e * SIGMA * np.power(df.t_a, 4)
-    df["lw_err"] = df.lw_pred - df.dw_ir
-    df["foo"] = df.index.hour + (df.index.minute / 60)
-    term1 = 243.04 * np.log(df.pw_hpa * 100 / 610.94)
-    term2 = 17.625 - np.log(df.pw_hpa * 100 / 610.94)
-    df["tdp"] = 273.15 + (term1/term2)
-
-    fig, axes = plt.subplots(7, 1, figsize=(4, 12), sharex=True)
-    i = 0
-    cnorm = mpl.colors.Normalize(vmin=0, vmax=10)
-    # cmap = mpl.cm.viridis
-    for s, group in df.groupby(df.site):
-        ax = axes[i]
-        group = group.sample(200)
-        ax.set_title(s, loc="left")
-        ax.scatter(group.foo, group.lw_err, c=group.t_a - group.tdp, norm=cnorm)
-        i += 1
-    plt.show()
-    print()
-    # df = pd.read_csv(os.path.join("data", "tra.csv"))
-    # df["y"] = df.y - df.correction - 0.6
-    # fit_linear(df, set_intercept=0.6, print_out=True)
 
 
