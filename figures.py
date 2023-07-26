@@ -10,8 +10,10 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.linear_model import LinearRegression
 
-from constants import ELEVATIONS, SEVEN_COLORS, P_ATM, SIGMA, SURFRAD
+from constants import ELEVATIONS, SEVEN_COLORS, P_ATM, SIGMA, SURFRAD, \
+    COLOR7_DICT
 from corr26b import create_training_set, reduce_to_equal_pts_per_site, \
     add_solar_time, fit_linear
 from fig3 import shakespeare, ijhmt_to_tau, ijhmt_to_individual_e
@@ -745,5 +747,57 @@ if __name__ == "__main__":
     # df['correction'] = C3_CONST * (np.exp(-1 * df.elev / 8500) - 1)
     # filename = os.path.join("data", "specific_figure", "training_data.csv")
     # df.to_csv(filename)
+
+    # error maps for fixed c3
+    df = training_data()
+    df['corr_c3'] = np.exp(-1 * df.elev / 8500) - 1
+    # train, test = train_test_split(df, test_size=0.2, random_state=35)
+    test = df.sample(1000, random_state=35)
+
+    c1_x = np.linspace(0.3, 0.8, 25)  # 100
+    c2_x = np.linspace(1, 3, 50)  # 200
+    c3_values = np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.5])
+
+    cnorm = mpl.colors.Normalize(vmin=0, vmax=0.4)
+
+    fig, axes = plt.subplots(2, 3, figsize=(6, 4), sharex=True, sharey=True)
+    plt.subplots_adjust(hspace=0.1, wspace=0.1)
+    ii = 0
+    for c3 in c3_values:
+        z = np.zeros((len(c1_x), len(c2_x)))
+        for i in range(len(c1_x)):
+            for j in range(len(c2_x)):
+                pred_y = c1_x[i] + c2_x[j] * test.x
+                correction = c3 * test.correction
+                z[i, j] = np.sqrt(
+                    mean_squared_error(test.y, pred_y + correction))
+        xi, yi = np.unravel_index(z.argmin(), z.shape)
+        print(xi, yi)
+
+        ax = axes[ii // 3, ii % 3]
+        cb = ax.contourf(
+            c2_x, c1_x, z, cmap=mpl.cm.coolwarm, norm=cnorm
+        )
+        ax.scatter(c2_x[yi], c1_x[xi], c="k", marker="^")
+        text = f"({c1_x[xi]:.3f}, {c2_x[yi]:.3f}) \nRMSE: {z.min():.3f}"
+        ax.text(c2_x[yi] + .05, c1_x[xi] + 0.01, text)
+        # fig.colorbar(cb, label="RMSE")
+
+        title = f"$c_3={c3}$"
+        ax.set_title(title, loc="left")
+
+        ii += 1
+    axes[1, 0].set_xlabel("$c_2$")
+    axes[1, 1].set_xlabel("$c_2$")
+    axes[1, 2].set_xlabel("$c_2$")
+    axes[0, 0].set_ylabel("$c_1$")
+    axes[1, 0].set_ylabel("$c_1$")
+    # ax.xaxis.set_major_locator(mpl.ticker.LinearLocator(5))
+    # ax.xaxis.set_major_formatter('{x:.02f}')
+    # ax.yaxis.set_major_locator(mpl.ticker.LinearLocator(6))
+    # ax.yaxis.set_major_formatter('{x:.02f}')
+
+    plt.tight_layout()
+    plt.show()
 
 
