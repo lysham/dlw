@@ -39,7 +39,7 @@ COLORS = {
 
 # (2010-15 data, equal #/site, 5%, 20th, 1,000 pts set aside for validation)
 C1_CONST = 0.6
-C2_CONST = 1.648
+C2_CONST = 1.652
 C3_CONST = 0.15
 
 
@@ -63,7 +63,7 @@ def training_data(create=False, import_full_train=False, import_val=False):
     """
     if create:
         df = create_training_set(
-            year=[2010, 2011, 2012, 2014, 2015],
+            year=[2010, 2011, 2012, 2013, 2014, 2015],
             temperature=False, cs_only=True,
             filter_pct_clr=FILTER_PCT_CLR,
             filter_npts_clr=FILTER_NPTS_CLR, drive="server4"
@@ -524,12 +524,15 @@ def print_results_table():
     y = df.y.to_numpy().reshape(-1, 1)  # non-adjusted y
     y_corr = df.y_corr.to_numpy().reshape(-1, 1)  # elevation-adjusted
 
-    _print_metrics(y_corr, 0.600 + 1.648 * x)  #
+    print("Fit")
+    _print_metrics(y_corr, C1_CONST + C2_CONST * x)  #
+    print("\nS1965, LC2019, B2021")
     _print_metrics(y, 0.605 + 1.528 * x)  # S1965
     _print_metrics(y, 0.619 + 1.665 * x)  # LC2019
     _print_metrics(y, 0.564 + 1.878 * x)  # B2021
 
     # Note: MVGS2017 and SR2021 take pw as input instead of sqrt(pw)
+    print("\nMVGS2017, SR2021")
     x2 = np.power(x, 2)
     _print_metrics(y, 1.108 * np.power(x2, 0.083))  # MVGS2017
     tau = evaluate_sr2021(x2, site_array=df.site.to_numpy())
@@ -639,7 +642,88 @@ def solar_time(create_csv=False):
     return None
 
 
+def convergence():
+
+    df = training_data(create=False, import_val=False, import_full_train=False)
+    test = df.loc[df.index.year == 2013].copy()  # make test set
+    test = test.sample(n=1000)
+    df = df.loc[df.index.year != 2013].copy()
+
+    sizes = np.geomspace(100, 100000, 20)
+    n_iter = 100  # per sample size
+    c1_vals = np.zeros((len(sizes), n_iter))
+    c2_vals = np.zeros((len(sizes), n_iter))
+    rmses = np.zeros((len(sizes), n_iter))
+    r2s = np.zeros((len(sizes), n_iter))
+    for i in range(len(sizes)):
+        for j in range(n_iter):
+            train = df.sample(n=int(sizes[i]))
+            fit_df = pd.DataFrame(dict(x=train.x, y=train.y-train.correction))
+            c1, c2 = fit_linear(fit_df, print_out=False)
+            c1_vals[i, j] = c1
+            c2_vals[i, j] = c2
+
+            # evaluate on test
+            de_p = C3_CONST * (np.exp(-1 * test.elev / 8500) - 1)
+            pred_e = c1 + (c2 * test.x) + de_p
+            # pred_y = SIGMA * np.power(test.t_a, 4) * pred_e
+            # rmse = np.sqrt(mean_squared_error(
+            #     test.dw_ir.to_numpy(), pred_y.to_numpy()))
+            rmse = np.sqrt(mean_squared_error(
+                test.y.to_numpy(), pred_e.to_numpy()))
+            rmses[i, j] = rmse
+            r2s[i, j] = r2_score(test.y.to_numpy(), pred_e.to_numpy())
+
+    fig, axes = plt.subplots(3, 1, figsize=(5, 5), sharex=True)
+    ax = axes[0]
+    ax.set_xscale("log")
+    ax.fill_between(
+        sizes, c1_vals.min(axis=1),
+        c1_vals.max(axis=1), alpha=0.5, fc=COLORS["cornflowerblue"])
+    ax.plot(sizes, c1_vals.mean(axis=1), c=COLORS["cornflowerblue"])
+    ax.set_ylabel("$c_1$")
+    ax.set_yticks(np.linspace(0.58, 0.62, 5))
+    ax.set_ylim(0.58, 0.62)
+    ax.grid(alpha=0.3)
+    ax.set_axisbelow(True)
+
+    ax = axes[1]
+    ax.set_xscale("log")
+    ax.fill_between(
+        sizes, c2_vals.min(axis=1), c2_vals.max(axis=1),
+        alpha=0.5, fc=COLORS["cornflowerblue"])
+    ax.plot(sizes, c2_vals.mean(axis=1), c=COLORS["cornflowerblue"])
+    ax.set_ylabel("$c_2$")
+    ax.set_yticks(np.linspace(1.4, 1.9, 6))
+    ax.set_ylim(1.4, 1.9)
+    ax.yaxis.set_major_formatter('{x:.02f}')
+    ax.grid(alpha=0.3)
+    ax.set_axisbelow(True)
+
+    ax = axes[2]
+    ax.set_xscale("log")
+    ax.fill_between(
+        sizes, r2s.min(axis=1), r2s.max(axis=1),
+        alpha=0.5, fc=COLORS["cornflowerblue"]
+    )
+    ax.plot(sizes, r2s.mean(axis=1), c=COLORS["cornflowerblue"])
+    ax.set_xlabel("Training set size")
+    ax.set_ylabel("R$^2$")
+    ax.set_yticks(np.linspace(0.89, 0.93, 5))
+    ax.set_ylim(0.89, 0.93)
+    ax.grid(alpha=0.3)
+    ax.set_axisbelow(True)
+    ax.set_xlim(sizes[0], sizes[-1])
+    plt.show()
+
+    filename = os.path.join("figures", "convergence.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
 if __name__ == "__main__":
+    # df = training_data(create=True)
+    # create_tra_val_sets()
     print()
     # create_tra_val_sets()
     # pressure_temperature_per_site()
@@ -651,5 +735,15 @@ if __name__ == "__main__":
     # print_results_table()
     # solar_time(create_csv=False)
     print()
+
+    # # 2010 & 2015 data
+    # df = create_training_set(
+    #     year=[2010, 2015], temperature=False, cs_only=False,
+    #     filter_pct_clr=0.0, filter_npts_clr=0.0, drive="server4"
+    # )
+    # df = reduce_to_equal_pts_per_site(df)  # min_pts = 200
+    # df['correction'] = C3_CONST * (np.exp(-1 * df.elev / 8500) - 1)
+    # filename = os.path.join("data", "specific_figure", "training_data.csv")
+    # df.to_csv(filename)
 
 
