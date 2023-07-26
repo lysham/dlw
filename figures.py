@@ -42,7 +42,7 @@ COLORS = {
 # (2010-15 data, equal #/site, 5%, 20th, 1,000 pts set aside for validation)
 C1_CONST = 0.6
 C2_CONST = 1.652
-C3_CONST = 0.15
+C3_CONST = 0.2
 
 
 def training_data(create=False, import_full_train=False, import_val=False):
@@ -723,6 +723,64 @@ def convergence():
     return None
 
 
+def error_map_fixed_c3():
+    # error maps for fixed c3
+    df = training_data()
+    df['correction'] = np.exp(-1 * df.elev / 8500) - 1
+    # train, test = train_test_split(df, test_size=0.2, random_state=35)
+    test = df.sample(10000, random_state=35)
+    title_idx = ["(a)", "(b)", "(c)", "(d)", "(e)", "(f)"]
+
+    c1_x = np.linspace(0.5, 0.7, 50)  # 100
+    c2_x = np.linspace(1, 3, 50)  # 200
+    c3_values = np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.5])
+
+    cnorm = mpl.colors.Normalize(vmin=0, vmax=0.25)  # vmax=0.4
+
+    fig, axes = plt.subplots(2, 3, figsize=(6, 4), sharex=True, sharey=True)
+    ii = 0
+    for c3 in c3_values:
+        z = np.zeros((len(c1_x), len(c2_x)))
+        for i in range(len(c1_x)):
+            for j in range(len(c2_x)):
+                pred_y = c1_x[i] + c2_x[j] * test.x
+                correction = c3 * test.correction
+                z[i, j] = np.sqrt(
+                    mean_squared_error(test.y, pred_y + correction))
+        xi, yi = np.unravel_index(z.argmin(), z.shape)
+        print(c3, xi, yi, f"{z[xi, yi]:.5f}", f"{z.mean():.5f}")
+
+        ax = axes[ii // 3, ii % 3]
+        cb = ax.contourf(
+            c2_x, c1_x, z, cmap=mpl.cm.coolwarm, norm=cnorm
+        )
+        ax.scatter(c2_x[yi], c1_x[xi], c="k", marker="^")
+        text = f"({c1_x[xi]:.3f}, {c2_x[yi]:.3f}) \nRMSE: {z.min():.4f}"
+        # annotation (x, y, s)
+        ax.text(c2_x[yi] - 0.1, c1_x[xi] + 0.01, text)
+
+        title = f"{title_idx[ii]} $c_3={c3}$"
+        ax.set_title(title, loc="left")
+
+        ii += 1
+    axes[1, 0].set_xlabel("$c_2$")
+    axes[1, 1].set_xlabel("$c_2$")
+    axes[1, 2].set_xlabel("$c_2$")
+    axes[0, 0].set_ylabel("$c_1$")
+    axes[1, 0].set_ylabel("$c_1$")
+    # ax.xaxis.set_major_locator(mpl.ticker.LinearLocator(5))
+    # ax.xaxis.set_major_formatter('{x:.02f}')
+    # ax.yaxis.set_major_locator(mpl.ticker.LinearLocator(6))
+    # ax.yaxis.set_major_formatter('{x:.02f}')
+
+    fig.subplots_adjust(right=0.9)
+    cbar_ax = fig.add_axes([0.94, 0.1, 0.05, 0.8])
+    fig.colorbar(cb, cax=cbar_ax, label="RMSE")
+    filename = os.path.join("figures", "error_map_fixed_c3.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
 if __name__ == "__main__":
     # df = training_data(create=True)
     # create_tra_val_sets()
@@ -748,56 +806,14 @@ if __name__ == "__main__":
     # filename = os.path.join("data", "specific_figure", "training_data.csv")
     # df.to_csv(filename)
 
-    # error maps for fixed c3
+    # fdf = training_data(import_full_train=True)
     df = training_data()
-    df['corr_c3'] = np.exp(-1 * df.elev / 8500) - 1
-    # train, test = train_test_split(df, test_size=0.2, random_state=35)
-    test = df.sample(1000, random_state=35)
+    df["correction"] = 0.2 * (np.exp(-1 * df.elev / 8500) - 1)
 
-    c1_x = np.linspace(0.3, 0.8, 25)  # 100
-    c2_x = np.linspace(1, 3, 50)  # 200
-    c3_values = np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.5])
+    df["y"] = df.y - df.correction
+    fit_df = pd.DataFrame(dict(x=df.x.to_numpy(), y=df.y.to_numpy()))
+    fit_linear(df, print_out=True)
 
-    cnorm = mpl.colors.Normalize(vmin=0, vmax=0.4)
-
-    fig, axes = plt.subplots(2, 3, figsize=(6, 4), sharex=True, sharey=True)
-    plt.subplots_adjust(hspace=0.1, wspace=0.1)
-    ii = 0
-    for c3 in c3_values:
-        z = np.zeros((len(c1_x), len(c2_x)))
-        for i in range(len(c1_x)):
-            for j in range(len(c2_x)):
-                pred_y = c1_x[i] + c2_x[j] * test.x
-                correction = c3 * test.correction
-                z[i, j] = np.sqrt(
-                    mean_squared_error(test.y, pred_y + correction))
-        xi, yi = np.unravel_index(z.argmin(), z.shape)
-        print(xi, yi)
-
-        ax = axes[ii // 3, ii % 3]
-        cb = ax.contourf(
-            c2_x, c1_x, z, cmap=mpl.cm.coolwarm, norm=cnorm
-        )
-        ax.scatter(c2_x[yi], c1_x[xi], c="k", marker="^")
-        text = f"({c1_x[xi]:.3f}, {c2_x[yi]:.3f}) \nRMSE: {z.min():.3f}"
-        ax.text(c2_x[yi] + .05, c1_x[xi] + 0.01, text)
-        # fig.colorbar(cb, label="RMSE")
-
-        title = f"$c_3={c3}$"
-        ax.set_title(title, loc="left")
-
-        ii += 1
-    axes[1, 0].set_xlabel("$c_2$")
-    axes[1, 1].set_xlabel("$c_2$")
-    axes[1, 2].set_xlabel("$c_2$")
-    axes[0, 0].set_ylabel("$c_1$")
-    axes[1, 0].set_ylabel("$c_1$")
-    # ax.xaxis.set_major_locator(mpl.ticker.LinearLocator(5))
-    # ax.xaxis.set_major_formatter('{x:.02f}')
-    # ax.yaxis.set_major_locator(mpl.ticker.LinearLocator(6))
-    # ax.yaxis.set_major_formatter('{x:.02f}')
-
-    plt.tight_layout()
-    plt.show()
-
+    fit_df = pd.DataFrame(dict(x=df.x, y=df.y + df.correction-0.6))
+    fit_linear(df, set_intercept=0.6, print_out=True)
 
