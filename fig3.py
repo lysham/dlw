@@ -577,6 +577,7 @@ def plot_fit3_dopt():
     cmap = mpl.colormaps["Paired"]
     cmaplist = [cmap(i) for i in range(len(lbl))]
 
+    # df = ijhmt_to_tau("fig3_esky_i.csv")
     df = ijhmt_to_tau("fig5_esky_ij_b4.csv")  # tau, first p removed
     # df = ijhmt_to_individual_e("fig3_esky_i.csv")
     x = df.index.to_numpy()
@@ -589,11 +590,11 @@ def plot_fit3_dopt():
         y = -1 * np.log(df[s])
         # y = df[s]
         ax.plot(x, y, label=labels[i], c=cmaplist[i])
-        y_ref = y_ref * y
-        # y_ref += y
+        # y_ref = y_ref * y  # transmissivity
+        y_ref += y  # dopt or emissivity
         i += 1
     ax.plot(x, y_ref, label="total", c="0.0", ls="--")
-    ax.set_title("Individual contributions", loc="left")
+    ax.set_title("Individual contributions (band 4)", loc="left")
     ax.set_xlim(x[0], x[-1])
     ax.set_xlabel("$p_w$ [-]")
     ax.set_ylabel(r"$d_{\rm{opt}}$ [-]")
@@ -603,6 +604,8 @@ def plot_fit3_dopt():
     ax.legend(ncol=2, loc="upper right")
     plt.tight_layout()
     plt.show()
+    filename = os.path.join("figures", "temp.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 
 
