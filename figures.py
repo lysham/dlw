@@ -41,8 +41,8 @@ COLORS = {
 
 # (2010-15 data, equal #/site, 5%, 20th, 1,000 pts set aside for validation)
 C1_CONST = 0.6
-C2_CONST = 1.652
-C3_CONST = 0.2
+C2_CONST = 1.653
+C3_CONST = 0.15
 
 
 def training_data(create=False, import_full_train=False, import_val=False):
@@ -728,14 +728,16 @@ def error_map_fixed_c3():
     df = training_data()
     df['correction'] = np.exp(-1 * df.elev / 8500) - 1
     # train, test = train_test_split(df, test_size=0.2, random_state=35)
-    test = df.sample(10000, random_state=35)
+    # test = df.sample(10000, random_state=35)
+    test = df.copy()
     title_idx = ["(a)", "(b)", "(c)", "(d)", "(e)", "(f)"]
 
     c1_x = np.linspace(0.5, 0.7, 50)  # 100
     c2_x = np.linspace(1, 3, 50)  # 200
     c3_values = np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.5])
 
-    cnorm = mpl.colors.Normalize(vmin=0, vmax=0.25)  # vmax=0.4
+    vmin, vmax = (0, 0.225)
+    # cnorm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
 
     fig, axes = plt.subplots(2, 3, figsize=(6, 4), sharex=True, sharey=True)
     ii = 0
@@ -752,11 +754,12 @@ def error_map_fixed_c3():
 
         ax = axes[ii // 3, ii % 3]
         cb = ax.contourf(
-            c2_x, c1_x, z, cmap=mpl.cm.coolwarm, norm=cnorm
+            c2_x, c1_x, z, cmap=mpl.cm.coolwarm,
+            vmin=vmin, vmax=vmax
         )
         ax.scatter(c2_x[yi], c1_x[xi], c="k", marker="^")
-        text = f"({c1_x[xi]:.3f}, {c2_x[yi]:.3f}) \nRMSE: {z.min():.4f}"
         # annotation (x, y, s)
+        text = f"({c1_x[xi]:.3f}, {c2_x[yi]:.3f}) \nRMSE: {z.min():.4f}"
         ax.text(c2_x[yi] - 0.1, c1_x[xi] + 0.01, text)
 
         title = f"{title_idx[ii]} $c_3={c3}$"
@@ -808,12 +811,12 @@ if __name__ == "__main__":
 
     # fdf = training_data(import_full_train=True)
     df = training_data()
-    df["correction"] = 0.2 * (np.exp(-1 * df.elev / 8500) - 1)
+    df["correction"] = 0.15 * (np.exp(-1 * df.elev / 8500) - 1)
 
     df["y"] = df.y - df.correction
     fit_df = pd.DataFrame(dict(x=df.x.to_numpy(), y=df.y.to_numpy()))
-    fit_linear(df, print_out=True)
+    fit_linear(fit_df, print_out=True)
 
-    fit_df = pd.DataFrame(dict(x=df.x, y=df.y + df.correction-0.6))
-    fit_linear(df, set_intercept=0.6, print_out=True)
+    fit_df = pd.DataFrame(dict(x=df.x, y=df.y - 0.6))
+    fit_linear(fit_df, set_intercept=0.6, print_out=True)
 
