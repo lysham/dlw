@@ -90,9 +90,9 @@ def create_tra_val_sets():
     # from training data, create training and validation sets
     # using train_test_split to create idx split
     df = training_data(import_full_train=True)  # equal # samples per site
-    # split training_data into train and validation (1,000)
+    # split training_data into train and validation (10,000)
     tra_idx, val_idx = train_test_split(
-        np.arange(df.shape[0]), test_size=1000, random_state=43)
+        np.arange(df.shape[0]), test_size=10000, random_state=43)
 
     filename = os.path.join("data", "val.csv")
     df.iloc[val_idx].to_csv(filename)
@@ -519,7 +519,7 @@ def rh2pw(rh, t=294.2):
 
 def print_results_table():
     # print validation results
-    df = pd.read_csv(os.path.join("data", "val.csv"))
+    df = training_data(import_val=True)
     df["y_corr"] = df.y - df.correction
 
     x = df.x.to_numpy().reshape(-1, 1)
@@ -537,9 +537,10 @@ def print_results_table():
     print("\nMVGS2017, SR2021")
     x2 = np.power(x, 2)
     _print_metrics(y, 1.108 * np.power(x2, 0.083))  # MVGS2017
-    tau = evaluate_sr2021(x2, site_array=df.site.to_numpy())
+    # tau = evaluate_sr2021(x2, site_array=df.site.to_numpy())
+    tau = evaluate_sr2021(x2)  # assume GWC H
     e_sr2021 = 1 - tau
-    _print_metrics(y, e_sr2021)
+    _print_metrics(y, e_sr2021.reshape(-1, 1))
     return None
 
 
@@ -547,7 +548,7 @@ def _print_metrics(actual, model):
     rmse = np.sqrt(mean_squared_error(actual, model))
     r2 = r2_score(actual, model)
     mbe = np.nanmean((model - actual), axis=0)
-    print(f"RMSE: {rmse.round(5)} | MBE: {mbe[0].round(5)} | R2: {r2.round(5)}")
+    print(f"RMSE: {rmse.round(5)} | MBE: {mbe.round(5)} | R2: {r2.round(5)}")
     return None
 
 
@@ -784,6 +785,85 @@ def error_map_fixed_c3():
     return None
 
 
+def data_processing_table(create_csv=False):
+    # create specific files
+    if create_csv:
+        # 2010 & 2015 data
+        df = create_training_set(
+            year=[2010, 2015], temperature=False, cs_only=False,
+            filter_pct_clr=0.0, filter_npts_clr=0.0, drive="server4"
+        )
+        df = reduce_to_equal_pts_per_site(df)  # min_pts = 200
+        df['correction'] = C3_CONST * (np.exp(-1 * df.elev / 8500) - 1)
+        filename = os.path.join(
+            "data", "specific_figure", "data_processing_table_base.csv")
+        df.to_csv(filename)
+
+        # 2010 & 2015 data
+        df = create_training_set(
+            year=[2010, 2017], temperature=False, cs_only=False,
+            filter_pct_clr=0.0, filter_npts_clr=0.0, drive="server4"
+        )
+        df = reduce_to_equal_pts_per_site(df)  # min_pts = 200
+        df['correction'] = C3_CONST * (np.exp(-1 * df.elev / 8500) - 1)
+        filename = os.path.join(
+            "data", "specific_figure", "data_processing_table_2017.csv")
+        df.to_csv(filename)
+
+    # import test/validation set and import baseline total set
+    test = training_data(import_val=True)  # evaluate on validation set
+
+    filename = os.path.join(
+        "data", "specific_figure", "data_processing_table_base.csv")
+    # # import _2017 file to include DRA 2017 data in training set
+    # filename = os.path.join(
+    #     "data", "specific_figure", "data_processing_table_2017.csv")
+    # training data set has not had filters applied
+    total = pd.read_csv(filename, index_col=0, parse_dates=True)
+
+    # change one of these at a time and evaluate
+    clear_sky = "both"  # ["both", "li", "reno"]
+    solar_time_filter = True
+    apply_pct_clr = True
+    apply_npts_clr = True
+    remove_site_bias = True
+    elev_correction = True
+    # if "both" and all true for above, then baseline is evaluated
+
+    base = total.copy(deep=True)
+    if apply_pct_clr:
+        base = base.loc[base.clr_pct >= FILTER_PCT_CLR]
+    if apply_npts_clr:
+        base = base.loc[base.clr_num >= FILTER_NPTS_CLR]
+    if clear_sky == "both":
+        base = base.loc[base.csv2]
+    elif clear_sky == "li":
+        base = base.loc[base.cs_period]
+    elif clear_sky == "reno":
+        base = base.loc[base.reno_cs]
+    if solar_time_filter:
+        base = base.loc[base.index.hour > 8]
+    # use an equal number of points, apply correction
+    if remove_site_bias:  # get to 100,000 points equally
+        df = reduce_to_equal_pts_per_site(base, min_pts=14285, random_state=23)
+    else:  # use straightforward sample
+        df = base.sample(100000, random_state=23)  # roughly 10x test size
+    if elev_correction:
+        df["y"] = df.y - df.correction
+
+    fit_df = pd.DataFrame(dict(x=df.x.to_numpy(), y=df.y.to_numpy()))
+    c1, c2 = fit_linear(fit_df, print_out=True)
+    # evaluate on test set
+    print("\nperformance on validation set:")
+    model = c1 + c2 * test.x.to_numpy()
+    if not elev_correction:  # evaluate on uncorrected actuals
+        actual = test.y.to_numpy()
+    else:  # have test set be at sea level
+        actual = test.y - test.correction
+    _print_metrics(actual, model)
+    return None
+
+
 if __name__ == "__main__":
     # df = training_data(create=True)
     # create_tra_val_sets()
@@ -791,7 +871,7 @@ if __name__ == "__main__":
     # create_tra_val_sets()
     # pressure_temperature_per_site()
     # emissivity_vs_pw_data()
-    altitude_correction()
+    # altitude_correction()
     # compare(with_data=True)
     # compare(with_data=False)
     # tau_lc_vs_sr()
@@ -799,24 +879,9 @@ if __name__ == "__main__":
     # solar_time(create_csv=False)
     print()
 
-    # # 2010 & 2015 data
-    # df = create_training_set(
-    #     year=[2010, 2015], temperature=False, cs_only=False,
-    #     filter_pct_clr=0.0, filter_npts_clr=0.0, drive="server4"
-    # )
-    # df = reduce_to_equal_pts_per_site(df)  # min_pts = 200
-    # df['correction'] = C3_CONST * (np.exp(-1 * df.elev / 8500) - 1)
-    # filename = os.path.join("data", "specific_figure", "training_data.csv")
-    # df.to_csv(filename)
-
     # # fdf = training_data(import_full_train=True)
     # df = training_data()
     # df["correction"] = 0.15 * (np.exp(-1 * df.elev / 8500) - 1)
     #
     # df["y"] = df.y - df.correction
-    # fit_df = pd.DataFrame(dict(x=df.x.to_numpy(), y=df.y.to_numpy()))
-    # fit_linear(fit_df, print_out=True)
-    #
-    # fit_df = pd.DataFrame(dict(x=df.x, y=df.y - 0.6))
-    # fit_linear(fit_df, set_intercept=0.6, print_out=True)
-    #
+

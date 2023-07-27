@@ -19,6 +19,7 @@ data/training_data.csv
 data/tra.csv
 data/val.csv
 data/shp_files/
+data/specific_figure/*table*.csv
 
 randall_files
 
