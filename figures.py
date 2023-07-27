@@ -226,7 +226,7 @@ def pressure_temperature_per_site():
 
 def emissivity_vs_pw_data():
     df = training_data()  # import data
-    df = reduce_to_equal_pts_per_site(df, min_pts=200)
+    df = reduce_to_equal_pts_per_site(df, min_pts=150, random_state=14)
     ms = 15
 
     fig, ax = plt.subplots(figsize=(6, 4))
@@ -264,7 +264,7 @@ def altitude_correction():
     # histogram per site of lw_err with and without altitude correction
     # dataframe should match exactly that of emissivity vs pw data plot
     df = training_data()  # import data
-    df = reduce_to_equal_pts_per_site(df, min_pts=150, random_state=22)
+    df = reduce_to_equal_pts_per_site(df, min_pts=150, random_state=14)
 
     df["e"] = C1_CONST + (C2_CONST * df.x)
     df["e_corr"] = df.e + C3_CONST * (np.exp(-1 * df.elev / 8500) - 1)
@@ -355,7 +355,7 @@ def compare(with_data=True):
     # plot comparisons of selected correlations with and without sample data
     if with_data:
         df = training_data()
-        df = reduce_to_equal_pts_per_site(df, min_pts=100)
+        df = reduce_to_equal_pts_per_site(df, min_pts=100, random_state=14)
         df['y'] = df.y - df.correction  # bring all sample to sea level
         ms = 10  # marker size for data samples
         filename = os.path.join("figures", f"compare_with_data.png")
@@ -562,7 +562,9 @@ def solar_time(create_csv=False):
             filter_solar_time=False,
             drive="server4"
         )
-        df = reduce_to_equal_pts_per_site(df, min_pts=300)
+        df = df.loc[(df.site != "DRA") & (df.site != "BOU")]
+        df = df.sample(1000, random_state=30)
+        # df = reduce_to_equal_pts_per_site(df, min_pts=200)
         df['correction'] = C3_CONST * (np.exp(-1 * df.elev / 8500) - 1)
         df['e'] = C1_CONST + C2_CONST * df.x
         tmp = np.log(df.pw_hpa * 100 / 610.94)
@@ -581,6 +583,7 @@ def solar_time(create_csv=False):
     df['e'] = c1 + c2 * df.x
     df["lw_pred"] = (df.e + df.correction) * SIGMA * np.power(df.t_a, 4)
     df["lw_err"] = df.lw_pred - df.dw_ir  # error
+    df["time"] = df.index.hour + (df.index.minute / 60)
 
     # boxplot by hour
     fig, axes = plt.subplots(2, 1, figsize=(6, 6), sharex=True)
@@ -593,13 +596,13 @@ def solar_time(create_csv=False):
     ax.axhline(0, c="0.7", ls="--")
     ax.boxplot(
         data, labels=np.arange(6, 19), patch_artist=True,
-        boxprops={'fill': True, 'facecolor': 'white'},
+        boxprops={'fill': True, 'facecolor': 'white', 'alpha': 0.9},
         medianprops={'color': "black"},
         showfliers=False, zorder=10
     )
     ax.set_ylabel(r"$L_{d,\rm{pred}} - L_{d,\rm{meas}}$ [W/m$^2$]")
     ax.set_axisbelow(True)
-    ax.set_ylim(-30, 20)
+    ax.set_ylim(-30, 30)
 
     ax = axes[1]
     data = []
@@ -615,7 +618,16 @@ def solar_time(create_csv=False):
     ax.set_ylabel(r"$T_{a} - T_{dp}$ [K]")
     ax.set_xlabel("Solar hour of day")
     ax.set_axisbelow(True)
-    ax.set_ylim(0, 40)
+    ax.set_ylim(0, 30)
+
+    # add data behind
+    pdf = df.copy()
+    pdf = pdf.loc[(pdf.time >= 6) & (pdf.time <= 18)]
+    # x-axis 1st tick is 6 am
+    axes[0].scatter(pdf.time - 5, pdf.lw_err, c="0.8",
+                    s=10, alpha=0.3, zorder=0)
+    axes[1].scatter(pdf.time - 5, pdf.dtdp, c="0.8",
+                    s=10, alpha=0.3, zorder=0)
 
     filename = os.path.join("figures", "solar_time_boxplot.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
@@ -868,7 +880,6 @@ if __name__ == "__main__":
     # df = training_data(create=True)
     # create_tra_val_sets()
     print()
-    # create_tra_val_sets()
     # pressure_temperature_per_site()
     # emissivity_vs_pw_data()
     # altitude_correction()
