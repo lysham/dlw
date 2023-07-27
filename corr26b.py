@@ -348,7 +348,7 @@ def import_cs_compare_csv(csvname, site=None):
     return df
 
 
-def reduce_to_equal_pts_per_site(df, min_pts=None):
+def reduce_to_equal_pts_per_site(df, min_pts=None, random_state=30):
     # keep equal number of points per site
     site_pts = df.groupby(df.site).t_a.count().sort_values().to_dict()
     if min_pts is None:
@@ -356,7 +356,7 @@ def reduce_to_equal_pts_per_site(df, min_pts=None):
     new_df = pd.DataFrame()
     for s in site_pts.keys():
         tmp = df.loc[df.site == s].copy()
-        tmp = tmp.sample(min_pts, random_state=30)
+        tmp = tmp.sample(min_pts, random_state=random_state)
         new_df = pd.concat([new_df, tmp])
     return new_df.copy()
 

@@ -264,7 +264,7 @@ def altitude_correction():
     # histogram per site of lw_err with and without altitude correction
     # dataframe should match exactly that of emissivity vs pw data plot
     df = training_data()  # import data
-    df = reduce_to_equal_pts_per_site(df, min_pts=200)
+    df = reduce_to_equal_pts_per_site(df, min_pts=150, random_state=22)
 
     df["e"] = C1_CONST + (C2_CONST * df.x)
     df["e_corr"] = df.e + C3_CONST * (np.exp(-1 * df.elev / 8500) - 1)
@@ -276,17 +276,17 @@ def altitude_correction():
     xmin, xmax = (-30, 30)
     bins = np.arange(xmin, xmax + 1, 2.5)
 
-    fig, axes = plt.subplots(4, 2, figsize=(6, 4), sharey=True)
-    plt.subplots_adjust(hspace=0.05, wspace=0.05)
-    lbl = r"$\tilde{\varepsilon}_{\rm{sky,c}}$"
-    lbl_ = r"$\tilde{\varepsilon}_{\rm{sky,c}} + c_3 (\exp{^{-z/H}} - 1)$"
+    fig, axes = plt.subplots(4, 2, figsize=(6, 4), sharey=True, sharex=True)
+    plt.subplots_adjust(hspace=0.2, wspace=0.05)
+    lbl = r"$\tilde{\varepsilon}_{\rm{sky,c}}(p_w)$"
+    lbl_ = r"$\tilde{\varepsilon}_{\rm{sky,c}}(p_w) + c_3 (\exp{^{-z/H}} - 1)$"
     i = 0  # plot counter
     j = 0  # site counter
     for i in range(len(ELEVATIONS) + 1):  # hacky
         ax = axes[i // 2, i % 2]  # zig zag downward
         s, alt = ELEVATIONS[j]
         if i == 1:
-            # format empty subplot at lower right, legend only
+            # format empty subplot at upper right, legend only
             ax.hist([], color="0.3", alpha=0.3, label=lbl)
             ax.hist([], ec="0.3", alpha=0.3, color=COLORS["persianindigo"],
                     label=lbl_)
@@ -312,7 +312,7 @@ def altitude_correction():
             ax.text(0.01, 0.93, s=note, va="top", ha="left",
                     fontsize="small", transform=ax.transAxes, color="0.0")
             ax.set_axisbelow(True)
-            ax.set_ylim(0, 45)
+            ax.set_ylim(0, 35)
             ax.set_xlim(xmin, xmax)
             j += 1
         i += 1
@@ -791,7 +791,7 @@ if __name__ == "__main__":
     # create_tra_val_sets()
     # pressure_temperature_per_site()
     # emissivity_vs_pw_data()
-    # altitude_correction()
+    altitude_correction()
     # compare(with_data=True)
     # compare(with_data=False)
     # tau_lc_vs_sr()
@@ -809,14 +809,14 @@ if __name__ == "__main__":
     # filename = os.path.join("data", "specific_figure", "training_data.csv")
     # df.to_csv(filename)
 
-    # fdf = training_data(import_full_train=True)
-    df = training_data()
-    df["correction"] = 0.15 * (np.exp(-1 * df.elev / 8500) - 1)
-
-    df["y"] = df.y - df.correction
-    fit_df = pd.DataFrame(dict(x=df.x.to_numpy(), y=df.y.to_numpy()))
-    fit_linear(fit_df, print_out=True)
-
-    fit_df = pd.DataFrame(dict(x=df.x, y=df.y - 0.6))
-    fit_linear(fit_df, set_intercept=0.6, print_out=True)
-
+    # # fdf = training_data(import_full_train=True)
+    # df = training_data()
+    # df["correction"] = 0.15 * (np.exp(-1 * df.elev / 8500) - 1)
+    #
+    # df["y"] = df.y - df.correction
+    # fit_df = pd.DataFrame(dict(x=df.x.to_numpy(), y=df.y.to_numpy()))
+    # fit_linear(fit_df, print_out=True)
+    #
+    # fit_df = pd.DataFrame(dict(x=df.x, y=df.y - 0.6))
+    # fit_linear(fit_df, set_intercept=0.6, print_out=True)
+    #
