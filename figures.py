@@ -979,6 +979,64 @@ def _clear_sky_filter(ax, pdf, plot_date):
     return ax
 
 
+
+
+def plot_lbl_match():
+    # compare LC2019 with SR2021
+    df = ijhmt_to_individual_e("fig3_esky_i.csv")
+    x = df.index.to_numpy()
+    tmp = df.copy(deep=True)
+    tmp = tmp.drop(columns=["Aerosols", "total"])
+    tmp["total"] = tmp.cumsum(axis=1).iloc[:, -1]
+
+    # transmissivity - plot total tau against Shakespeare
+    site = "GWC"
+    lat1 = SURFRAD[site]["lat"]
+    lon1 = SURFRAD[site]["lon"]
+    h1, spline = shakespeare(lat1, lon1)
+    pw = x * P_ATM  # Pa
+    w = 0.62198 * pw / (P_ATM - pw)
+    q = w / (1 + w)
+    p_rep = P_ATM * np.exp(-1 * SURFRAD[site]["alt"] / 8500)
+    p_ratio = p_rep / P_ATM
+    he = (h1 / np.cos(40.3 * np.pi / 180)) * np.power(p_ratio, 1.8)
+    d_opt = spline.ev(q, he)
+    tau_shp = np.exp(-1 * d_opt)
+
+    sr2021 = 1 - tau_shp
+    y_fit = C1_CONST + C2_CONST * np.sqrt(x)
+
+    y_lbl_orig = 0.6173 + 1.6940 * np.power(x, 0.5035)
+
+    obs_err5 = 5 / (SIGMA * np.power(294.2, 4))
+    obs_err10 = 10 / (SIGMA * np.power(294.2, 4))
+
+    fig, ax = plt.subplots()
+    ax.grid(alpha=0.3)
+    ax.plot(x, y_fit, lw=2, ls="-", c="0.0", label="fit")
+    ax.fill_between(x, y_fit - obs_err10, y_fit + obs_err10, fc="0.8", alpha=0.5, label="+/-10W/m$^2$")
+    ax.fill_between(x, y_fit - obs_err5, y_fit + obs_err5, fc="0.6", alpha=0.5, label="+/-5W/m$^2$")
+    ax.plot(x, df.total.to_numpy(), c=COLORS["persianred"], ls="-", zorder=2,
+            label="LC2019")
+    ax.plot(x, df.H2O + df.CO2, c=COLORS["persianred"], ls=":", lw=2,
+            label="LC2019 (H2O+CO2)")
+    ax.plot(x, tmp.total.to_numpy(), c=COLORS["persianindigo"], ls="--",
+            label="LC2019 (no aerosols)")
+    ax.plot(x, y_lbl_orig, c=COLORS["barnred"], ls="-",
+            label="LBL (original)")
+    ax.plot(x, sr2021, c=COLORS["cornflowerblue"], ls=":", label="SR2021")
+    ax.plot(x, sr2021 + 0.02, c=COLORS["cornflowerblue"], lw=2, ls="-",
+            label="SR2021 + 0.02")
+    ax.legend(loc="lower right")
+    ax.set_xlabel("pw")
+    ax.set_ylabel("emissivity")
+    ax.set_axisbelow(True)
+    ax.set_xlim(x[0], x[-1])
+    filename = os.path.join("figures", "lbl_match.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
 if __name__ == "__main__":
     # df = training_data(create=True)
     # create_tra_val_sets()
@@ -998,51 +1056,3 @@ if __name__ == "__main__":
     # ff = pd.DataFrame(dict(x=x, y=y))
     # ff.loc[(ff.x >0.5) & (ff.y < 200)]
 
-
-    df = ijhmt_to_tau("fig3_esky_i.csv")  # tau, first p removed
-    x = df.index.to_numpy()
-
-    # transmissivity - plot total tau against Shakespeare
-    site = "GWC"
-    lat1 = SURFRAD[site]["lat"]
-    lon1 = SURFRAD[site]["lon"]
-    h1, spline = shakespeare(lat1, lon1)
-    pw = x * P_ATM  # Pa
-    w = 0.62198 * pw / (P_ATM - pw)
-    q = w / (1 + w)
-    p_rep = P_ATM * np.exp(-1 * SURFRAD[site]["alt"] / 8500)
-    p_ratio = p_rep / P_ATM
-    he = (h1 / np.cos(40.3 * np.pi / 180)) * np.power(p_ratio, 1.8)
-    d_opt = spline.ev(q, he)
-    tau_shp = np.exp(-1 * d_opt)
-
-    y_fit = C1_CONST + C2_CONST * np.sqrt(x)
-    y_fit = 1 - y_fit
-
-    tmp = df.copy(deep=True)
-    tmp = tmp.drop(columns=["Aerosols", "total"])
-    tmp["total"] = tmp.cumprod(axis=1).iloc[:, -1]
-
-    fig, ax = plt.subplots()
-    ax.plot(x, df.total.to_numpy(), c=COLORS["persianred"], ls="-",
-            label="LC2019", zorder=2)
-    ax.plot(
-        x, df.H2O.to_numpy() * df.CO2.to_numpy(), c=COLORS["persianred"],
-        ls="--", label="LC2019 H$_2$O and CO$_2$", zorder=4
-    )
-    ax.plot(x, tau_shp, c=COLORS["cornflowerblue"],
-            label="SR2021", zorder=5)
-    fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
-    ax.plot(x, y_fit, lw=2, ls="-", c="0.0", zorder=0,
-            label=fit_label)
-    ax.plot(x, tmp.total.to_numpy(), c=COLORS["viridian"], ls=":", lw=2, label="no aerosols")
-    ax.set_xlim(x[0], x[-1])
-    ax.set_ylim(0, 0.5)
-    ax.grid(alpha=0.3)
-    ax.set_xlabel("$p_w$ [-]")
-    ax.set_ylabel("transmissivity [-]")
-    ax2 = ax.secondary_xaxis("top", functions=(pw2rh, rh2pw))
-    ax2.set_xlabel("RH [%] at 294.2 K")
-    ax.legend(ncol=2, bbox_to_anchor=(0.5, -0.2), loc="upper center")
-    plt.tight_layout()
-    plt.show()
