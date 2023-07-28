@@ -20,6 +20,8 @@ data/tra.csv
 data/val.csv
 data/shp_files/
 data/specific_figure/*
+data/profiles/
+data/hitran
 
 randall_files
 

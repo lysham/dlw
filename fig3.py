@@ -652,3 +652,29 @@ if __name__ == "__main__":
     # y = df["CO2"].to_numpy()
     # fit_df = pd.DataFrame(dict(x=x, y=-1 * np.log(y)))
     # fit_linear(fit_df, print_out=True)
+
+    part = "total"
+    tau = True
+
+    if tau:
+        df = ijhmt_to_tau("fig3_esky_i.csv")
+    else:
+        df = ijhmt_to_individual_e("fig3_esky_i.csv")
+    x = df.index.to_numpy()
+    y = df[part].to_numpy()
+
+    y_b = np.ones(len(x)) if tau else np.zeros(len(x))
+    for i in np.arange(1, 8):
+        if tau:
+            df = ijhmt_to_tau(f"fig5_esky_ij_b{i}.csv")
+            tmp = df[part].to_numpy()
+            y_b = y_b * tmp
+        else:
+            df = ijhmt_to_individual_e(f"fig5_esky_ij_b{i}.csv")
+            y_b = y_b + df[part].to_numpy()
+
+    fig, ax = plt.subplots()
+    ax.plot(x, y_b, lw=2, label="banded")
+    ax.plot(x, y, ls="--", label="wideband")
+    ax.legend()
+    plt.show()
