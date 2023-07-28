@@ -876,6 +876,109 @@ def data_processing_table(create_csv=False):
     return None
 
 
+def clear_sky_filter(create_csv=False):
+    # show clear sky filter difference
+    s = "GWC"
+    filename = os.path.join(
+        "data", "specific_figure", f"{s.lower()}_clearness.csv")
+    if create_csv:
+        df = create_training_set(
+            year=[2010, 2011, 2012, 2013, 2014, 2015], sites=s,
+            filter_pct_clr=0.0, filter_npts_clr=0.0, filter_solar_time=False,
+            temperature=False, cs_only=False, drive="server4")
+        df.to_csv(filename)
+    else:
+        df = pd.read_csv(filename, index_col=0, parse_dates=True)
+        df = df.loc[df.index.year < 2012]  # could increase to more samples
+    df["csv2"] = df.csv2.astype("bool")
+    x = df.resample("D")["csv2"].mean()
+    y = df.resample("D")["csv2"].count()
+
+    tmp_clr = df["csv2"].resample("D").count()
+    thresh = np.quantile(
+        tmp_clr.loc[tmp_clr > 0].to_numpy(), 0.2
+    )
+
+    toss_date = dt.date(2010, 10, 19)
+    keep_date = dt.date(2010, 6, 20)
+    # highlight examples used
+    toss_x = x.loc[x.index.date == toss_date].item()
+    toss_y = y.loc[y.index.date == toss_date].item()
+    keep_x = x.loc[x.index.date == keep_date].item()
+    keep_y = y.loc[y.index.date == keep_date].item()
+
+    # print out # and % for both examples
+    fig = plt.figure(figsize=(8.5, 3.5), layout="constrained")
+    subfigs = fig.subfigures(1, 2, wspace=0.01, width_ratios=[1, 2])
+    # scatter plot
+    ax = subfigs[0].subplots()
+    ax.set_aspect(1/900)  # unit in y is *aspect* times displayed unit in x
+    ax.grid(True, alpha=0.7)
+    ax.scatter(x, y, marker=".", alpha=0.5, c="0.5")
+    ax.scatter(toss_x, toss_y, marker="o", c=COLORS["persianindigo"])
+    ax.scatter(keep_x, keep_y, marker="o", c=COLORS["viridian"])
+    ax.axvline(0.05, ls="--", c=COLORS["persianred"], label="Fraction of samples threshold")
+    ax.axhline(thresh, c=COLORS["persianred"], label="Number of samples threshold")
+    ax.set_title(f"{s}")
+    ax.set_xlim(0, 1)
+    ax.set_xlabel("Daily clear sky fraction ")
+    ax.set_ylabel("Daily clear sky samples samples")
+    ax.set_ylim(0, 900)
+    ax.set_axisbelow(True)
+    ax.legend(ncol=1, frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.25))
+
+    ax1, ax2 = subfigs[1].subplots(1, 2, sharey=True)
+    # tossed example
+    keep_cols = ["GHI_m", "DNI_m", "GHI_c", "DNI_c", "cs_period", "reno_cs"]
+    pdf = df.loc[df.index.date == toss_date][keep_cols].copy()
+    pdf = pdf.resample("60S", label="right", closed="right").median()
+    ax1 = _clear_sky_filter(ax1, pdf, toss_date)
+    ax1.set_xlabel("Solar hour of day")
+    ax1.legend(
+        frameon=False, ncol=3, loc="upper center", bbox_to_anchor=(0.5, 1.0),
+        borderpad=0.3, labelspacing=0.3, columnspacing=0.8
+    )
+    title = toss_date.strftime("%Y-%m-%d") + " (toss)"
+    ax1.set_title(title, color=COLORS["persianindigo"])
+
+    # kept example
+    keep_cols = ["GHI_m", "DNI_m", "GHI_c", "DNI_c", "cs_period", "reno_cs"]
+    pdf = df.loc[df.index.date == keep_date][keep_cols].copy()
+    pdf = pdf.resample("60S", label="right", closed="right").median()
+    ax2 = _clear_sky_filter(ax2, pdf, keep_date)
+    ax2.set_xlabel("Solar hour of day")
+    title = keep_date.strftime("%Y-%m-%d") + " (keep)"
+    ax2.set_title(title, color=COLORS["viridian"])
+    filename = os.path.join("figures", "clear_sky_filter.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def _clear_sky_filter(ax, pdf, plot_date):
+    # pdf["time"] = pdf.index.hour + (pdf.index.minute / 60)
+    # pdf.set_index("time", inplace=True)
+    ax.plot(pdf.index, pdf.GHI_m, c=COLORS["persianindigo"], label="GHI")
+    ax.plot(pdf.index, pdf.DNI_m, c=COLORS["viridian"], label="DNI")
+    ax.plot(pdf.index, pdf.GHI_c, c=COLORS["persianindigo"], ls="--", label="GHI$_c$")
+    ax.plot(pdf.index, pdf.DNI_c, c=COLORS["viridian"], ls="--", label="DNI$_c$")
+    ax.fill_between(
+        pdf.index, 0, pdf.GHI_m, where=pdf.cs_period, fc="0.7", alpha=0.4,
+        label="CS1"
+    )
+    ax.fill_between(
+        pdf.index, 0, pdf.GHI_m, where=pdf.reno_cs, fc="0.9", alpha=0.4,
+        hatch="//", label="CS2", ec="0.3"
+    )
+    # ax.xaxis.set_major_locator(mpl.dates.HourLocator())
+    ax.xaxis.set_major_formatter(mpl.dates.DateFormatter("%H"))
+    ax.set_xlim(pdf.index[0], pdf.index[-1])
+    ax.set_ylim(0, 1200)
+    start = dt.datetime(plot_date.year, plot_date.month, plot_date.day, 5, 0)
+    end = dt.datetime(plot_date.year, plot_date.month, plot_date.day, 19, 0)
+    ax.set_xlim(start, end)
+    return ax
+
+
 if __name__ == "__main__":
     # df = training_data(create=True)
     # create_tra_val_sets()
@@ -888,11 +991,8 @@ if __name__ == "__main__":
     # tau_lc_vs_sr()
     # print_results_table()
     # solar_time(create_csv=False)
+    clear_sky_filter(create_csv=False)
     print()
 
-    # # fdf = training_data(import_full_train=True)
-    # df = training_data()
-    # df["correction"] = 0.15 * (np.exp(-1 * df.elev / 8500) - 1)
-    #
-    # df["y"] = df.y - df.correction
-
+    # ff = pd.DataFrame(dict(x=x, y=y))
+    # ff.loc[(ff.x >0.5) & (ff.y < 200)]
