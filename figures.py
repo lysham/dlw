@@ -990,9 +990,59 @@ if __name__ == "__main__":
     # compare(with_data=False)
     # tau_lc_vs_sr()
     # print_results_table()
-    # solar_time(create_csv=False)
-    clear_sky_filter(create_csv=False)
+    data_processing_table(create_csv=True)
+    solar_time(create_csv=True)
+    clear_sky_filter(create_csv=True)
     print()
 
     # ff = pd.DataFrame(dict(x=x, y=y))
     # ff.loc[(ff.x >0.5) & (ff.y < 200)]
+
+    #
+    # df = ijhmt_to_tau("fig3_esky_i.csv")  # tau, first p removed
+    # x = df.index.to_numpy()
+    #
+    # # transmissivity - plot total tau against Shakespeare
+    # site = "GWC"
+    # lat1 = SURFRAD[site]["lat"]
+    # lon1 = SURFRAD[site]["lon"]
+    # h1, spline = shakespeare(lat1, lon1)
+    # pw = x * P_ATM  # Pa
+    # w = 0.62198 * pw / (P_ATM - pw)
+    # q = w / (1 + w)
+    # p_rep = P_ATM * np.exp(-1 * SURFRAD[site]["alt"] / 8500)
+    # p_ratio = p_rep / P_ATM
+    # he = (h1 / np.cos(40.3 * np.pi / 180)) * np.power(p_ratio, 1.8)
+    # d_opt = spline.ev(q, he)
+    # tau_shp = np.exp(-1 * d_opt)
+    #
+    # y_fit = C1_CONST + C2_CONST * np.sqrt(x)
+    # y_fit = 1 - y_fit
+    #
+    # tmp = df.copy(deep=True)
+    # tmp = tmp.drop(columns=["Aerosols", "total"])
+    # tmp["total"] = tmp.cumprod(axis=1).iloc[:, -1]
+    #
+    # fig, ax = plt.subplots()
+    # ax.plot(x, df.total.to_numpy(), c=COLORS["persianred"], ls="-",
+    #         label="LC2019", zorder=2)
+    # ax.plot(
+    #     x, df.H2O.to_numpy() * df.CO2.to_numpy(), c=COLORS["persianred"],
+    #     ls="--", label="LC2019 H$_2$O and CO$_2$", zorder=4
+    # )
+    # ax.plot(x, tau_shp, c=COLORS["cornflowerblue"],
+    #         label="SR2021", zorder=5)
+    # fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
+    # ax.plot(x, y_fit, lw=2, ls="-", c="0.0", zorder=0,
+    #         label=fit_label)
+    # ax.plot(x, tmp.total.to_numpy(), c=COLORS["viridian"], ls=":", lw=2, label="no aerosols")
+    # ax.set_xlim(x[0], x[-1])
+    # ax.set_ylim(0, 0.5)
+    # ax.grid(alpha=0.3)
+    # ax.set_xlabel("$p_w$ [-]")
+    # ax.set_ylabel("transmissivity [-]")
+    # ax2 = ax.secondary_xaxis("top", functions=(pw2rh, rh2pw))
+    # ax2.set_xlabel("RH [%] at 294.2 K")
+    # ax.legend(ncol=2, bbox_to_anchor=(0.5, -0.2), loc="upper center")
+    # plt.tight_layout()
+    # plt.show()

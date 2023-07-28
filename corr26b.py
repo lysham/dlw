@@ -491,7 +491,7 @@ def create_training_set(year=[2012, 2013], sites=SURF_SITE_CODES,
                 tmp = add_solar_time(tmp)
                 tmp = tmp.set_index("solar_time")
                 if filter_solar_time:
-                    tmp = tmp.loc[tmp.index.hour > 8]  # filter solar time
+                    tmp = tmp.loc[tmp.index.hour >= 8]  # filter solar time
 
                 # ensure both clear sky filter columns are boolean
                 tmp.cs_period.astype(bool)
