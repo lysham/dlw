@@ -916,7 +916,7 @@ def clear_sky_filter(create_csv=False):
     ax.grid(True, alpha=0.7)
     ax.scatter(x, y, marker=".", alpha=0.5, c="0.5")
     ax.scatter(toss_x, toss_y, marker="o", c=COLORS["persianindigo"])
-    ax.scatter(keep_x, keep_y, marker="o", c=COLORS["cornflowerblue"])
+    ax.scatter(keep_x, keep_y, marker="o", c=COLORS["viridian"])
     ax.axvline(0.05, ls="--", c=COLORS["persianred"], label="Fraction of samples threshold")
     ax.axhline(thresh, c=COLORS["persianred"], label="Number of samples threshold")
     ax.set_title(f"{s}")
@@ -939,7 +939,7 @@ def clear_sky_filter(create_csv=False):
         borderpad=0.3, labelspacing=0.3, columnspacing=0.8
     )
     title = toss_date.strftime("%Y-%m-%d") + " (toss)"
-    ax1.set_title(title, color=COLORS["persianindigo"])
+    ax1.set_title(title)
 
     # kept example
     keep_cols = ["GHI_m", "DNI_m", "GHI_c", "DNI_c", "cs_period", "reno_cs"]
@@ -948,7 +948,7 @@ def clear_sky_filter(create_csv=False):
     ax2 = _clear_sky_filter(ax2, pdf, keep_date)
     ax2.set_xlabel("Solar hour of day")
     title = keep_date.strftime("%Y-%m-%d") + " (keep)"
-    ax2.set_title(title, color=COLORS["cornflowerblue"])
+    ax2.set_title(title)
     filename = os.path.join("figures", "clear_sky_filter.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
@@ -958,9 +958,9 @@ def _clear_sky_filter(ax, pdf, plot_date):
     # pdf["time"] = pdf.index.hour + (pdf.index.minute / 60)
     # pdf.set_index("time", inplace=True)
     ax.plot(pdf.index, pdf.GHI_m, c=COLORS["persianindigo"], label="GHI")
-    ax.plot(pdf.index, pdf.DNI_m, c=COLORS["cornflowerblue"], label="DNI")
+    ax.plot(pdf.index, pdf.DNI_m, c=COLORS["viridian"], label="DNI")
     ax.plot(pdf.index, pdf.GHI_c, c=COLORS["persianindigo"], ls="--", label="GHI$_c$")
-    ax.plot(pdf.index, pdf.DNI_c, c=COLORS["cornflowerblue"], ls="--", label="DNI$_c$")
+    ax.plot(pdf.index, pdf.DNI_c, c=COLORS["viridian"], ls="--", label="DNI$_c$")
     ax.fill_between(
         pdf.index, 0, pdf.GHI_m, where=pdf.cs_period, fc="0.7", alpha=0.4,
         label="CS1"
