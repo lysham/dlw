@@ -13,7 +13,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.linear_model import LinearRegression
 
 from constants import ELEVATIONS, SEVEN_COLORS, P_ATM, SIGMA, SURFRAD, \
-    COLOR7_DICT
+    COLOR7_DICT, N_SPECIES, LI_TABLE1, LBL_LABELS
 from corr26b import create_training_set, reduce_to_equal_pts_per_site, \
     add_solar_time, fit_linear
 from fig3 import shakespeare, ijhmt_to_tau, ijhmt_to_individual_e
@@ -916,7 +916,7 @@ def clear_sky_filter(create_csv=False):
     ax.grid(True, alpha=0.7)
     ax.scatter(x, y, marker=".", alpha=0.5, c="0.5")
     ax.scatter(toss_x, toss_y, marker="o", c=COLORS["persianindigo"])
-    ax.scatter(keep_x, keep_y, marker="o", c=COLORS["viridian"])
+    ax.scatter(keep_x, keep_y, marker="o", c=COLORS["cornflowerblue"])
     ax.axvline(0.05, ls="--", c=COLORS["persianred"], label="Fraction of samples threshold")
     ax.axhline(thresh, c=COLORS["persianred"], label="Number of samples threshold")
     ax.set_title(f"{s}")
@@ -948,7 +948,7 @@ def clear_sky_filter(create_csv=False):
     ax2 = _clear_sky_filter(ax2, pdf, keep_date)
     ax2.set_xlabel("Solar hour of day")
     title = keep_date.strftime("%Y-%m-%d") + " (keep)"
-    ax2.set_title(title, color=COLORS["viridian"])
+    ax2.set_title(title, color=COLORS["cornflowerblue"])
     filename = os.path.join("figures", "clear_sky_filter.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
@@ -958,9 +958,9 @@ def _clear_sky_filter(ax, pdf, plot_date):
     # pdf["time"] = pdf.index.hour + (pdf.index.minute / 60)
     # pdf.set_index("time", inplace=True)
     ax.plot(pdf.index, pdf.GHI_m, c=COLORS["persianindigo"], label="GHI")
-    ax.plot(pdf.index, pdf.DNI_m, c=COLORS["viridian"], label="DNI")
+    ax.plot(pdf.index, pdf.DNI_m, c=COLORS["cornflowerblue"], label="DNI")
     ax.plot(pdf.index, pdf.GHI_c, c=COLORS["persianindigo"], ls="--", label="GHI$_c$")
-    ax.plot(pdf.index, pdf.DNI_c, c=COLORS["viridian"], ls="--", label="DNI$_c$")
+    ax.plot(pdf.index, pdf.DNI_c, c=COLORS["cornflowerblue"], ls="--", label="DNI$_c$")
     ax.fill_between(
         pdf.index, 0, pdf.GHI_m, where=pdf.cs_period, fc="0.7", alpha=0.4,
         label="CS1"
@@ -977,8 +977,6 @@ def _clear_sky_filter(ax, pdf, plot_date):
     end = dt.datetime(plot_date.year, plot_date.month, plot_date.day, 19, 0)
     ax.set_xlim(start, end)
     return ax
-
-
 
 
 def plot_lbl_match():
@@ -1037,6 +1035,96 @@ def plot_lbl_match():
     return None
 
 
+def broadband_contribution():
+    # emissivity and transmissivity with RH reference axes
+    cmap = mpl.colormaps["Paired"]
+    cmaplist = [cmap(i) for i in range(N_SPECIES)]
+    species = list(LI_TABLE1.keys())
+
+    tau = ijhmt_to_tau()
+    eps = ijhmt_to_individual_e()
+    x = tau.index.to_numpy()
+
+    # set margins, size of figure
+    fig_x0 = 0.05
+    fig_y0 = 0.35
+    fig_width = 0.42
+    fig_height = 0.65
+    wspace = 1 - (2 * fig_width) - (2 * fig_x0)
+    if wspace < 0:
+        print("warning: overlapping figures")
+
+    fig = plt.figure(figsize=(6, 3.5))
+    ax0 = fig.add_axes((fig_x0, fig_y0, fig_width, fig_height))
+    ax1 = fig.add_axes(
+        (fig_x0 + fig_width + wspace, fig_y0, fig_width, fig_height))
+    j = 0
+    y_e = np.zeros(len(x))
+    y_t = np.ones(len(x))
+    for gas in species:
+        y = eps[gas].to_numpy()
+        ax0.fill_between(x, y_e, y_e + y, label=LBL_LABELS[gas], fc=cmaplist[j])
+        y_e = y_e + y
+        y = tau[gas].to_numpy()
+        ax1.fill_between(x, y_t, y_t * y, label=LBL_LABELS[gas], fc=cmaplist[j])
+        y_t = y_t * y
+        j += 1
+    # set axis limits, labels, grid
+    ax0.set_ylim(0, 1)
+    ax1.set_ylim(0, 1)
+    ax0.set_xlim(x[0], x[-1])
+    ax1.set_xlim(x[0], x[-1])
+    ax0.legend(ncol=2, loc="lower center")
+    ax0.grid(alpha=0.3)
+    ax0.set_axisbelow(True)
+    ax1.grid(alpha=0.3)
+    ax1.set_axisbelow(True)
+    ax0.set_xlabel("p$_w$ [-]")
+    ax1.set_xlabel("p$_w$ [-]")
+    ax0.set_title(r"(a) $\varepsilon_{i}$", loc="left")
+    ax1.set_title(r"(b) $\tau_{i}$", loc="left")
+
+    # add secondary axes for relative humidity reference
+    ax2 = fig.add_axes((fig_x0, 0.2, fig_width, 0.0))
+    ax2.yaxis.set_visible(False)  # hide the yaxis
+    rh_lbls = [20, 40, 60, 80, 100]
+    t = 290
+    ax2.set_xlim(pw2rh(x[0], t), pw2rh(x[-1], t))
+    ax2.set_xticks(np.array(rh_lbls), labels=rh_lbls)
+    ax2.set_xlabel(f"RH [%] at {t} K")
+
+    ax3 = fig.add_axes((fig_x0, 0.05, fig_width, 0.0))
+    ax3.yaxis.set_visible(False)  # hide the yaxis
+    t = 300
+    ax3.set_xlim(pw2rh(x[0], t), pw2rh(x[-1], t))
+    ax3.set_xticks(np.array(rh_lbls), labels=rh_lbls)
+    ax3.set_xlabel(f"RH [%] at {t} K")
+
+    ax4 = fig.add_axes((fig_x0 + fig_width + wspace, 0.2, fig_width, 0.0))
+    ax4.yaxis.set_visible(False)  # hide the yaxis
+    t = 290
+    ax4.set_xlim(pw2rh(x[0], t), pw2rh(x[-1], t))
+    ax4.set_xticks(np.array(rh_lbls), labels=rh_lbls)
+    ax4.set_xlabel(f"RH [%] at {t} K")
+
+    ax4 = fig.add_axes((fig_x0 + fig_width + wspace, 0.05, fig_width, 0.0))
+    ax4.yaxis.set_visible(False)  # hide the yaxis
+    t = 300
+    ax4.set_xlim(pw2rh(x[0], t), pw2rh(x[-1], t))
+    ax4.set_xticks(np.array(rh_lbls), labels=rh_lbls)
+    ax4.set_xlabel(f"RH [%] at {t} K")
+
+    filename = os.path.join("figures", "broadband_contribution.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def spectral_band_contribution():
+    # filename = os.path.join("figures", "spectral_band_contribution.png")
+    # fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
 if __name__ == "__main__":
     # df = training_data(create=True)
     # create_tra_val_sets()
@@ -1050,9 +1138,69 @@ if __name__ == "__main__":
     # print_results_table()
     # data_processing_table(create_csv=True)
     # solar_time(create_csv=True)
-    # clear_sky_filter(create_csv=True)
+    clear_sky_filter(create_csv=False)
     print()
 
     # ff = pd.DataFrame(dict(x=x, y=y))
     # ff.loc[(ff.x >0.5) & (ff.y < 200)]
+
+    # cmap = mpl.colormaps["Paired"]
+    # cmaplist = [cmap(i) for i in range(N_SPECIES)]
+    # species = list(LI_TABLE1.keys())
+    #
+    # tau = ijhmt_to_tau()
+    # x = tau.index.to_numpy()
+    #
+    # fig, axes = plt.subplots(2, 7, figsize=(10, 3.5), sharex=True, sharey="row")
+    # plt.subplots_adjust(wspace=0.0)
+    #
+    # # for emissivity
+    # for j in np.arange(1, 8):
+    #     ax = axes[0, j - 1]
+    #     ax.set_title(f"b{j}", loc="center")
+    #     df = ijhmt_to_individual_e(f"fig5_esky_ij_b{j}.csv")
+    #     y_e = np.zeros(len(x))
+    #     for i in range(N_SPECIES):
+    #         y = df[species[i]].to_numpy()
+    #         ax.fill_between(
+    #             x, y_e, y_e + y, fc=cmaplist[i], label=LBL_LABELS[species[i]]
+    #         )
+    #         y_e += y
+    #     ax.grid(alpha=0.3)
+    #     ax.set_axisbelow(True)
+    #     ax.set_ylim(0, 0.3)
+    #
+    # # for emissivity
+    # for j in np.arange(1, 8):
+    #     ax = axes[1, j - 1]
+    #     df = ijhmt_to_tau(f"fig5_esky_ij_b{j}.csv")
+    #     y_t = np.ones(len(x))
+    #     d = np.zeros(len(x))
+    #     for i in range(N_SPECIES):
+    #         y = df[species[i]].to_numpy()
+    #         dopt = -1 * np.log(y)
+    #         ax.fill_between(
+    #             x, d, d + dopt, fc=cmaplist[i], label=LBL_LABELS[species[i]]
+    #         )
+    #         # ax.fill_between(
+    #         #     x, y_t, y_t * y, fc=cmaplist[i], label=LBL_LABELS[species[i]]
+    #         # )
+    #         d = d + dopt
+    #         y_t = y_t * y
+    #
+    #     ax.grid(alpha=0.3)
+    #     ax.set_axisbelow(True)
+    #     ax.set_ylim(0, 0.4)
+    #     ax.set_xlabel("p$_w$ x 100", fontsize="small")
+    #
+    # ax.set_xlim(x[0], x[-1])
+    # xticks = [0.005, 0.010, 0.015, 0.020]
+    # x_labels = [f"{i*100:.1f}" for i in xticks]
+    # ax.set_xticks(xticks, labels=x_labels)
+    #
+    # axes[0, 0].set_ylabel(r"$\varepsilon$", fontsize="large")
+    # axes[1, 0].set_ylabel(r"$d_{\rm{opt}}$", fontsize="large")
+    # filename = os.path.join("figures", f"spectral_band_contribution.png")
+    # fig.savefig(filename, bbox_inches="tight", dpi=300)
+    # plt.close()
 

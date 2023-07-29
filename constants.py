@@ -78,5 +78,34 @@ LI_TABLE1 = {
     "CH4": [0.0245, -0.0313, 0.0790],
     "overlaps": [0.0524, -0.1423, 0.2998]
 }
+LBL_LABELS = {  # used for labeling in plots
+    "H2O": "H$_2$O",
+    "CO2": "CO$_2$",
+    "O3": "O$_3$",
+    "aerosols": "aerosols",
+    "N2O": "N$_2$O",
+    "CH4": "CH$_4$",
+    "overlaps": "overlaps"
+}
 N_SPECIES = len(LI_TABLE1)  # number of contributing components (from TABLE 1)
 N_BANDS = 7  # number of bands
+
+BANDS_V = {  # cm^-1
+    "b1": (0.00001, 400),
+    "b2": (400, 580),
+    "b3": (580, 750),
+    "b4": (750, 1400),
+    "b5": (1400, 2250),
+    "b6": (2250, 2400),
+    "b7": (2400, 2500),
+}
+
+BANDS_L = {  # micron
+    "b1": (25, 100000),
+    "b2": (17.2, 25),
+    "b3": (13.3, 17.2),
+    "b4": (7.1, 13.3),
+    "b5": (4.4, 7.1),
+    "b6": (4.2, 4.4),
+    "b7": (4.0, 4.2),
+}
