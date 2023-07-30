@@ -746,8 +746,6 @@ if __name__ == "__main__":
     part = "N2O"
     tau = True
 
-
-
     # e_h2o = 0.2996 + 2.2747 * np.power(x, 0.3784)
     # e_co2 = 0.2893 - 0.5640 * np.power(x, 0.1821)
     # e_o3 = 0.0126 - 0.1421 * np.power(x, 1.1744)
@@ -785,3 +783,39 @@ if __name__ == "__main__":
     # t2o3 = t2o3.to_numpy()
     # t3o3 = (1 - (ee.H2O + ee.CO2 + ee.O3)) / (1 - (ee.H2O + ee.CO2))
     # t3o3 = t3o3.to_numpy()
+
+    species = list(LI_TABLE1.keys())
+    species = species[:-1]  # remove overlaps
+
+    tau = ijhmt_to_tau()
+    eps = ijhmt_to_individual_e()
+    x = tau.index.to_numpy()
+
+    y_b = np.ones(len(x))
+    for i in np.arange(1, 8):
+        tmp = ijhmt_to_tau(f"fig5_esky_ij_b{i}.csv")["total"].to_numpy()
+        y_b = y_b * tmp
+
+    o_b = np.ones(len(x))
+    for i in np.arange(1, 8):
+        tmp = ijhmt_to_tau(f"fig5_esky_ij_b{i}.csv")["overlaps"].to_numpy()
+        o_b = o_b * tmp
+
+    # compare tau total to 1-e_total with overlaps removed from each
+    tau_total = tau.cumprod(axis=1).iloc[:, -2].to_numpy()
+    eps_total = eps.cumsum(axis=1).iloc[:, -2].to_numpy()
+
+    tau_ = tau_total * tau["overlaps"].to_numpy()
+    eps_ = eps_total + eps["overlaps"].to_numpy()
+
+    to = tau_ / y_b
+
+    fig, ax = plt.subplots()
+    ax.plot(x, 1 - eps_, "ro")
+    ax.plot(x, tau_, "b-")
+    # ax.plot(x, 1 - eps["total"].to_numpy(), "r")
+    ax.plot(x, y_b, "g--")
+    ax.plot(x, y_b * o_b, "g*")
+    # ax.plot(x, to)
+    ax.set_ylim(0, 1.1)
+    plt.show()
