@@ -915,8 +915,8 @@ def clear_sky_filter(create_csv=False):
     ax.set_aspect(1/900)  # unit in y is *aspect* times displayed unit in x
     ax.grid(True, alpha=0.7)
     ax.scatter(x, y, marker=".", alpha=0.5, c="0.5")
-    ax.scatter(toss_x, toss_y, marker="o", c=COLORS["persianindigo"])
-    ax.scatter(keep_x, keep_y, marker="o", c=COLORS["viridian"])
+    ax.scatter(toss_x, toss_y, marker="o", alpha=0.9, c=COLORS["persianred"])
+    ax.scatter(keep_x, keep_y, marker="o", alpha=0.9, c=COLORS["persianred"])
     ax.axvline(0.05, ls="--", c=COLORS["persianred"], label="Fraction of samples threshold")
     ax.axhline(thresh, c=COLORS["persianred"], label="Number of samples threshold")
     ax.set_title(f"{s}")
