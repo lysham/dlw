@@ -111,7 +111,7 @@ def pressure_temperature_per_site(server4=True):
     alpha_background = 0.2 if overlay_profile else 1.0
     pm_p_mb = 20  # plus minus pressure (mb)
     ms = 15  # marker size
-    ec = "0.2"  # marker edge color
+    ec = "0.3"  # marker edge color
 
     if overlay_profile:
         filename = os.path.join("data", "afgl_midlatitude_summer.csv")
@@ -361,11 +361,7 @@ def compare(with_data=True):
         ms = 10  # marker size for data samples
         filename = os.path.join("figures", f"compare_with_data.png")
     else:
-        t = 288  # standard temperature for scaling measurement error
-        yerr = 5 / (SIGMA * np.power(t, 4))  # +/-5 W/m^2 error
         filename = os.path.join("figures", f"compare.png")
-    t = 288  # standard temperature for scaling measurement error
-    yerr = 5 / (SIGMA * np.power(t, 4))  # +/-5 W/m^2 error
     figsize = (7, 4)
     # set axis bounds of both figures
     xmin, xmax = (0.01, 35.5)  # hpa
@@ -385,7 +381,7 @@ def compare(with_data=True):
     ax.set_ylim(ymin, ymax)
     axins.set_xlim(xmin * 100 / P_ATM, 0.01)
     axins.set_ylim(0.6, 0.8)
-    ax, axins = _add_common_features(ax, axins, x, y, e_tau_p0)
+    ax, axins = _add_common_features(ax, axins, x, y, e_tau_p0, with_data)
     if with_data:  # with data
         ax.scatter(
             (df.pw_hpa * 100) / P_ATM, df.y, marker="o", s=ms,
@@ -395,14 +391,13 @@ def compare(with_data=True):
             (df.pw_hpa * 100) / P_ATM, df.y, marker="o", s=ms,
             alpha=0.3, c="0.3", ec="0.5", lw=0.5, zorder=0
         )
-    # ax.fill_between(x, y - yerr, y + yerr, alpha=0.5, label="+/- 5 W/m$^2$")
 
     ax.legend(ncol=3, bbox_to_anchor=(0.5, -0.15), loc="upper center")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 
 
-def _add_common_features(ax, axins, x, y, e_tau_p0):
+def _add_common_features(ax, axins, x, y, e_tau_p0, with_data=True):
     # Helper function for compare.
     # #Adds select correlations, axis labels, and grid
 
@@ -413,34 +408,57 @@ def _add_common_features(ax, axins, x, y, e_tau_p0):
     y_li = 0.617 + 1.694 * np.sqrt(x)
     y_berdahl = 0.564 + 1.878 * np.sqrt(x)
 
+    # find valid x-values for MVGS (Mendoza, Victor..., 2017)
+    mvgs_min = 0.2  # hPa
+    mvgs_max = 17  # hPa
+    mvgs_idx = (x >= mvgs_min * 100 / P_ATM) & (x <= mvgs_max * 100 / P_ATM)
+
     # fit: -./:, lw=1, gray, change ls only
     # lbl: -, lw=1, colors
     # main_fit: -, lw=1.5, black
 
-    fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
-    ax.plot(x, y, lw=2, ls="-", c="0.0", zorder=2,
-            label=fit_label)
-    # LBL models
-    ax.plot(x, y_mendoza, lw=1, ls="-", c=COLORS["viridian"], zorder=8,
-            label="$1.108p_w^{0.083}$ (MVGS2017)")
-    ax.plot(x, y_li, lw=1, ls="-", c=COLORS["persianred"], zorder=8,
+    # t = 288  # standard temperature for scaling measurement error
+    t = 260 + (40 / len(x)) * np.arange(len(x))
+    y_err = 10 / (SIGMA * np.power(t, 4))  # +/-5 W/m^2 error
+    if with_data:
+        label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$ (MC2023)"
+        ax.plot(x, y, lw=2, ls="-", c="0.0", zorder=2, label=label)
+    else:
+        label = r"$\pm$10 W/m$^2$ (MC2023)"
+        ax.fill_between(x, y - y_err, y + y_err, fc="0.6", alpha=0.5,
+                         zorder=2, label=label)
+
+    # Brunt-type models
+    ax.plot(x, y_li, lw=2, ls="-", c=COLORS["persianred"], zorder=8,
             label="$0.617+1.694\sqrt{p_w}$ (LC2019)")
-    # empirical for comparison
-    ax.plot(x, y_brunt, lw=1, ls="--", c="0.5", zorder=5,
+    ax.plot(x, y_brunt, lw=2, ls="--", c="0.5", zorder=5,
             label="$0.605+1.528\sqrt{p_w}$ (S1965)")
-    ax.plot(x, y_berdahl, c="0.5", ls=":", lw=1, zorder=5,
+    ax.plot(x, y_berdahl, c="0.5", ls=":", lw=2, zorder=5,
             label="$0.564+1.878\sqrt{p_w}$ (B1984)")
+    # other forms
+    # plot faded line for mendoza below valid line
+    ax.plot(
+        x, y_mendoza, lw=1, ls="-", c=COLORS["viridian"], alpha=0.3, zorder=3)
+    ax.plot(
+        x[mvgs_idx], y_mendoza[mvgs_idx], lw=2, ls="-", c=COLORS["viridian"],
+        zorder=8, label="$1.108p_w^{0.083}$ (MVGS2017)")
+
     # tau model
-    ax.plot(x, e_tau_p0, lw=1, ls="-", c=COLORS["cornflowerblue"], zorder=5,
+    ax.plot(x, e_tau_p0, lw=2, ls="-", c=COLORS["cornflowerblue"], zorder=5,
             label=r"$1-e^{-d_{\rm opt}(p_w,H_e)}$ (SR2021)")
 
     # inset
-    axins.plot(x, y, lw=2, ls="-", c="0.0", zorder=2)
-    axins.plot(x, y_mendoza, lw=1, ls="-", c=COLORS["viridian"])
-    axins.plot(x, y_li, lw=1, ls="-", c=COLORS["persianred"])
-    axins.plot(x, y_brunt, lw=1, ls="--", c="0.5")
-    axins.plot(x, y_berdahl, c="0.5", ls=":", lw=1)
-    axins.plot(x, e_tau_p0, lw=1, ls="-", c=COLORS["cornflowerblue"])
+    if with_data:
+        axins.plot(x, y, lw=2, ls="-", c="0.0", zorder=2)
+    else:
+        axins.fill_between(
+            x, y - y_err, y + y_err, fc="0.6", alpha=0.5, zorder=2)
+    axins.plot(x, y_mendoza, lw=2, ls="-", c=COLORS["viridian"], alpha=0.3)
+    axins.plot(x[mvgs_idx], y_mendoza[mvgs_idx], lw=1, ls="-", c=COLORS["viridian"])
+    axins.plot(x, y_li, lw=2, ls="-", c=COLORS["persianred"])
+    axins.plot(x, y_brunt, lw=2, ls="--", c="0.5")
+    axins.plot(x, y_berdahl, c="0.5", ls=":", lw=2)
+    axins.plot(x, e_tau_p0, lw=2, ls="-", c=COLORS["cornflowerblue"])
     axins.grid(alpha=0.3)
     axins.set_axisbelow(True)
     _, connects = ax.indicate_inset_zoom(axins, edgecolor="#969696")
@@ -1131,7 +1149,6 @@ def tmp_spectral_band_contribution():  # TODO
 
 if __name__ == "__main__":
     # df = training_data(create=True)
-    # create_tra_val_sets()
     print()
     # solar_time(create_csv=True)  # boxplot
     # clear_sky_filter(create_csv=False)
@@ -1140,7 +1157,7 @@ if __name__ == "__main__":
     # altitude_correction()
     # compare(with_data=True)
     # compare(with_data=False)
-    print_results_table()
+    # print_results_table()
     # data_processing_table(create_csv=True)
     # tau_lc_vs_sr()
     print()
