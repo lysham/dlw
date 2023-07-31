@@ -41,7 +41,7 @@ COLORS = {
 
 # (2010-15 data, equal #/site, 5%, 20th, 1,000 pts set aside for validation)
 C1_CONST = 0.6
-C2_CONST = 1.653
+C2_CONST = 1.652
 C3_CONST = 0.15
 
 
@@ -74,6 +74,7 @@ def training_data(create=False, import_full_train=False, import_val=False):
         df['correction'] = C3_CONST * (np.exp(-1 * df.elev / 8500) - 1)
         filename = os.path.join("data", "training_data.csv")
         df.to_csv(filename)
+        create_tra_val_sets(df)
     elif import_full_train:
         filename = os.path.join("data", "training_data.csv")
         df = pd.read_csv(filename, index_col=0, parse_dates=True)
@@ -86,10 +87,10 @@ def training_data(create=False, import_full_train=False, import_val=False):
     return df
 
 
-def create_tra_val_sets():
+def create_tra_val_sets(df):
     # from training data, create training and validation sets
     # using train_test_split to create idx split
-    df = training_data(import_full_train=True)  # equal # samples per site
+    # df = training_data(import_full_train=True)  # equal # samples per site
     # split training_data into train and validation (10,000)
     tra_idx, val_idx = train_test_split(
         np.arange(df.shape[0]), test_size=10000, random_state=43)
@@ -103,7 +104,7 @@ def create_tra_val_sets():
     return None
 
 
-def pressure_temperature_per_site():
+def pressure_temperature_per_site(server4=True):
     # variation on t0/p0 original, showing winter/summer, other
     overlay_profile = False
     filter_ta = False
@@ -211,8 +212,8 @@ def pressure_temperature_per_site():
     ax.plot([], [], marker="^", color="0.2", ls="none", label="summer")
     ax.plot([], [], marker="s", color="0.2", ls="none", label="winter")
     lgd = ax.legend(ncol=5, bbox_to_anchor=(0.5, 1.01), loc="lower center")
-    # for lh in lgd.legend_handles:  # running on linux
-    for lh in lgd.legendHandles:  # running on Mac
+    handles = lgd.legend_handles if server4 else lgd.legendHandles
+    for lh in handles:
         lh.set_alpha(1)
     ax.set_xlabel("T$_a$ [K]")
     ax.set_ylabel("P [mb]")
@@ -409,7 +410,7 @@ def _add_common_features(ax, axins, x, y, e_tau_p0):
     # # yerr5 = (0.05 * dlw) / (SIGMA * np.power(t, 4))  # 5% error
     y_mendoza = 1.108 * np.power(x, 0.083)
     y_brunt = 0.605 + 1.528 * np.sqrt(x)
-    y_li = 0.619 + 1.665 * np.sqrt(x)
+    y_li = 0.617 + 1.694 * np.sqrt(x)
     y_berdahl = 0.564 + 1.878 * np.sqrt(x)
 
     # fit: -./:, lw=1, gray, change ls only
@@ -423,7 +424,7 @@ def _add_common_features(ax, axins, x, y, e_tau_p0):
     ax.plot(x, y_mendoza, lw=1, ls="-", c=COLORS["viridian"], zorder=8,
             label="$1.108p_w^{0.083}$ (MVGS2017)")
     ax.plot(x, y_li, lw=1, ls="-", c=COLORS["persianred"], zorder=8,
-            label="$0.619+1.665\sqrt{p_w}$ (LC2019)")
+            label="$0.617+1.694\sqrt{p_w}$ (LC2019)")
     # empirical for comparison
     ax.plot(x, y_brunt, lw=1, ls="--", c="0.5", zorder=5,
             label="$0.605+1.528\sqrt{p_w}$ (S1965)")
@@ -456,7 +457,7 @@ def _add_common_features(ax, axins, x, y, e_tau_p0):
     return ax, axins
 
 
-def tau_lc_vs_sr():
+def tau_lc_vs_sr():  # TODO update to 2019 published
     df = ijhmt_to_tau("fig3_esky_i.csv")  # tau, first p removed
     x = df.index.to_numpy()
 
@@ -528,9 +529,9 @@ def print_results_table():
 
     print("Fit")
     _print_metrics(y_corr, C1_CONST + C2_CONST * x)  #
-    print("\nS1965, LC2019, B2021")
+    # print("\nS1965, LC2019, B2021")
     _print_metrics(y, 0.605 + 1.528 * x)  # S1965
-    _print_metrics(y, 0.619 + 1.665 * x)  # LC2019
+    _print_metrics(y, 0.617 + 1.694 * x)  # LC2019
     _print_metrics(y, 0.564 + 1.878 * x)  # B2021
 
     # Note: MVGS2017 and SR2021 take pw as input instead of sqrt(pw)
@@ -545,9 +546,10 @@ def print_results_table():
 
 
 def _print_metrics(actual, model):
+    # Helper function for print_results_table()
     rmse = np.sqrt(mean_squared_error(actual, model))
     r2 = r2_score(actual, model)
-    mbe = np.nanmean((model - actual), axis=0)
+    mbe = np.nanmean((model - actual), axis=0)[0]
     print(f"RMSE: {rmse.round(5)} | MBE: {mbe.round(5)} | R2: {r2.round(5)}")
     return None
 
@@ -979,62 +981,6 @@ def _clear_sky_filter(ax, pdf, plot_date):
     return ax
 
 
-def plot_lbl_match():
-    # compare LC2019 with SR2021
-    df = ijhmt_to_individual_e("fig3_esky_i.csv")
-    x = df.index.to_numpy()
-    tmp = df.copy(deep=True)
-    tmp = tmp.drop(columns=["Aerosols", "total"])
-    tmp["total"] = tmp.cumsum(axis=1).iloc[:, -1]
-
-    # transmissivity - plot total tau against Shakespeare
-    site = "GWC"
-    lat1 = SURFRAD[site]["lat"]
-    lon1 = SURFRAD[site]["lon"]
-    h1, spline = shakespeare(lat1, lon1)
-    pw = x * P_ATM  # Pa
-    w = 0.62198 * pw / (P_ATM - pw)
-    q = w / (1 + w)
-    p_rep = P_ATM * np.exp(-1 * SURFRAD[site]["alt"] / 8500)
-    p_ratio = p_rep / P_ATM
-    he = (h1 / np.cos(40.3 * np.pi / 180)) * np.power(p_ratio, 1.8)
-    d_opt = spline.ev(q, he)
-    tau_shp = np.exp(-1 * d_opt)
-
-    sr2021 = 1 - tau_shp
-    y_fit = C1_CONST + C2_CONST * np.sqrt(x)
-
-    y_lbl_orig = 0.6173 + 1.6940 * np.power(x, 0.5035)
-
-    obs_err5 = 5 / (SIGMA * np.power(294.2, 4))
-    obs_err10 = 10 / (SIGMA * np.power(294.2, 4))
-
-    fig, ax = plt.subplots()
-    ax.grid(alpha=0.3)
-    ax.plot(x, y_fit, lw=2, ls="-", c="0.0", label="fit")
-    ax.fill_between(x, y_fit - obs_err10, y_fit + obs_err10, fc="0.8", alpha=0.5, label="+/-10W/m$^2$")
-    ax.fill_between(x, y_fit - obs_err5, y_fit + obs_err5, fc="0.6", alpha=0.5, label="+/-5W/m$^2$")
-    ax.plot(x, df.total.to_numpy(), c=COLORS["persianred"], ls="-", zorder=2,
-            label="LC2019")
-    ax.plot(x, df.H2O + df.CO2, c=COLORS["persianred"], ls=":", lw=2,
-            label="LC2019 (H2O+CO2)")
-    ax.plot(x, tmp.total.to_numpy(), c=COLORS["persianindigo"], ls="--",
-            label="LC2019 (no aerosols)")
-    ax.plot(x, y_lbl_orig, c=COLORS["barnred"], ls="-",
-            label="LBL (original)")
-    ax.plot(x, sr2021, c=COLORS["cornflowerblue"], ls=":", label="SR2021")
-    ax.plot(x, sr2021 + 0.02, c=COLORS["cornflowerblue"], lw=2, ls="-",
-            label="SR2021 + 0.02")
-    ax.legend(loc="lower right")
-    ax.set_xlabel("pw")
-    ax.set_ylabel("emissivity")
-    ax.set_axisbelow(True)
-    ax.set_xlim(x[0], x[-1])
-    filename = os.path.join("figures", "lbl_match.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
-    return None
-
-
 def broadband_contribution():
     # emissivity and transmissivity with RH reference axes
     cmap = mpl.colormaps["Paired"]
@@ -1119,9 +1065,67 @@ def broadband_contribution():
     return None
 
 
-def spectral_band_contribution():
-    # filename = os.path.join("figures", "spectral_band_contribution.png")
-    # fig.savefig(filename, bbox_inches="tight", dpi=300)
+def tmp_spectral_band_contribution():  # TODO
+    # temporary, will need to update to 2019 values
+    cmap = mpl.colormaps["Paired"]
+    cmaplist = [cmap(i) for i in range(N_SPECIES)]
+    species = list(LI_TABLE1.keys())
+
+    tau = ijhmt_to_tau()
+    x = tau.index.to_numpy()
+
+    fig, axes = plt.subplots(2, 7, figsize=(10, 3.5), sharex=True, sharey="row")
+    plt.subplots_adjust(wspace=0.0)
+
+    # for emissivity
+    for j in np.arange(1, 8):
+        ax = axes[0, j - 1]
+        ax.set_title(f"b{j}", loc="center")
+        df = ijhmt_to_individual_e(f"fig5_esky_ij_b{j}.csv")
+        y_e = np.zeros(len(x))
+        for i in range(N_SPECIES):
+            y = df[species[i]].to_numpy()
+            ax.fill_between(
+                x, y_e, y_e + y, fc=cmaplist[i], label=LBL_LABELS[species[i]]
+            )
+            y_e += y
+        ax.grid(alpha=0.3)
+        ax.set_axisbelow(True)
+        ax.set_ylim(0, 0.3)
+
+    # for emissivity
+    for j in np.arange(1, 8):
+        ax = axes[1, j - 1]
+        df = ijhmt_to_tau(f"fig5_esky_ij_b{j}.csv")
+        y_t = np.ones(len(x))
+        d = np.zeros(len(x))
+        for i in range(N_SPECIES):
+            y = df[species[i]].to_numpy()
+            dopt = -1 * np.log(y)
+            ax.fill_between(
+                x, d, d + dopt, fc=cmaplist[i], label=LBL_LABELS[species[i]]
+            )
+            # ax.fill_between(
+            #     x, y_t, y_t * y, fc=cmaplist[i], label=LBL_LABELS[species[i]]
+            # )
+            d = d + dopt
+            y_t = y_t * y
+
+        ax.grid(alpha=0.3)
+        ax.set_axisbelow(True)
+        ax.set_ylim(0, 0.4)
+        ax.set_xlabel("p$_w$ x 100", fontsize="small")
+
+    ax.set_xlim(x[0], x[-1])
+    xticks = [0.005, 0.010, 0.015, 0.020]
+    x_labels = [f"{i*100:.1f}" for i in xticks]
+    ax.set_xticks(xticks, labels=x_labels)
+
+    axes[0, 0].set_ylabel(r"$\varepsilon$", fontsize="large")
+    axes[1, 0].set_ylabel(r"$d_{\rm{opt}}$", fontsize="large")
+    filename = os.path.join("figures", f"spectral_band_contribution.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    plt.close()
     return None
 
 
@@ -1129,78 +1133,19 @@ if __name__ == "__main__":
     # df = training_data(create=True)
     # create_tra_val_sets()
     print()
-    # pressure_temperature_per_site()
+    # solar_time(create_csv=True)  # boxplot
+    # clear_sky_filter(create_csv=False)
+    # pressure_temperature_per_site(server4=True)
     # emissivity_vs_pw_data()
     # altitude_correction()
     # compare(with_data=True)
     # compare(with_data=False)
-    # tau_lc_vs_sr()
-    # print_results_table()
+    print_results_table()
     # data_processing_table(create_csv=True)
-    # solar_time(create_csv=True)
-    clear_sky_filter(create_csv=False)
+    # tau_lc_vs_sr()
     print()
 
     # ff = pd.DataFrame(dict(x=x, y=y))
     # ff.loc[(ff.x >0.5) & (ff.y < 200)]
 
-    # cmap = mpl.colormaps["Paired"]
-    # cmaplist = [cmap(i) for i in range(N_SPECIES)]
-    # species = list(LI_TABLE1.keys())
-    #
-    # tau = ijhmt_to_tau()
-    # x = tau.index.to_numpy()
-    #
-    # fig, axes = plt.subplots(2, 7, figsize=(10, 3.5), sharex=True, sharey="row")
-    # plt.subplots_adjust(wspace=0.0)
-    #
-    # # for emissivity
-    # for j in np.arange(1, 8):
-    #     ax = axes[0, j - 1]
-    #     ax.set_title(f"b{j}", loc="center")
-    #     df = ijhmt_to_individual_e(f"fig5_esky_ij_b{j}.csv")
-    #     y_e = np.zeros(len(x))
-    #     for i in range(N_SPECIES):
-    #         y = df[species[i]].to_numpy()
-    #         ax.fill_between(
-    #             x, y_e, y_e + y, fc=cmaplist[i], label=LBL_LABELS[species[i]]
-    #         )
-    #         y_e += y
-    #     ax.grid(alpha=0.3)
-    #     ax.set_axisbelow(True)
-    #     ax.set_ylim(0, 0.3)
-    #
-    # # for emissivity
-    # for j in np.arange(1, 8):
-    #     ax = axes[1, j - 1]
-    #     df = ijhmt_to_tau(f"fig5_esky_ij_b{j}.csv")
-    #     y_t = np.ones(len(x))
-    #     d = np.zeros(len(x))
-    #     for i in range(N_SPECIES):
-    #         y = df[species[i]].to_numpy()
-    #         dopt = -1 * np.log(y)
-    #         ax.fill_between(
-    #             x, d, d + dopt, fc=cmaplist[i], label=LBL_LABELS[species[i]]
-    #         )
-    #         # ax.fill_between(
-    #         #     x, y_t, y_t * y, fc=cmaplist[i], label=LBL_LABELS[species[i]]
-    #         # )
-    #         d = d + dopt
-    #         y_t = y_t * y
-    #
-    #     ax.grid(alpha=0.3)
-    #     ax.set_axisbelow(True)
-    #     ax.set_ylim(0, 0.4)
-    #     ax.set_xlabel("p$_w$ x 100", fontsize="small")
-    #
-    # ax.set_xlim(x[0], x[-1])
-    # xticks = [0.005, 0.010, 0.015, 0.020]
-    # x_labels = [f"{i*100:.1f}" for i in xticks]
-    # ax.set_xticks(xticks, labels=x_labels)
-    #
-    # axes[0, 0].set_ylabel(r"$\varepsilon$", fontsize="large")
-    # axes[1, 0].set_ylabel(r"$d_{\rm{opt}}$", fontsize="large")
-    # filename = os.path.join("figures", f"spectral_band_contribution.png")
-    # fig.savefig(filename, bbox_inches="tight", dpi=300)
-    # plt.close()
 

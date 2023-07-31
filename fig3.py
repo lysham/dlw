@@ -694,95 +694,11 @@ if __name__ == "__main__":
     # df = ijhmt_to_tau("fig5_esky_ij_b4.csv")  # tau, first p removed
     # df = ijhmt_to_individual_e("fig3_esky_i.csv")  # e, disaggregated
 
-    # # regression fit
-    # df = ijhmt_to_tau("fig3_esky_i.csv")
-    # x = df.index.to_numpy()
-    # y = df["O3"].to_numpy()
-    # fit_df = pd.DataFrame(dict(x=x, y=-1 * np.log(y)))
-    # fit_linear(fit_df, print_out=True)
-    # df = ijhmt_to_individual_e("fig3_esky_i.csv")
-    # ye = df["O3"].to_numpy()
-    # df = import_ijhmt_df("fig3_esky_i.csv")
-    # ypo3 = df["pO3"].to_numpy()
-    # yhc = df["pCO2"].to_numpy()
-    #
-    # df = ijhmt_to_individual_e("fig3_esky_i.csv")
-    # ye = df.total.to_numpy()
-    # fig, ax = plt.subplots()
-    # ax.plot(x, df["O3"].to_numpy(), label="o3")
-    # ax.plot(x, df["Aerosols"].to_numpy(), label="aerosols")
-    # ax.plot(x, df["CH4"].to_numpy(), label="ch4")
-    # ax.legend(title="emissivity")
-    # plt.show()
-    #
-    # df = ijhmt_to_tau("fig3_esky_i.csv")
-    # fig, ax = plt.subplots()
-    # ax.plot(x, df["O3"].to_numpy(), label="o3")
-    # ax.plot(x, df["Aerosols"].to_numpy(), label="aerosols")
-    # ax.plot(x, df["CH4"].to_numpy(), label="ch4")
-    # ax.legend(title="transmissivity")
-    # plt.show()
-    #
-    # fig, ax = plt.subplots()
-    # ax.plot(x, -1 * np.log(df["O3"].to_numpy()), label="o3")
-    # ax.plot(x, -1 * np.log(df["Aerosols"].to_numpy()), label="aerosols")
-    # ax.plot(x, -1 * np.log(df["CH4"].to_numpy()), label="ch4")
-    # ax.legend(title="opt depth")
-    # plt.show()
-    #
-    # ems = ijhmt_to_individual_e("fig3_esky_i.csv")
-    # tau = ijhmt_to_tau("fig3_esky_i.csv")
-    #
-    # # calculate band weights for transmissivity
-    # t = 294.2
-    # lw_const = integrate.quad(func=planck_lambda, a=4, b=100000, args=(t,))[0]
-    # bw = []
-    # for i in np.arange(1, 8):
-    #     l1, l2 = BANDS_L[f"b{i}"]
-    #     out = integrate.quad(func=planck_lambda, a=l1, b=l2, args=(t,))[0]
-    #     bw.append(out / lw_const)
-    # bw = np.array(bw)
+    # TODO create pseudo-raw data to replace fig3_esky_i (lc2019_esky_i)
+    # TODO update ijhmt_ functions
 
     part = "N2O"
     tau = True
-
-    # e_h2o = 0.2996 + 2.2747 * np.power(x, 0.3784)
-    # e_co2 = 0.2893 - 0.5640 * np.power(x, 0.1821)
-    # e_o3 = 0.0126 - 0.1421 * np.power(x, 1.1744)
-    #
-    # e2_h2o = 0.455 + 2.789 * np.power(x, 0.5)
-    # e2_co2 = 0.133 - 0.921 * np.power(x, 0.5)
-    # e2_o3 = 0.015 - 0.053 * np.power(x, 0.5)
-    #
-    # df = ijhmt_to_individual_e("fig3_esky_i.csv")
-    # df = import_ijhmt_df("fig3_esky_i.csv")
-    # e2_h2o = df.H2O.to_numpy()
-    # e2_co2 = df.pCO2.to_numpy()  # force negative co2 to 0
-    # e2_co2[np.where(e2_co2 < e2_h2o)] = e2_h2o[np.where(e2_co2 < e2_h2o)]
-    # e2_o3 = df.pO3.to_numpy()
-    #
-    # t2_o3 = (1 - e2_o3) / (1 - e2_co2)
-    #
-    # fit_df = pd.DataFrame(dict(x=x, y=-1 * np.log(t2_o3)))
-    # fit_linear(fit_df, print_out=True)
-    #
-    # fig, ax = plt.subplots()
-    # ax.plot(x, e_h2o, "b")
-    # ax.plot(x, e_h2o + e_co2, "r")
-    # ax.plot(x, e_h2o + e_co2 + e_o3, "g")
-    # ax.plot(x, df.H2O.to_numpy(), "b:")
-    # ax.plot(x, e2_co2, "r:")
-    # plt.show()
-    #
-    # t = ijhmt_to_tau("fig3_esky_i.csv")
-    # e = import_ijhmt_df("fig3_esky_i.csv")
-    # ee = ijhmt_to_individual_e("fig3_esky_i.csv")
-    #
-    # t1o3 = t.O3.to_numpy()
-    # t2o3 = (1 - e.pO3) / (1 - e.pCO2)
-    # t2o3 = t2o3.to_numpy()
-    # t3o3 = (1 - (ee.H2O + ee.CO2 + ee.O3)) / (1 - (ee.H2O + ee.CO2))
-    # t3o3 = t3o3.to_numpy()
 
     species = list(LI_TABLE1.keys())
     species = species[:-1]  # remove overlaps
