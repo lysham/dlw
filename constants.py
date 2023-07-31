@@ -76,7 +76,10 @@ LI_TABLE1 = {
     "aerosols": [0.0191, -0.1421, 0.6121],
     "N2O": [13.8712, -13.8761, 0.0001],
     "CH4": [0.0245, -0.0313, 0.0790],
-    "overlaps": [0.0524, -0.1423, 0.2998]
+    "O2": [0, 0, 0],
+    "N2": [0, 0, 0],
+    "overlaps": [0.0524, -0.1423, 0.2998],
+    "total": [0.6173, 1.6940, 0.5035]
 }
 LBL_LABELS = {  # used for labeling in plots
     "H2O": "H$_2$O",
@@ -85,9 +88,12 @@ LBL_LABELS = {  # used for labeling in plots
     "aerosols": "aerosols",
     "N2O": "N$_2$O",
     "CH4": "CH$_4$",
-    "overlaps": "overlaps"
+    "O2": "O$_2$",
+    "N2": "N$_2$",
+    "overlaps": "overlaps",
+    "total": "total"
 }
-N_SPECIES = len(LI_TABLE1)  # number of contributing components (from TABLE 1)
+N_SPECIES = len(LI_TABLE1) - 1  # number of contributing components (from TABLE 1)
 N_BANDS = 7  # number of bands
 
 BANDS_V = {  # cm^-1

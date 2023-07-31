@@ -2567,7 +2567,7 @@ def define_tau_method_1_vs_2():
     fig, ax = plt.subplots()
     ax.grid(alpha=0.3)
     x = pdf.index.to_numpy()
-    species = list(LI_TABLE1.keys())
+    species = list(LI_TABLE1.keys())[:-1]
     # species = species[::-1]  # plot in reverse
     j = 0
     y_ref = np.ones(len(x))

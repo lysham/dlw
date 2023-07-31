@@ -25,7 +25,7 @@ from pcmap_data_funcs import get_asos_stations
 
 from constants import SIGMA, SURFRAD, SURF_COLS, SURF_ASOS, SURF_SITE_CODES, \
     P_ATM, E_C1, E_C2, ELEV_DICT, ELEVATIONS, LON_DICT, SEVEN_COLORS, \
-    P_ATM_BAR, COLOR7_DICT
+    P_ATM_BAR
 from process import import_site_year, add_solar_time
 
 

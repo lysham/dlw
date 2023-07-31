@@ -13,7 +13,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.linear_model import LinearRegression
 
 from constants import ELEVATIONS, SEVEN_COLORS, P_ATM, SIGMA, SURFRAD, \
-    COLOR7_DICT, N_SPECIES, LI_TABLE1, LBL_LABELS
+    N_SPECIES, LI_TABLE1, LBL_LABELS
 from corr26b import create_training_set, reduce_to_equal_pts_per_site, \
     add_solar_time, fit_linear
 from fig3 import shakespeare, ijhmt_to_tau, ijhmt_to_individual_e
@@ -1003,7 +1003,7 @@ def broadband_contribution():
     # emissivity and transmissivity with RH reference axes
     cmap = mpl.colormaps["Paired"]
     cmaplist = [cmap(i) for i in range(N_SPECIES)]
-    species = list(LI_TABLE1.keys())
+    species = list(LI_TABLE1.keys())[:-1]
 
     tau = ijhmt_to_tau()
     eps = ijhmt_to_individual_e()
@@ -1087,7 +1087,7 @@ def tmp_spectral_band_contribution():  # TODO
     # temporary, will need to update to 2019 values
     cmap = mpl.colormaps["Paired"]
     cmaplist = [cmap(i) for i in range(N_SPECIES)]
-    species = list(LI_TABLE1.keys())
+    species = list(LI_TABLE1.keys())[:-1]
 
     tau = ijhmt_to_tau()
     x = tau.index.to_numpy()
@@ -1109,7 +1109,7 @@ def tmp_spectral_band_contribution():  # TODO
             y_e += y
         ax.grid(alpha=0.3)
         ax.set_axisbelow(True)
-        ax.set_ylim(0, 0.3)
+        ax.set_ylim(0, 0.4)
 
     # for emissivity
     for j in np.arange(1, 8):
@@ -1160,6 +1160,7 @@ if __name__ == "__main__":
     # print_results_table()
     # data_processing_table(create_csv=True)
     # tau_lc_vs_sr()
+    # tmp_spectral_band_contribution()
     print()
 
     # ff = pd.DataFrame(dict(x=x, y=y))

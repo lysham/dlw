@@ -75,7 +75,7 @@ def get_emissivity_ij(t_a, pw_norm):
     filename = os.path.join("data", "band_coef.csv")
     df = pd.read_csv(filename, dtype={"O2": float, "N2": float})
 
-    cc = list(LI_TABLE1.keys())  # contributing components
+    cc = list(LI_TABLE1.keys())[:-1]  # contributing components
     # p_w = get_pw_norm(t_a, rh)
     # print(p_w, pw_norm)
     emissivity = np.zeros((N_SPECIES, N_BANDS))
@@ -99,7 +99,7 @@ def get_emissivity_i(p_w, sp="H2O"):
 
 
 def plot_fig3_shakespeare_comparison():
-    species = list(LI_TABLE1.keys())
+    species = list(LI_TABLE1.keys())[:-1]
 
     pw_x = np.geomspace(0.1, 2.3, 20)
     e_broad = np.zeros((len(pw_x), N_SPECIES))
@@ -189,14 +189,12 @@ def plot_fig3():
     cmaplist = [cmap(i) for i in range(N_SPECIES)]
     fig, ax = plt.subplots()
     x = df.pw.to_numpy()
-    species = list(LI_TABLE1.keys())
+    species = list(LI_TABLE1.keys())[:-1]
     species = species[::-1]
     j = 0
     for i in species:
         if i == "H2O":
             y = i
-        elif i == "aerosols" or i == "overlaps":
-            y = f"p{i[0].upper() + i[1:]}"
         else:
             y = f"p{i}"
         ax.fill_between(x, 0, df[y].to_numpy(), label=i, fc=cmaplist[-(j + 1)])
@@ -646,11 +644,13 @@ def plot_wide_vs_banded(tau=True, part="total"):
     ye = df[part].to_numpy()
 
     y_b = np.ones(len(x)) if tau else np.zeros(len(x))
+    d_opt = np.zeros(len(x))
     for i in np.arange(1, 8):
         if tau:
             df = ijhmt_to_tau(f"fig5_esky_ij_b{i}.csv")
             tmp = df[part].to_numpy()
             y_b = y_b * tmp #* bw[i-1]
+            d_opt += -1 * np.log(tmp)
         else:
             df = ijhmt_to_individual_e(f"fig5_esky_ij_b{i}.csv")
             y_b = y_b + df[part].to_numpy()
@@ -660,15 +660,19 @@ def plot_wide_vs_banded(tau=True, part="total"):
     ax.plot(x, y, ls="--", label="wide band")
     if tau:
         ax.plot(x, 1 - ye, ls=":", label="1 - e_i")
+        ax.plot(x, np.exp(-1 * d_opt), "s", c="r", label="sum of d$_{opt}$ over $j$")
     ax.set_title(plot_title + f" ({part})", loc="left")
     if part == "total":
         ax.legend(loc="upper right")
+        i = 10
     else:
         ax.legend(loc="lower left")
+        species = list(LI_TABLE1.keys())[:-1]
+        i = species.index(part)
     ax.set_xlabel("p$_w$ [-]")
     ax.set_ylim(0, 1.1)
     ax.grid(alpha=0.3)
-    filename = os.path.join("figures", f"{s}_{part}.png")
+    filename = os.path.join("figures", f"{s}_{i}_{part}.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     plt.close()
     return None
@@ -697,47 +701,102 @@ if __name__ == "__main__":
     # TODO create pseudo-raw data to replace fig3_esky_i (lc2019_esky_i)
     # TODO update ijhmt_ functions
 
-    part = "N2O"
-    tau = True
+    plot_fig3()
 
-    species = list(LI_TABLE1.keys())
-    species = species[:-1]  # remove overlaps
+    tab1 = LI_TABLE1
 
-    tau = ijhmt_to_tau()
-    eps = ijhmt_to_individual_e()
-    x = tau.index.to_numpy()
+    tab2 = dict(
+        b1=dict(
+            H2O=[0.1725, 0, 0],
+            CO2=[0, 0, 0],
+            O3=[0, 0, 0],
+            aerosols=[0, 0, 0],
+            N2O=[0, 0, 0],
+            CH4=[0, 0, 0],
+            O2=[0, 0, 0],
+            N2=[0, 0, 0],
+            overlaps=[0, 0, 0],
+            total=[0.1725, 0, 0]
+        ),
+        b2=dict(
+            H2O=[0.1083, 0.0748, 270.8944],
+            CO2=[0.0002, 0, 0],
+            O3=[0, 0, 0],
+            aerosols=[0.0002, 0, 0],
+            N2O=[0.0001, 0, 0],
+            CH4=[0, 0, 0],
+            O2=[0, 0, 0],
+            N2=[0, 0, 0],
+            overlaps=[0.0003, 0, 0],
+            total=[0.1170, 0.0662, 270.4686]
+        ),
+        b3=dict(
+            H2O=[-0.2308, 0.6484, 0.1280],
+            CO2=[0.3038, -0.05265, 0.1497],
+            O3=[0, 0, 0],
+            aerosols=[0.0001, 0, 0],
+            N2O=[0.0001, 0, 0],
+            CH4=[0, 0, 0],
+            O2=[0, 0, 0],
+            N2=[0, 0, 0],
+            overlaps=[17.0770, -17.0907, 0.0002],
+            total=[0.1457, 0.0417, 0.0992]
+        ),
+        b4=dict(
+            H2O=[0.0289, 6.2436, 0.9010],
+            CO2=[0.0144, -0.1740, 0.7268],
+            O3=[0.0129, -0.4970, 1.1620],
+            aerosols=[0.0159, -0.3040, 0.8828],
+            N2O=[0.0018, 0, 0],
+            CH4=[0.0243, -0.0312, 0.0795],
+            O2=[0, 0, 0],
+            N2=[0, 0, 0],
+            overlaps=[0.0227, -0.2748, 0.7480],
+            total=[0.1057, 5.8689, 0.9633]
+        ),
+        b5=dict(
+            H2O=[0.0775, 0, 0],
+            CO2=[0, 0, 0],
+            O3=[-0.0002, 0, 0],
+            aerosols=[0, 0, 0],
+            N2O=[-0.0006, 0, 0],
+            CH4=[0, 0, 0],
+            O2=[0, 0, 0],
+            N2=[0, 0, 0],
+            overlaps=[-0.0001, 0, 0],
+            total=[0.0766, 0, 0]
+        ),
+        b6=dict(
+            H2O=[0.0044, 0, 0],
+            CO2=[-0.0022, 0, 0],
+            O3=[0, 0, 0],
+            aerosols=[0, 0, 0],
+            N2O=[0, 0, 0],
+            CH4=[0, 0, 0],
+            O2=[0, 0, 0],
+            N2=[0, 0, 0],
+            overlaps=[-0.0002, 0, 0],
+            total=[0.0019, 0, 0]
+        ),
+        b7=dict(
+            H2O=[0.0033, 0, 0],
+            CO2=[-0.0003, 0, 0],
+            O3=[0, 0, 0],
+            aerosols=[-0.0001, 0, 0],
+            N2O=[-0.0001, 0, 0],
+            CH4=[0, 0, 0],
+            O2=[0, 0, 0],
+            N2=[0, 0, 0],
+            overlaps=[-0.0002, 0, 0],
+            total=[0.0026, 0, 0]
+        )
+    )
 
-    y_b = np.ones(len(x))
-    for i in species:
-        for j in np.arange(1, 8):
-            tmp = ijhmt_to_tau(f"fig5_esky_ij_b{j}.csv")[i].to_numpy()
-            y_b = y_b * tmp
+    filename = "fig3_esky_i.csv"
+    xmin, xmax = (0.01, 35.5)  # hpa
+    x = np.geomspace(xmin + 0.00001, xmax, 100)  # hPa
+    x = x * 100 / P_ATM  # normalized
 
-    o_b = np.zeros(len(x))
-    for i in np.arange(1, 8):
-        tmp = ijhmt_to_individual_e(f"fig5_esky_ij_b{i}.csv")["overlaps"].to_numpy()
-        o_b = o_b + tmp
-
-    # compare tau total to 1-e_total with overlaps removed from each
-    tau_total = tau.cumprod(axis=1).iloc[:, -2].to_numpy()
-    eps_total = eps.cumsum(axis=1).iloc[:, -2].to_numpy()
-
-    tau_ = tau_total * tau["overlaps"].to_numpy()
-    eps_ = eps_total + eps["overlaps"].to_numpy()
-
-    fig, ax = plt.subplots()
-    ax.plot(x, o_b)
-    ax.plot(x, eps["overlaps"].to_numpy())
-    plt.show()
-
-    to = tau_ / y_b
-
-    fig, ax = plt.subplots()
-    ax.plot(x, 1 - eps_, "ro")
-    ax.plot(x, tau_, "b-")
-    # ax.plot(x, 1 - eps["total"].to_numpy(), "r")
-    ax.plot(x, y_b, "g--")
-    ax.plot(x, y_b * o_b, "g*")
-    # ax.plot(x, to)
-    ax.set_ylim(0, 1.1)
-    plt.show()
+    for part in tab1:
+        c1, c2, c3 = tab1[part]
+        y = part[0] + part[1] * np.power(x, part[3])

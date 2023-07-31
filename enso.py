@@ -9,8 +9,6 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, r2_score
 
-from constants import COLOR7_DICT
-
 from statsmodels.tsa.seasonal import seasonal_decompose
 
 from corr26b import create_training_set, fit_linear, alt2sl, \
