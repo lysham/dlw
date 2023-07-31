@@ -792,14 +792,15 @@ if __name__ == "__main__":
     x = tau.index.to_numpy()
 
     y_b = np.ones(len(x))
-    for i in np.arange(1, 8):
-        tmp = ijhmt_to_tau(f"fig5_esky_ij_b{i}.csv")["total"].to_numpy()
-        y_b = y_b * tmp
+    for i in species:
+        for j in np.arange(1, 8):
+            tmp = ijhmt_to_tau(f"fig5_esky_ij_b{j}.csv")[i].to_numpy()
+            y_b = y_b * tmp
 
-    o_b = np.ones(len(x))
+    o_b = np.zeros(len(x))
     for i in np.arange(1, 8):
-        tmp = ijhmt_to_tau(f"fig5_esky_ij_b{i}.csv")["overlaps"].to_numpy()
-        o_b = o_b * tmp
+        tmp = ijhmt_to_individual_e(f"fig5_esky_ij_b{i}.csv")["overlaps"].to_numpy()
+        o_b = o_b + tmp
 
     # compare tau total to 1-e_total with overlaps removed from each
     tau_total = tau.cumprod(axis=1).iloc[:, -2].to_numpy()
@@ -807,6 +808,11 @@ if __name__ == "__main__":
 
     tau_ = tau_total * tau["overlaps"].to_numpy()
     eps_ = eps_total + eps["overlaps"].to_numpy()
+
+    fig, ax = plt.subplots()
+    ax.plot(x, o_b)
+    ax.plot(x, eps["overlaps"].to_numpy())
+    plt.show()
 
     to = tau_ / y_b
 
