@@ -709,7 +709,7 @@ def create_data_tables_from_lc2019():
         ),
         b3=dict(
             H2O=[-0.2308, 0.6484, 0.1280],
-            CO2=[0.3038, -0.05265, 0.1497],
+            CO2=[0.3038, -0.5262, 0.1497],
             O3=[0, 0, 0],
             aerosols=[0.0001, 0, 0],
             N2O=[0.0001, 0, 0],
@@ -826,5 +826,5 @@ if __name__ == "__main__":
     # df = ijhmt_to_tau("fig5_esky_ij_b4.csv")  # tau, first p removed
     # df = ijhmt_to_individual_e("fig3_esky_i.csv")  # e, disaggregated
 
-    # create_data_tables_from_lc2019()
+    create_data_tables_from_lc2019()
     plot_wide_vs_banded(tau=True, part="CO2")

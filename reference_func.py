@@ -20,7 +20,8 @@ from constants import *
 from fig3 import get_atm_p, import_ijhmt_df, ijhmt_to_tau, ijhmt_to_individual_e
 from process import *
 from enso import get_train, import_oni_mei_data, create_monthly_df
-from figures import FILTER_NPTS_CLR, FILTER_PCT_CLR, training_data, COLORS, C1_CONST, C2_CONST
+from figures import FILTER_NPTS_CLR, FILTER_PCT_CLR, training_data, COLORS, \
+    C1_CONST, C2_CONST, pw2rh, rh2pw
 
 
 def look_at_jyj():
@@ -2682,6 +2683,90 @@ def plot_lbl_match():  # TODO update ijhmt
     ax.set_axisbelow(True)
     ax.set_xlim(x[0], x[-1])
     filename = os.path.join("figures", "lbl_match.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def broadband_contribution_e_and_tau():
+    # emissivity and transmissivity with RH reference axes
+    cmap = mpl.colormaps["Paired"]
+    cmaplist = [cmap(i) for i in range(N_SPECIES)]
+    species = list(LI_TABLE1.keys())[:-1]
+
+    tau = ijhmt_to_tau()
+    eps = ijhmt_to_individual_e()
+    x = tau.index.to_numpy()
+
+    # set margins, size of figure
+    fig_x0 = 0.05
+    fig_y0 = 0.35
+    fig_width = 0.42
+    fig_height = 0.65
+    wspace = 1 - (2 * fig_width) - (2 * fig_x0)
+    if wspace < 0:
+        print("warning: overlapping figures")
+
+    fig = plt.figure(figsize=(6, 3.5))
+    ax0 = fig.add_axes((fig_x0, fig_y0, fig_width, fig_height))
+    ax1 = fig.add_axes(
+        (fig_x0 + fig_width + wspace, fig_y0, fig_width, fig_height))
+    j = 0
+    y_e = np.zeros(len(x))
+    y_t = np.ones(len(x))
+    for gas in species:
+        y = eps[gas].to_numpy()
+        ax0.fill_between(x, y_e, y_e + y, label=LBL_LABELS[gas], fc=cmaplist[j])
+        y_e = y_e + y
+        y = tau[gas].to_numpy()
+        ax1.fill_between(x, y_t, y_t * y, label=LBL_LABELS[gas], fc=cmaplist[j])
+        y_t = y_t * y
+        j += 1
+    # set axis limits, labels, grid
+    ax0.set_ylim(0, 1)
+    ax1.set_ylim(0, 1)
+    ax0.set_xlim(x[0], x[-1])
+    ax1.set_xlim(x[0], x[-1])
+    ax0.legend(ncol=2, loc="lower center")
+    ax0.grid(alpha=0.3)
+    ax0.set_axisbelow(True)
+    ax1.grid(alpha=0.3)
+    ax1.set_axisbelow(True)
+    ax0.set_xlabel("p$_w$ [-]")
+    ax1.set_xlabel("p$_w$ [-]")
+    ax0.set_title(r"(a) $\varepsilon_{i}$", loc="left")
+    ax1.set_title(r"(b) $\tau_{i}$", loc="left")
+
+    # add secondary axes for relative humidity reference
+    ax2 = fig.add_axes((fig_x0, 0.2, fig_width, 0.0))
+    ax2.yaxis.set_visible(False)  # hide the yaxis
+    rh_lbls = [20, 40, 60, 80, 100]
+    t = 290
+    ax2.set_xlim(pw2rh(x[0], t), pw2rh(x[-1], t))
+    ax2.set_xticks(np.array(rh_lbls), labels=rh_lbls)
+    ax2.set_xlabel(f"RH [%] at {t} K")
+
+    ax3 = fig.add_axes((fig_x0, 0.05, fig_width, 0.0))
+    ax3.yaxis.set_visible(False)  # hide the yaxis
+    t = 300
+    ax3.set_xlim(pw2rh(x[0], t), pw2rh(x[-1], t))
+    ax3.set_xticks(np.array(rh_lbls), labels=rh_lbls)
+    ax3.set_xlabel(f"RH [%] at {t} K")
+
+    ax4 = fig.add_axes((fig_x0 + fig_width + wspace, 0.2, fig_width, 0.0))
+    ax4.yaxis.set_visible(False)  # hide the yaxis
+    t = 290
+    ax4.set_xlim(pw2rh(x[0], t), pw2rh(x[-1], t))
+    ax4.set_xticks(np.array(rh_lbls), labels=rh_lbls)
+    ax4.set_xlabel(f"RH [%] at {t} K")
+
+    ax4 = fig.add_axes((fig_x0 + fig_width + wspace, 0.05, fig_width, 0.0))
+    ax4.yaxis.set_visible(False)  # hide the yaxis
+    t = 300
+    ax4.set_xlim(pw2rh(x[0], t), pw2rh(x[-1], t))
+    ax4.set_xticks(np.array(rh_lbls), labels=rh_lbls)
+    ax4.set_xlabel(f"RH [%] at {t} K")
+
+    filename = os.path.join("figures", "broadband_contribution.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 

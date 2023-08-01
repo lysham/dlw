@@ -1024,18 +1024,19 @@ def broadband_contribution():
         (fig_x0 + fig_width + wspace, fig_y0, fig_width, fig_height))
     j = 0
     y_e = np.zeros(len(x))
-    y_t = np.ones(len(x))
+    y_t = np.zeros(len(x))
     for gas in species:
         y = eps[gas].to_numpy()
         ax0.fill_between(x, y_e, y_e + y, label=LBL_LABELS[gas], fc=cmaplist[j])
         y_e = y_e + y
-        y = tau[gas].to_numpy()
-        ax1.fill_between(x, y_t, y_t * y, label=LBL_LABELS[gas], fc=cmaplist[j])
-        y_t = y_t * y
+        y = -1 * np.log(tau[gas].to_numpy())
+        ax1.fill_between(x, y_t, y_t + y, label=LBL_LABELS[gas], fc=cmaplist[j])
+        # y_t = y_t * y
+        y_t = y_t + y
         j += 1
     # set axis limits, labels, grid
     ax0.set_ylim(0, 1)
-    ax1.set_ylim(0, 1)
+    ax1.set_ylim(bottom=0)
     ax0.set_xlim(x[0], x[-1])
     ax1.set_xlim(x[0], x[-1])
     ax0.legend(ncol=2, loc="lower center")
@@ -1046,7 +1047,7 @@ def broadband_contribution():
     ax0.set_xlabel("p$_w$ [-]")
     ax1.set_xlabel("p$_w$ [-]")
     ax0.set_title(r"(a) $\varepsilon_{i}$", loc="left")
-    ax1.set_title(r"(b) $\tau_{i}$", loc="left")
+    ax1.set_title(r"(b) $d_{\rm{opt}}$", loc="left")
 
     # add secondary axes for relative humidity reference
     ax2 = fig.add_axes((fig_x0, 0.2, fig_width, 0.0))
@@ -1099,7 +1100,7 @@ def tmp_spectral_band_contribution():  # TODO
     for j in np.arange(1, 8):
         ax = axes[0, j - 1]
         ax.set_title(f"b{j}", loc="center")
-        df = ijhmt_to_individual_e(f"fig5_esky_ij_b{j}.csv")
+        df = ijhmt_to_individual_e(f"lc2019_esky_ij_b{j}.csv")
         y_e = np.zeros(len(x))
         for i in range(N_SPECIES):
             y = df[species[i]].to_numpy()
@@ -1114,7 +1115,7 @@ def tmp_spectral_band_contribution():  # TODO
     # for emissivity
     for j in np.arange(1, 8):
         ax = axes[1, j - 1]
-        df = ijhmt_to_tau(f"fig5_esky_ij_b{j}.csv")
+        df = ijhmt_to_tau(f"lc2019_esky_ij_b{j}.csv")
         y_t = np.ones(len(x))
         d = np.zeros(len(x))
         for i in range(N_SPECIES):
@@ -1160,7 +1161,8 @@ if __name__ == "__main__":
     # print_results_table()
     # data_processing_table(create_csv=True)
     # tau_lc_vs_sr()
-    # tmp_spectral_band_contribution()
+    broadband_contribution()
+    tmp_spectral_band_contribution()
     print()
 
     # ff = pd.DataFrame(dict(x=x, y=y))
