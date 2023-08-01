@@ -244,7 +244,7 @@ def emissivity_vs_pw_data():
         ax.scatter([], [], marker="o", s=3*ms, alpha=1, c=SEVEN_COLORS[i],
                    ec="0.5", lw=0.5,  label=lbl_s)  # dummy for legend
         i += 1
-    xmin, xmax = (0, 40)
+    xmin, xmax = (0, 35)
     x = np.geomspace(0.00001, xmax, 40)
     y = C1_CONST + C2_CONST * np.sqrt(x * 100 / P_ATM)
     # label = r"$c_1 + c_2 \sqrt{p_w}$"
@@ -1154,15 +1154,15 @@ if __name__ == "__main__":
     # solar_time(create_csv=True)  # boxplot
     # clear_sky_filter(create_csv=False)
     # pressure_temperature_per_site(server4=True)
-    # emissivity_vs_pw_data()
+    emissivity_vs_pw_data()
     # altitude_correction()
     # compare(with_data=True)
     # compare(with_data=False)
     # print_results_table()
     # data_processing_table(create_csv=True)
     # tau_lc_vs_sr()
-    broadband_contribution()
-    tmp_spectral_band_contribution()
+    # broadband_contribution()
+    # tmp_spectral_band_contribution()
     print()
 
     # ff = pd.DataFrame(dict(x=x, y=y))
