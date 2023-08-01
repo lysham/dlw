@@ -1148,13 +1148,30 @@ def tmp_spectral_band_contribution():  # TODO
     return None
 
 
+def print_broadband_coefs():
+    # print regression fit for each column (columns should not be cumulative)
+    df = ijhmt_to_tau("lc2019_esky_i.csv")  # adjust fit_df definition
+    x = df.index.to_numpy()
+    for s in df.columns.to_list():
+        # if (s != "O2") & (s != "N2"):
+        y = df[s].to_numpy()
+        print("\n", s)
+        if np.std(y) < 0.001:  # make constant
+            print(f"c1={np.mean(y).round(3)}")
+        else:
+            # note whether x=x or x=sqrt(x), y=y or y=-1*np.log(y)
+            fit_df = pd.DataFrame(dict(x=x, y=-1 * np.log(y)))
+            fit_linear(fit_df, print_out=True)
+    return None
+
+
 if __name__ == "__main__":
     # df = training_data(create=True)
     print()
     # solar_time(create_csv=True)  # boxplot
     # clear_sky_filter(create_csv=False)
     # pressure_temperature_per_site(server4=True)
-    emissivity_vs_pw_data()
+    # emissivity_vs_pw_data()
     # altitude_correction()
     # compare(with_data=True)
     # compare(with_data=False)
@@ -1168,4 +1185,26 @@ if __name__ == "__main__":
     # ff = pd.DataFrame(dict(x=x, y=y))
     # ff.loc[(ff.x >0.5) & (ff.y < 200)]
 
+    df = ijhmt_to_tau("lc2019_esky_i.csv")  # adjust fit_df definition
+    x = df.index.to_numpy()
+    for j in np.arange(1, 8):
+        y_ref = np.zeros(len(x))
+        filename = f"lc2019_esky_ij_b{j}.csv"
+        df = ijhmt_to_tau(filename)
+        for s in ["H2O", "CO2"]:
+            y = df[s].to_numpy()
+            y_ref = y_ref * y  # cumulative product in the band
+            print("\n", f"b{j}", s)
+            if np.std(y) < 0.001:  # make constant
+                print(f"c1={np.mean(y).round(3)}")
+            else:
+                # note whether x=x or x=sqrt(x), y=y or y=-1*np.log(y)
+                fit_df = pd.DataFrame(dict(x=x, y=-1 * np.log(y)))
+                fit_linear(fit_df, print_out=True)
+        print("total")
+        if np.std(y_ref) < 0.001:
+            print(f"c1={np.mean(y).round(3)}")
+        else:
+            fit_df = pd.DataFrame(dict(x=x, y=-1 * np.log(y_ref)))
+            fit_linear(fit_df, print_out=True)
 

@@ -609,23 +609,6 @@ def plot_fit3_dopt():
     return None
 
 
-def print_out_coefs():
-    # print regression fit for each column (columns should not be cumulative)
-    df = ijhmt_to_tau("fig3_esky_i.csv")  # adjust fit_df definition
-    x = df.index.to_numpy()
-    for s in df.columns.to_list():
-        # if (s != "O2") & (s != "N2"):
-        y = df[s].to_numpy()
-        print("\n", s)
-        if np.std(y) < 0.001:  # make constant
-            print(f"c1={np.mean(y).round(3)}")
-        else:
-            # note whether x=x or x=sqrt(x), y=y or y=-1*np.log(y)
-            fit_df = pd.DataFrame(dict(x=x, y=-1 * np.log(y)))
-            fit_linear(fit_df, print_out=True)
-    return None
-
-
 def plot_wide_vs_banded(tau=True, part="total"):
     if tau:
         df = ijhmt_to_tau("lc2019_esky_i.csv")
