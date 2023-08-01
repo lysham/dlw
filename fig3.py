@@ -492,7 +492,7 @@ def violin_figure(x, y, y2, xq, yq, c1, c2, c3, title, filename,
     return None
 
 
-def ijhmt_to_tau(filename="fig3_esky_i.csv"):
+def ijhmt_to_tau(filename="lc2019_esky_i.csv"):
     df = import_ijhmt_df(filename=filename)
     df = df.set_index("pw")
     # (method 1) convert to aggregated tau, then disaggregate
@@ -510,7 +510,7 @@ def ijhmt_to_tau(filename="fig3_esky_i.csv"):
     return df
 
 
-def ijhmt_to_individual_e(filename="fig3_esky_i.csv"):
+def ijhmt_to_individual_e(filename="lc2019_esky_i.csv"):
     df = import_ijhmt_df(filename=filename)
     df = df.set_index("pw")
     col1 = df.H2O.to_numpy()
@@ -628,31 +628,31 @@ def print_out_coefs():
 
 def plot_wide_vs_banded(tau=True, part="total"):
     if tau:
-        df = ijhmt_to_tau("fig3_esky_i.csv")
+        df = ijhmt_to_tau("lc2019_esky_i.csv")
         plot_title = "transmissivity"
         legend_label = r"product of $\tau_{ij}$ over $j$"
         s = "tau"  # for figure name
     else:
-        df = ijhmt_to_individual_e("fig3_esky_i.csv")
+        df = ijhmt_to_individual_e("lc2019_esky_i.csv")
         plot_title = "emissivity"
         legend_label = r"sum of $\varepsilon_{ij}$ over $j$"
         s = "eps"
     x = df.index.to_numpy()
     y = df[part].to_numpy()
 
-    df = ijhmt_to_individual_e("fig3_esky_i.csv")
+    df = ijhmt_to_individual_e("lc2019_esky_i.csv")
     ye = df[part].to_numpy()
 
     y_b = np.ones(len(x)) if tau else np.zeros(len(x))
     d_opt = np.zeros(len(x))
     for i in np.arange(1, 8):
         if tau:
-            df = ijhmt_to_tau(f"fig5_esky_ij_b{i}.csv")
+            df = ijhmt_to_tau(f"lc2019_esky_ij_b{i}.csv")
             tmp = df[part].to_numpy()
             y_b = y_b * tmp #* bw[i-1]
             d_opt += -1 * np.log(tmp)
         else:
-            df = ijhmt_to_individual_e(f"fig5_esky_ij_b{i}.csv")
+            df = ijhmt_to_individual_e(f"lc2019_esky_ij_b{i}.csv")
             y_b = y_b + df[part].to_numpy()
 
     fig, ax = plt.subplots()
@@ -678,30 +678,7 @@ def plot_wide_vs_banded(tau=True, part="total"):
     return None
 
 
-if __name__ == "__main__":
-    print()
-    # t_a = 294.2  # [K]
-    # rh = 50  # %
-    # pw = get_pw_norm(t_a, rh)
-
-    # plot_fig3_ondata("FPK", sample=0.05)
-    # plot_fig3_quantiles(
-    #     yr=[2010, 2011, 2012, 2013], all_sites=True, tau=False,
-    #     temperature=True, pct_clr_min=0.5, pressure_bins=5, violin=True
-    # )
-    # plot_fig3_quantiles(
-    #     yr=[2015], tau=False,
-    #     temperature=False, pct_clr_min=0.05, pressure_bins=10, violin=True
-    # )
-    print()
-    # df = import_ijhmt_df("fig3_esky_i.csv")  # original
-    # df = ijhmt_to_tau("fig5_esky_ij_b4.csv")  # tau, first p removed
-    # df = ijhmt_to_individual_e("fig3_esky_i.csv")  # e, disaggregated
-
-    # TODO create pseudo-raw data to replace fig3_esky_i (lc2019_esky_i)
-    # TODO update ijhmt_ functions
-
-    plot_fig3()
+def create_data_tables_from_lc2019():
 
     tab1 = LI_TABLE1
 
@@ -792,11 +769,62 @@ if __name__ == "__main__":
         )
     )
 
-    filename = "fig3_esky_i.csv"
-    xmin, xmax = (0.01, 35.5)  # hpa
-    x = np.geomspace(xmin + 0.00001, xmax, 100)  # hPa
-    x = x * 100 / P_ATM  # normalized
+    folder = os.path.join("data", "ijhmt_2019_data")
+    xmin, xmax = (0.001, 0.025)  # normalized
+    x = np.geomspace(xmin, xmax, 50)  # normalized
 
-    for part in tab1:
-        c1, c2, c3 = tab1[part]
-        y = part[0] + part[1] * np.power(x, part[3])
+    species = list(tab1.keys())[:-1]
+
+    y_ref = np.zeros(len(x))
+    df = pd.DataFrame(dict(pw=x))
+    for i in species:
+        c1, c2, c3 = tab1[i]
+        y = c1 + c2 * np.power(x, c3)
+        colname = i if i == "H2O" else f"p{i}"
+        y_ref = y_ref + y
+        df[colname] = y_ref
+
+    filename = os.path.join(folder, "lc2019_esky_i.csv")
+    df.to_csv(filename)
+
+    # do this per band
+    for j in np.arange(1, 8):
+        df = pd.DataFrame(dict(pw=x))
+        y_ref = np.zeros(len(x))
+        band_dict = tab2[f"b{j}"]
+        for i in species:
+            c1, c2, c3 = band_dict[i]
+            if j == 2:
+                y = c1 + c2 * np.tanh(c3 * x)
+            else:
+                y = c1 + c2 * np.power(x, c3)
+            colname = i if i == "H2O" else f"p{i}"
+            y_ref = y_ref + y
+            df[colname] = y_ref
+        filename = os.path.join(folder, f"lc2019_esky_ij_b{j}.csv")
+        df.to_csv(filename)
+    return None
+
+
+if __name__ == "__main__":
+    print()
+    # t_a = 294.2  # [K]
+    # rh = 50  # %
+    # pw = get_pw_norm(t_a, rh)
+
+    # plot_fig3_ondata("FPK", sample=0.05)
+    # plot_fig3_quantiles(
+    #     yr=[2010, 2011, 2012, 2013], all_sites=True, tau=False,
+    #     temperature=True, pct_clr_min=0.5, pressure_bins=5, violin=True
+    # )
+    # plot_fig3_quantiles(
+    #     yr=[2015], tau=False,
+    #     temperature=False, pct_clr_min=0.05, pressure_bins=10, violin=True
+    # )
+    print()
+    # df = import_ijhmt_df("fig3_esky_i.csv")  # original
+    # df = ijhmt_to_tau("fig5_esky_ij_b4.csv")  # tau, first p removed
+    # df = ijhmt_to_individual_e("fig3_esky_i.csv")  # e, disaggregated
+
+    # create_data_tables_from_lc2019()
+    plot_wide_vs_banded(tau=True, part="CO2")
