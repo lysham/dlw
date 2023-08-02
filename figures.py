@@ -546,28 +546,28 @@ def print_results_table():
     y_corr = df.y_corr.to_numpy().reshape(-1, 1)  # elevation-adjusted
 
     print("Fit")
-    _print_metrics(y_corr, C1_CONST + C2_CONST * x)  #
+    _print_results_metrics(y_corr, C1_CONST + C2_CONST * x)  #
     # print("\nS1965, LC2019, B2021")
-    _print_metrics(y, 0.605 + 1.528 * x)  # S1965
-    _print_metrics(y, 0.617 + 1.694 * x)  # LC2019
-    _print_metrics(y, 0.564 + 1.878 * x)  # B2021
+    _print_results_metrics(y, 0.605 + 1.528 * x)  # S1965
+    _print_results_metrics(y, 0.617 + 1.694 * x)  # LC2019
+    _print_results_metrics(y, 0.564 + 1.878 * x)  # B2021
 
     # Note: MVGS2017 and SR2021 take pw as input instead of sqrt(pw)
     print("\nMVGS2017, SR2021")
     x2 = np.power(x, 2)
-    _print_metrics(y, 1.108 * np.power(x2, 0.083))  # MVGS2017
+    _print_results_metrics(y, 1.108 * np.power(x2, 0.083))  # MVGS2017
     # tau = evaluate_sr2021(x2, site_array=df.site.to_numpy())
     tau = evaluate_sr2021(x2)  # assume GWC H
     e_sr2021 = 1 - tau
-    _print_metrics(y, e_sr2021.reshape(-1, 1))
+    _print_results_metrics(y, e_sr2021.reshape(-1, 1))
     return None
 
 
-def _print_metrics(actual, model):
+def _print_results_metrics(actual, model):
     # Helper function for print_results_table()
     rmse = np.sqrt(mean_squared_error(actual, model))
     r2 = r2_score(actual, model)
-    mbe = np.nanmean((model - actual), axis=0)[0]
+    mbe = np.nanmean((model - actual), axis=0)
     print(f"RMSE: {rmse.round(5)} | MBE: {mbe.round(5)} | R2: {r2.round(5)}")
     return None
 
@@ -678,14 +678,13 @@ def solar_time(create_csv=False):
 
 
 def convergence():
-
     df = training_data(create=False, import_val=False, import_full_train=False)
     test = df.loc[df.index.year == 2013].copy()  # make test set
-    test = test.sample(n=1000)
+    test = test.sample(n=10000, random_state=35)
     df = df.loc[df.index.year != 2013].copy()
 
     sizes = np.geomspace(100, 100000, 20)
-    n_iter = 100  # per sample size
+    n_iter = 1000  # per sample size
     c1_vals = np.zeros((len(sizes), n_iter))
     c2_vals = np.zeros((len(sizes), n_iter))
     rmses = np.zeros((len(sizes), n_iter))
@@ -714,23 +713,31 @@ def convergence():
     ax.set_xscale("log")
     ax.fill_between(
         sizes, c1_vals.min(axis=1),
-        c1_vals.max(axis=1), alpha=0.5, fc=COLORS["cornflowerblue"])
+        c1_vals.max(axis=1), alpha=0.3, fc=COLORS["cornflowerblue"])
+    ax.fill_between(
+        sizes, np.quantile(c1_vals, 0.1, axis=1),
+        np.quantile(c1_vals, 0.9, axis=1),
+        alpha=0.5, fc=COLORS["cornflowerblue"])
     ax.plot(sizes, c1_vals.mean(axis=1), c=COLORS["cornflowerblue"])
     ax.set_ylabel("$c_1$")
-    ax.set_yticks(np.linspace(0.58, 0.62, 5))
-    ax.set_ylim(0.58, 0.62)
+    ax.set_yticks(np.linspace(0.58, 0.63, 6))
+    ax.set_ylim(0.58, 0.63)
     ax.grid(alpha=0.3)
     ax.set_axisbelow(True)
 
     ax = axes[1]
     ax.set_xscale("log")
     ax.fill_between(
-        sizes, c2_vals.min(axis=1), c2_vals.max(axis=1),
+        sizes, c2_vals.min(axis=1),
+        c2_vals.max(axis=1), alpha=0.3, fc=COLORS["cornflowerblue"])
+    ax.fill_between(
+        sizes, np.quantile(c2_vals, 0.1, axis=1),
+        np.quantile(c2_vals, 0.9, axis=1),
         alpha=0.5, fc=COLORS["cornflowerblue"])
     ax.plot(sizes, c2_vals.mean(axis=1), c=COLORS["cornflowerblue"])
     ax.set_ylabel("$c_2$")
-    ax.set_yticks(np.linspace(1.4, 1.9, 6))
-    ax.set_ylim(1.4, 1.9)
+    ax.set_yticks(np.linspace(1.3, 1.8, 6))
+    ax.set_ylim(1.3, 1.8)
     ax.yaxis.set_major_formatter('{x:.02f}')
     ax.grid(alpha=0.3)
     ax.set_axisbelow(True)
@@ -738,14 +745,17 @@ def convergence():
     ax = axes[2]
     ax.set_xscale("log")
     ax.fill_between(
-        sizes, r2s.min(axis=1), r2s.max(axis=1),
-        alpha=0.5, fc=COLORS["cornflowerblue"]
-    )
+        sizes, r2s.min(axis=1),
+        r2s.max(axis=1), alpha=0.3, fc=COLORS["cornflowerblue"])
+    ax.fill_between(
+        sizes, np.quantile(r2s, 0.1, axis=1),
+        np.quantile(r2s, 0.9, axis=1),
+        alpha=0.5, fc=COLORS["cornflowerblue"])
     ax.plot(sizes, r2s.mean(axis=1), c=COLORS["cornflowerblue"])
     ax.set_xlabel("Training set size")
     ax.set_ylabel("R$^2$")
-    ax.set_yticks(np.linspace(0.89, 0.93, 5))
-    ax.set_ylim(0.89, 0.93)
+    ax.set_yticks(np.linspace(0.86, 0.90, 5))
+    ax.set_ylim(0.86, 0.90)
     ax.grid(alpha=0.3)
     ax.set_axisbelow(True)
     ax.set_xlim(sizes[0], sizes[-1])
@@ -753,6 +763,7 @@ def convergence():
 
     filename = os.path.join("figures", "convergence.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
+    plt.close()
     return None
 
 
@@ -822,7 +833,7 @@ def data_processing_table(create_csv=False):
     if create_csv:
         # 2010 & 2015 data
         df = create_training_set(
-            year=[2010, 2015], temperature=False, cs_only=False,
+            year=[2010, 2011, 2012, 2015], temperature=False, cs_only=False,
             filter_pct_clr=0.0, filter_npts_clr=0.0, drive="server4"
         )
         df = reduce_to_equal_pts_per_site(df)  # min_pts = 200
@@ -833,7 +844,7 @@ def data_processing_table(create_csv=False):
 
         # 2010 & 2015 data
         df = create_training_set(
-            year=[2010, 2017], temperature=False, cs_only=False,
+            year=[2010, 2011, 2012, 2017], temperature=False, cs_only=False,
             filter_pct_clr=0.0, filter_npts_clr=0.0, drive="server4"
         )
         df = reduce_to_equal_pts_per_site(df)  # min_pts = 200
@@ -854,12 +865,13 @@ def data_processing_table(create_csv=False):
     total = pd.read_csv(filename, index_col=0, parse_dates=True)
 
     # change one of these at a time and evaluate
-    clear_sky = "both"  # ["both", "li", "reno"]
+    clear_sky = "li"  # ["both", "li", "reno"]
+    elev_correction = True
+    # switch table to table_2017
     solar_time_filter = True
     apply_pct_clr = True
     apply_npts_clr = True
     remove_site_bias = True
-    elev_correction = True
     # if "both" and all true for above, then baseline is evaluated
 
     base = total.copy(deep=True)
@@ -892,7 +904,8 @@ def data_processing_table(create_csv=False):
         actual = test.y.to_numpy()
     else:  # have test set be at sea level
         actual = test.y - test.correction
-    _print_metrics(actual, model)
+        actual = actual.to_numpy()
+    _print_results_metrics(actual, model)
     return None
 
 
@@ -1148,43 +1161,7 @@ def tmp_spectral_band_contribution():  # TODO
     return None
 
 
-def print_broadband_coefs():
-    # print regression fit for each column (columns should not be cumulative)
-    df = ijhmt_to_tau("lc2019_esky_i.csv")  # adjust fit_df definition
-    x = df.index.to_numpy()
-    for s in df.columns.to_list():
-        # if (s != "O2") & (s != "N2"):
-        y = df[s].to_numpy()
-        print("\n", s)
-        if np.std(y) < 0.001:  # make constant
-            print(f"c1={np.mean(y).round(3)}")
-        else:
-            # note whether x=x or x=sqrt(x), y=y or y=-1*np.log(y)
-            fit_df = pd.DataFrame(dict(x=x, y=-1 * np.log(y)))
-            fit_linear(fit_df, print_out=True)
-    return None
-
-
-if __name__ == "__main__":
-    # df = training_data(create=True)
-    print()
-    # solar_time(create_csv=True)  # boxplot
-    # clear_sky_filter(create_csv=False)
-    # pressure_temperature_per_site(server4=True)
-    # emissivity_vs_pw_data()
-    # altitude_correction()
-    # compare(with_data=True)
-    # compare(with_data=False)
-    # print_results_table()
-    # data_processing_table(create_csv=True)
-    # tau_lc_vs_sr()
-    # broadband_contribution()
-    # tmp_spectral_band_contribution()
-    print()
-
-    # ff = pd.DataFrame(dict(x=x, y=y))
-    # ff.loc[(ff.x >0.5) & (ff.y < 200)]
-
+def print_band_coefs():
     # print coefficients per band using spectral model for H2O and CO2 only
     df = ijhmt_to_tau("lc2019_esky_i.csv")  # adjust fit_df definition
     x = df.index.to_numpy()
@@ -1209,4 +1186,26 @@ if __name__ == "__main__":
         else:
             fit_df = pd.DataFrame(dict(x=x, y=y_ref))
             fit_linear(fit_df, print_out=True)
+    return None
+
+
+if __name__ == "__main__":
+    # df = training_data(create=True)
+    print()
+    # solar_time(create_csv=True)  # boxplot
+    # clear_sky_filter(create_csv=False)
+    # pressure_temperature_per_site(server4=True)
+    # emissivity_vs_pw_data()
+    # altitude_correction()
+    # compare(with_data=True)
+    # compare(with_data=False)
+    # print_results_table()
+    # data_processing_table(create_csv=True)
+    # tau_lc_vs_sr()
+    # broadband_contribution()
+    # tmp_spectral_band_contribution()
+    print()
+
+    # ff = pd.DataFrame(dict(x=x, y=y))
+    # ff.loc[(ff.x >0.5) & (ff.y < 200)]
 
