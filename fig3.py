@@ -789,6 +789,24 @@ def create_data_tables_from_lc2019():
     return None
 
 
+def sum_ei(e, i):
+    """
+
+    Parameters
+    ----------
+    e : DataFrame
+        Individual e table (either esky_i or esky_ij)
+    i : int
+        Index where 1 <= i <= 9
+
+    Returns
+    -------
+    sum of e_i up to i
+    """
+    # df should be an individual e table
+    return e.iloc[:, :i].cumsum(axis=1).iloc[:, -1].to_numpy()
+
+
 if __name__ == "__main__":
     print()
     # t_a = 294.2  # [K]
@@ -809,5 +827,81 @@ if __name__ == "__main__":
     # df = ijhmt_to_tau("fig5_esky_ij_b4.csv")  # tau, first p removed
     # df = ijhmt_to_individual_e("fig3_esky_i.csv")  # e, disaggregated
 
-    create_data_tables_from_lc2019()
-    plot_wide_vs_banded(tau=True, part="CO2")
+    # create_data_tables_from_lc2019()
+    # plot_wide_vs_banded(tau=True, part="CO2")
+
+    # # calculate band weights for transmissivity
+    # t = 294.2
+    # lw_const = integrate.quad(func=planck_lambda, a=4, b=100000, args=(t,))[0]
+    # bw = []
+    # for i in np.arange(1, 8):
+    #     l1, l2 = BANDS_L[f"b{i}"]
+    #     out = integrate.quad(func=planck_lambda, a=l1, b=l2, args=(t,))[0]
+    #     bw.append(out / lw_const)
+    # bw = np.array(bw)
+
+    df = ijhmt_to_individual_e("lc2019_esky_i.csv")
+    x = df.index.to_numpy()
+    e_total = df["total"].to_numpy()  # e_total
+    df = ijhmt_to_tau("lc2019_esky_i.csv")
+    t_total = df["total"].to_numpy()  # t_total
+
+    species = list(df.columns[:-1])
+    part = "O3"
+
+    # e_j = np.zeros(len(x))
+
+    # e_i = ijhmt_to_individual_e("lc2019_esky_i.csv")
+    # t_i = ijhmt_to_tau("lc2019_esky_i.csv")
+    # for part in species[2:]:
+    #     # part = "total"
+    #     ii = species.index(part)
+    #     term1 = (1-t_i[part].to_numpy())
+    #     term2 = sum_ei(e_i, ii-1)
+    #     # term2 = e_i[part].to_numpy()
+    #     lhs = t_i[part].to_numpy() + (term1*term2)
+    #     t_j = np.ones(len(x))
+    #     for j in np.arange(1, 8):
+    #         tau = ijhmt_to_tau(f"lc2019_esky_ij_b{j}.csv")
+    #         t_j = t_j * tau[part].to_numpy()
+    #     compare = lhs - t_j
+    #     print(part, compare.max(), compare.mean())
+
+    part = "O3"
+
+    df = ijhmt_to_tau("lc2019_esky_i.csv")
+    plot_title = "transmissivity"
+    legend_label = r"product of $\tau_{ij}$ over $j$"
+    s = "tau"  # for figure name
+    x = df.index.to_numpy()
+    y = df[part].to_numpy()
+
+    df = ijhmt_to_individual_e("lc2019_esky_i.csv")
+    ye = df[part].to_numpy()
+
+    y_b = np.ones(len(x))
+    d_opt = np.zeros(len(x))
+    for i in np.arange(1, 8):
+        df = ijhmt_to_tau(f"lc2019_esky_ij_b{i}.csv")
+        tmp = df[part].to_numpy()
+        y_b = y_b * tmp #* bw[i-1]
+        d_opt += -1 * np.log(tmp)
+
+    fig, ax = plt.subplots()
+    ax.plot(x, y_b, lw=2, label=legend_label)
+    ax.plot(x, y, ls="--", label="wide band")
+    ax.plot(x, 1 - ye, ls=":", label="1 - e_i")
+    ax.plot(x, np.exp(-1 * d_opt), "s", c="r", label="sum of d$_{opt}$ over $j$")
+    ax.set_title(plot_title + f" ({part})", loc="left")
+    if part == "total":
+        # ax.legend(loc="upper right")
+        i = 10
+    else:
+        species = list(LI_TABLE1.keys())[:-1]
+        i = species.index(part)
+    ax.set_xlabel("p$_w$ [-]")
+    ax.grid(alpha=0.3)
+    ax.legend()
+    filename = os.path.join("figures", "O3.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    # plt.show()
