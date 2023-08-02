@@ -1185,6 +1185,7 @@ if __name__ == "__main__":
     # ff = pd.DataFrame(dict(x=x, y=y))
     # ff.loc[(ff.x >0.5) & (ff.y < 200)]
 
+    # print coefficients per band using spectral model for H2O and CO2 only
     df = ijhmt_to_tau("lc2019_esky_i.csv")  # adjust fit_df definition
     x = df.index.to_numpy()
     for j in np.arange(1, 8):
@@ -1193,18 +1194,19 @@ if __name__ == "__main__":
         df = ijhmt_to_tau(filename)
         for s in ["H2O", "CO2"]:
             y = df[s].to_numpy()
-            y_ref = y_ref * y  # cumulative product in the band
+            dopt = -1 * np.log(y)
+            y_ref = y_ref + dopt  # cumulative product in the band
             print("\n", f"b{j}", s)
-            if np.std(y) < 0.001:  # make constant
-                print(f"c1={np.mean(y).round(3)}")
+            if np.std(dopt) < 0.001:  # make constant
+                print(f"c1={np.mean(dopt).round(3)}")
             else:
                 # note whether x=x or x=sqrt(x), y=y or y=-1*np.log(y)
-                fit_df = pd.DataFrame(dict(x=x, y=-1 * np.log(y)))
+                fit_df = pd.DataFrame(dict(x=x, y=dopt))
                 fit_linear(fit_df, print_out=True)
-        print("total")
+        print("\nTOTAL")
         if np.std(y_ref) < 0.001:
-            print(f"c1={np.mean(y).round(3)}")
+            print(f"c1={np.mean(y_ref).round(3)}")
         else:
-            fit_df = pd.DataFrame(dict(x=x, y=-1 * np.log(y_ref)))
+            fit_df = pd.DataFrame(dict(x=x, y=y_ref))
             fit_linear(fit_df, print_out=True)
 
