@@ -609,11 +609,11 @@ def plot_fit3_dopt():
     return None
 
 
-def plot_wide_vs_banded(tau=True, part="total"):
+def plot_tau_spectral_vs_wideband(tau=True, part="total"):
     if tau:
         df = ijhmt_to_tau("lc2019_esky_i.csv")
         plot_title = "transmissivity"
-        legend_label = r"product of $\tau_{ij}$ over $j$"
+        legend_label = r"$\tau_{ij}$ over $j$"
         s = "tau"  # for figure name
     else:
         df = ijhmt_to_individual_e("lc2019_esky_i.csv")
@@ -626,34 +626,33 @@ def plot_wide_vs_banded(tau=True, part="total"):
     df = ijhmt_to_individual_e("lc2019_esky_i.csv")
     ye = df[part].to_numpy()
 
-    y_b = np.ones(len(x)) if tau else np.zeros(len(x))
+    y_b = np.zeros(len(x))
     d_opt = np.zeros(len(x))
     for i in np.arange(1, 8):
         if tau:
             df = ijhmt_to_tau(f"lc2019_esky_ij_b{i}.csv")
-            tmp = df[part].to_numpy()
-            y_b = y_b * tmp #* bw[i-1]
-            d_opt += -1 * np.log(tmp)
+            d_opt += -1 * np.log(df[part].to_numpy())
         else:
             df = ijhmt_to_individual_e(f"lc2019_esky_ij_b{i}.csv")
-            y_b = y_b + df[part].to_numpy()
+        y_b = y_b + df[part].to_numpy()
+
+    if tau:
+        y_b = y_b - 6  # +1 -7 bands
 
     fig, ax = plt.subplots()
     ax.plot(x, y_b, lw=2, label=legend_label)
-    ax.plot(x, y, ls="--", label="wide band")
-    if tau:
-        ax.plot(x, 1 - ye, ls=":", label="1 - e_i")
-        ax.plot(x, np.exp(-1 * d_opt), "s", c="r", label="sum of d$_{opt}$ over $j$")
+    ax.plot(x, y, ls="--", label="wideband")
+    ax.plot(x, 1 - ye, ls=":", label="1 - e_i")
+    # ax.plot(x, np.exp(-1 * d_opt), "s", c="r", label="sum of d$_{opt}$ over $j$")
     ax.set_title(plot_title + f" ({part})", loc="left")
     if part == "total":
-        ax.legend(loc="upper right")
         i = 10
     else:
-        ax.legend(loc="lower left")
         species = list(LI_TABLE1.keys())[:-1]
         i = species.index(part)
     ax.set_xlabel("p$_w$ [-]")
-    ax.set_ylim(0, 1.1)
+    # ax.set_ylim(0, 1.1)
+    ax.legend()
     ax.grid(alpha=0.3)
     filename = os.path.join("figures", f"{s}_{i}_{part}.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
@@ -801,10 +800,10 @@ def sum_ei(e, i):
 
     Returns
     -------
-    sum of e_i up to i
+    sum of e_i up to and including i
     """
     # df should be an individual e table
-    return e.iloc[:, :i].cumsum(axis=1).iloc[:, -1].to_numpy()
+    return e.iloc[:, :i].sum(axis=1).to_numpy()
 
 
 if __name__ == "__main__":
@@ -869,39 +868,57 @@ if __name__ == "__main__":
 
     part = "O3"
 
-    df = ijhmt_to_tau("lc2019_esky_i.csv")
+    df = ijhmt_to_tau("fig3_esky_i.csv")
     plot_title = "transmissivity"
-    legend_label = r"product of $\tau_{ij}$ over $j$"
+    legend_label = r"$\tau_{ij}$ over $j$"
     s = "tau"  # for figure name
     x = df.index.to_numpy()
     y = df[part].to_numpy()
 
-    df = ijhmt_to_individual_e("lc2019_esky_i.csv")
+    df = ijhmt_to_individual_e("fig3_esky_i.csv")
     ye = df[part].to_numpy()
+    m = 7  # number of bands
+    idx = species.index(part)
+    rhs = m - sum_ei(df, idx + 1)  # i-1 (+1 for index=0)
+    # term2 = -1 * sum_ei(df, idx)
+    term2 = -1 * y * sum_ei(df, idx)
 
-    y_b = np.ones(len(x))
+    y_b = np.zeros(len(x))  # tau_ij
     d_opt = np.zeros(len(x))
+    lhs = np.zeros(len(x))
+    term1 = np.zeros(len(x))
     for i in np.arange(1, 8):
-        df = ijhmt_to_tau(f"lc2019_esky_ij_b{i}.csv")
-        tmp = df[part].to_numpy()
-        y_b = y_b * tmp #* bw[i-1]
-        d_opt += -1 * np.log(tmp)
+        df = ijhmt_to_tau(f"fig5_esky_ij_b{i}.csv")
+        t_ij = df[part].to_numpy()
+        d_opt += -1 * np.log(t_ij)
+        y_b = y_b + t_ij
+        df = ijhmt_to_individual_e(f"fig5_esky_ij_b{i}.csv")
+        lhs = lhs + (t_ij * (1 - sum_ei(df, idx)))
+        term1 += (t_ij * sum_ei(df, idx))
+
+    # if tau:
+    y_b = y_b - 6  # +1 -7 bands
 
     fig, ax = plt.subplots()
     ax.plot(x, y_b, lw=2, label=legend_label)
-    ax.plot(x, y, ls="--", label="wide band")
+    ax.plot(x, y, ls="--", label="wideband")
     ax.plot(x, 1 - ye, ls=":", label="1 - e_i")
-    ax.plot(x, np.exp(-1 * d_opt), "s", c="r", label="sum of d$_{opt}$ over $j$")
+    # ax.fill_between(x, 1-ye, 1-ye+adj, alpha=0.5)
+    # f = (term1 + term2).mean()
+    # ax.fill_between(x, y, y +f, alpha=0.5)
+    ax.fill_between(x, y, y + term1 + term2, alpha=0.25, label="adjustment")
+    # ax.plot(x, rhs - 6, "rs", label="RHS")
+    # ax.plot(x, lhs - 6, "g*", label="LHS")
+    # ax.plot(x, np.exp(-1 * d_opt), "s", c="r", label="sum of d$_{opt}$ over $j$")
     ax.set_title(plot_title + f" ({part})", loc="left")
     if part == "total":
-        # ax.legend(loc="upper right")
         i = 10
     else:
         species = list(LI_TABLE1.keys())[:-1]
         i = species.index(part)
     ax.set_xlabel("p$_w$ [-]")
-    ax.grid(alpha=0.3)
     ax.legend()
-    filename = os.path.join("figures", "O3.png")
+    # ax.set_ylim(0, 1.1)
+    ax.grid(alpha=0.3)
+    filename = os.path.join("figures", f"show_tij_to_ti_{part}.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
-    # plt.show()
