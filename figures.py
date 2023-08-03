@@ -475,23 +475,12 @@ def _add_common_features(ax, axins, x, y, e_tau_p0, with_data=True):
     return ax, axins
 
 
-def tau_lc_vs_sr():  # TODO update to 2019 published
-    df = ijhmt_to_tau("fig3_esky_i.csv")  # tau, first p removed
+def tau_lc_vs_sr():
+    df = ijhmt_to_tau("lc2019_esky_i.csv")  # tau, first p removed
     x = df.index.to_numpy()
 
     # transmissivity - plot total tau against Shakespeare
-    site = "GWC"
-    lat1 = SURFRAD[site]["lat"]
-    lon1 = SURFRAD[site]["lon"]
-    h1, spline = shakespeare(lat1, lon1)
-    pw = x * P_ATM  # Pa
-    w = 0.62198 * pw / (P_ATM - pw)
-    q = w / (1 + w)
-    p_rep = P_ATM * np.exp(-1 * SURFRAD[site]["alt"] / 8500)
-    p_ratio = p_rep / P_ATM
-    he = (h1 / np.cos(40.3 * np.pi / 180)) * np.power(p_ratio, 1.8)
-    d_opt = spline.ev(q, he)
-    tau_shp = np.exp(-1 * d_opt)
+    tau_shp = evaluate_sr2021(x)
 
     y_fit = C1_CONST + C2_CONST * np.sqrt(x)
     y_fit = 1 - y_fit
@@ -518,6 +507,32 @@ def tau_lc_vs_sr():  # TODO update to 2019 published
 
     ax.legend(ncol=2, bbox_to_anchor=(0.5, -0.2), loc="upper center")
     filename = os.path.join("figures", "tau_lc_vs_sr.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+
+    # essentially same figure, now in d_opt
+    fig, ax = plt.subplots(figsize=(5.25, 3))
+    ax.plot(x, -1 * np.log(df.total.to_numpy()), c=COLORS["persianred"], ls="-",
+            label="LC2019", zorder=2)
+    y = df.H2O.to_numpy() * df.CO2.to_numpy()
+    ax.plot(
+        x, -1 * np.log(y), c=COLORS["persianred"],
+        ls="--", label="LC2019 H$_2$O and CO$_2$", zorder=4
+    )
+    ax.plot(x, -1 * np.log(tau_shp), c=COLORS["cornflowerblue"],
+            label="SR2021", zorder=5)
+    fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
+    ax.plot(x, -1 * np.log(y_fit), lw=2, ls="-", c="0.0", zorder=0,
+            label="MC2023")
+    ax.set_xlim(x[0], x[-1])
+    ax.set_ylim(0.8, 2.2)
+    ax.grid(alpha=0.3)
+    ax.set_xlabel("$p_w$ [-]")
+    ax.set_ylabel("optical depth [-]")
+    ax2 = ax.secondary_xaxis("top", functions=(pw2rh, rh2pw))
+    ax2.set_xlabel("RH [%] at 294.2 K")
+
+    ax.legend(ncol=2, bbox_to_anchor=(0.5, -0.2), loc="upper center")
+    filename = os.path.join("figures", "dopt_lc_vs_sr.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 
@@ -1209,3 +1224,38 @@ if __name__ == "__main__":
     # ff = pd.DataFrame(dict(x=x, y=y))
     # ff.loc[(ff.x >0.5) & (ff.y < 200)]
 
+    cmap = mpl.colormaps["Paired"]
+    cmaplist = [cmap(i) for i in range(N_SPECIES)]
+    species = list(LI_TABLE1.keys())[:-1]
+
+    tau = ijhmt_to_tau()
+    eps = ijhmt_to_individual_e()
+    x = tau.index.to_numpy()
+
+    tau_shp = evaluate_sr2021(x)
+    y_fit = C1_CONST + C2_CONST * np.sqrt(x)  # e
+
+    fig, ax = plt.subplots(figsize=(5.25, 3))
+    y_t = np.zeros(len(x))
+    j = 0
+    for gas in species:
+        y = eps[gas].to_numpy()
+        y = -1 * np.log(tau[gas].to_numpy())
+        ax.fill_between(x, y_t, y_t + y, label=LBL_LABELS[gas], fc=cmaplist[j])
+        # y_t = y_t * y
+        y_t = y_t + y
+        j += 1
+    ax.plot(x, -1 * np.log(tau_shp), c="0.3", ls="--", label="SR2021")
+    ax.plot(x, -1 * np.log(1-y_fit), c="0.1", ls="-", label="MC2023")
+    # set axis limits, labels, grid
+    ax.set_ylim(bottom=0)
+    ax.set_xlim(x[0], x[-1])
+    ax.grid(alpha=0.3)
+    ax.set_axisbelow(True)
+    ax.set_xlabel("p$_w$ [-]")
+    ax.set_ylabel("optical depth [-]")
+    ax.set_title(r"$d_{\rm{opt}}$", loc="left")
+    ax.legend(ncol=3, loc="lower right")
+
+    filename = os.path.join("figures", "dopt_lc_vs_sr_temp.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
