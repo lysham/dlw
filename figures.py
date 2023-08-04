@@ -13,7 +13,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.linear_model import LinearRegression
 
 from constants import ELEVATIONS, SEVEN_COLORS, P_ATM, SIGMA, SURFRAD, \
-    N_SPECIES, LI_TABLE1, LBL_LABELS
+    N_SPECIES, LI_TABLE1, LBL_LABELS, BANDS_V
 from corr26b import create_training_set, reduce_to_equal_pts_per_site, \
     add_solar_time, fit_linear
 from fig3 import shakespeare, ijhmt_to_tau, ijhmt_to_individual_e
@@ -1112,8 +1112,8 @@ def broadband_contribution():
     return None
 
 
-def tmp_spectral_band_contribution():  # TODO
-    # temporary, will need to update to 2019 values
+def spectral_band_contribution():
+    # create plot of spectral band contributions
     cmap = mpl.colormaps["Paired"]
     cmaplist = [cmap(i) for i in range(N_SPECIES)]
     species = list(LI_TABLE1.keys())[:-1]
@@ -1121,55 +1121,103 @@ def tmp_spectral_band_contribution():  # TODO
     tau = ijhmt_to_tau()
     x = tau.index.to_numpy()
 
-    fig, axes = plt.subplots(2, 7, figsize=(10, 3.5), sharex=True, sharey="row")
-    plt.subplots_adjust(wspace=0.0)
+    fs = 10
+    tick_fs = fs / 1.3
 
-    # for emissivity
+    fig, axes = plt.subplots(
+        4, 7, sharex=True, figsize=(8, 5), sharey="row",
+        height_ratios=[1, 4, 4, 4]
+    )
+    plt.subplots_adjust(wspace=0.0)
+    # plot e, t, d_opt per band
     for j in np.arange(1, 8):
-        ax = axes[0, j - 1]
-        ax.set_title(f"b{j}", loc="center")
-        df = ijhmt_to_individual_e(f"lc2019_esky_ij_b{j}.csv")
+        ax_e = axes[1, j - 1]  # emissivity (top)
+        ax_t = axes[2, j - 1]  # transmissivity (middle)
+        ax_d = axes[3, j - 1]  # optical depth  (bottom)
+
+        # ax_e.set_title(f"b{j}", loc="center")
+        e_ij = ijhmt_to_individual_e(f"lc2019_esky_ij_b{j}.csv")
+        t_ij = ijhmt_to_tau(f"lc2019_esky_ij_b{j}.csv")
         y_e = np.zeros(len(x))
+        y_t = np.ones(len(x))
+        y_d = np.zeros(len(x))
         for i in range(N_SPECIES):
-            y = df[species[i]].to_numpy()
-            ax.fill_between(
+            y = e_ij[species[i]].to_numpy()
+            ax_e.fill_between(
                 x, y_e, y_e + y, fc=cmaplist[i], label=LBL_LABELS[species[i]]
             )
             y_e += y
-        ax.grid(alpha=0.3)
-        ax.set_axisbelow(True)
-        ax.set_ylim(0, 0.4)
 
-    # for emissivity
-    for j in np.arange(1, 8):
-        ax = axes[1, j - 1]
-        df = ijhmt_to_tau(f"lc2019_esky_ij_b{j}.csv")
-        y_t = np.ones(len(x))
-        d = np.zeros(len(x))
-        for i in range(N_SPECIES):
-            y = df[species[i]].to_numpy()
-            dopt = -1 * np.log(y)
-            ax.fill_between(
-                x, d, d + dopt, fc=cmaplist[i], label=LBL_LABELS[species[i]]
+            y = t_ij[species[i]].to_numpy()
+            ax_t.fill_between(
+                x, y_t, y_t * y, fc=cmaplist[i], label=LBL_LABELS[species[i]]
             )
-            # ax.fill_between(
-            #     x, y_t, y_t * y, fc=cmaplist[i], label=LBL_LABELS[species[i]]
-            # )
-            d = d + dopt
             y_t = y_t * y
 
-        ax.grid(alpha=0.3)
-        ax.set_axisbelow(True)
-        ax.set_ylim(0, 0.4)
-        ax.set_xlabel("p$_w$ x 100", fontsize="small")
+            dopt = -1 * np.log(y)
+            ax_d.fill_between(
+                x, y_d, y_d + dopt, fc=cmaplist[i], label=LBL_LABELS[species[i]]
+            )
+            y_d = y_d + dopt
 
-    ax.set_xlim(x[0], x[-1])
-    xticks = [0.005, 0.010, 0.015, 0.020]
-    x_labels = [f"{i*100:.1f}" for i in xticks]
-    ax.set_xticks(xticks, labels=x_labels)
+        ax_e.grid(alpha=0.3)
+        ax_e.set_axisbelow(True)
 
-    axes[0, 0].set_ylabel(r"$\varepsilon$", fontsize="large")
-    axes[1, 0].set_ylabel(r"$d_{\rm{opt}}$", fontsize="large")
+        ax_t.grid(alpha=0.3)
+        ax_t.set_axisbelow(True)
+
+        ax_d.grid(alpha=0.3)
+        ax_d.set_axisbelow(True)
+        ax_d.set_xlabel("$p_w$ x 100")
+
+        # set up x-axis ticks and labels
+        ax_d.set_xlim(x[0], x[-1])
+        xticks = [0.005, 0.010, 0.015, 0.020]
+        x_labels = [f"{i * 100:.1f}" for i in xticks]
+        ax_d.set_xticks(xticks, labels=x_labels, fontsize=tick_fs/1.1)
+
+    # handle titles
+    band_features = [
+        "H$_2$O absorbing", "window", "CO$_2$ absorbing", "window",
+        "H$_2$O absorbing", "CO$_2$ absorbing", "window"
+    ]
+    unit = r"cm$^{-1}$"
+    for j in np.arange(1, 8):
+        ax = axes[0, j-1]
+        ax.tick_params(
+            labelbottom=False, labelleft=False, bottom=False, left=False)
+        ax.spines.right.set_visible(False)
+        ax.spines.left.set_visible(False)
+        ax.spines.top.set_visible(False)
+        ax.spines.bottom.set_visible(False)
+        b = f"b{j}"
+        s1, s2 = BANDS_V[b]
+        if b == "b1":
+            s1 = 0
+        title = f"({b})\n{s1}-{s2}{unit}\n({band_features[j-1]})"
+        ax.text(
+            0.5, 0.5, title, ha="center", va="center", transform=ax.transAxes,
+            fontsize=fs / 1.3
+        )
+
+    # set y-axis ticks and labels
+    axes[1, 0].set_ylabel(r"$\varepsilon$", fontsize=fs)
+    axes[1, 0].set_ylim(bottom=0)
+    axes[1, 0].set_yticks(np.linspace(0, 0.4, 5))
+    axes[1, 0].tick_params(axis="y", labelsize=tick_fs)
+
+    axes[2, 0].set_ylabel(r"$\tau$", fontsize=fs)
+    axes[2, 0].set_yticks(np.linspace(0.7, 1.1, 5))
+    axes[2, 0].tick_params(axis="y", labelsize=tick_fs)
+
+    axes[3, 0].set_ylabel(r"$d_{\rm{opt}}$", fontsize=fs)
+    axes[3, 0].set_ylim(bottom=0)
+    axes[3, 0].set_yticks(np.linspace(0, 0.4, 5))
+    axes[3, 0].tick_params(axis="y", labelsize=tick_fs)
+
+    # legend
+    axes[1, -1].legend(ncol=2, fontsize=tick_fs, labelspacing=0.2)
+    # plt.show()
     filename = os.path.join("figures", f"spectral_band_contribution.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     plt.close()
@@ -1218,44 +1266,8 @@ if __name__ == "__main__":
     # data_processing_table(create_csv=True)
     # tau_lc_vs_sr()
     # broadband_contribution()
-    # tmp_spectral_band_contribution()
+    spectral_band_contribution()
     print()
 
     # ff = pd.DataFrame(dict(x=x, y=y))
     # ff.loc[(ff.x >0.5) & (ff.y < 200)]
-
-    cmap = mpl.colormaps["Paired"]
-    cmaplist = [cmap(i) for i in range(N_SPECIES)]
-    species = list(LI_TABLE1.keys())[:-1]
-
-    tau = ijhmt_to_tau()
-    eps = ijhmt_to_individual_e()
-    x = tau.index.to_numpy()
-
-    tau_shp = evaluate_sr2021(x)
-    y_fit = C1_CONST + C2_CONST * np.sqrt(x)  # e
-
-    fig, ax = plt.subplots(figsize=(5.25, 3))
-    y_t = np.zeros(len(x))
-    j = 0
-    for gas in species:
-        y = eps[gas].to_numpy()
-        y = -1 * np.log(tau[gas].to_numpy())
-        ax.fill_between(x, y_t, y_t + y, label=LBL_LABELS[gas], fc=cmaplist[j])
-        # y_t = y_t * y
-        y_t = y_t + y
-        j += 1
-    ax.plot(x, -1 * np.log(tau_shp), c="0.3", ls="--", label="SR2021")
-    ax.plot(x, -1 * np.log(1-y_fit), c="0.1", ls="-", label="MC2023")
-    # set axis limits, labels, grid
-    ax.set_ylim(bottom=0)
-    ax.set_xlim(x[0], x[-1])
-    ax.grid(alpha=0.3)
-    ax.set_axisbelow(True)
-    ax.set_xlabel("p$_w$ [-]")
-    ax.set_ylabel("optical depth [-]")
-    ax.set_title(r"$d_{\rm{opt}}$", loc="left")
-    ax.legend(ncol=3, loc="lower right")
-
-    filename = os.path.join("figures", "dopt_lc_vs_sr_temp.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
