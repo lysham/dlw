@@ -328,7 +328,13 @@ def tmp_spectral_vs_wideband_after_tau_adj():
 
 
 def create_data_tables_from_lc2019():
+    """Given published values from LC2019 create pseudo-raw data
+    from correlation coefficeints
 
+    Returns
+    -------
+
+    """
     tab1 = LI_TABLE1
 
     tab2 = dict(
@@ -471,7 +477,6 @@ def sum_ei(e, i):
     """
     # df should be an individual e table
     return e.iloc[:, :i].sum(axis=1).to_numpy()
-
 
 
 if __name__ == "__main__":
