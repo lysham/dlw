@@ -1033,79 +1033,90 @@ def broadband_contribution():
     cmaplist = [cmap(i) for i in range(N_SPECIES)]
     species = list(LI_TABLE1.keys())[:-1]
 
-    tau = ijhmt_to_tau()
+    tau = ijhmt_to_tau()  # use default file (lc2019)
     eps = ijhmt_to_individual_e()
     x = tau.index.to_numpy()
 
+    fs = 12  # fontsize
+    tick_fs = fs / 1.3  # tick fontsize
+
     # set margins, size of figure
     fig_x0 = 0.05
-    fig_y0 = 0.35
-    fig_width = 0.42
-    fig_height = 0.65
-    wspace = 1 - (2 * fig_width) - (2 * fig_x0)
+    fig_y0 = 0.2
+    fig_width = 0.265
+    fig_height = 0.8
+    wspace = 1 - (3 * fig_width) - (3 * fig_x0)
     if wspace < 0:
         print("warning: overlapping figures")
 
-    fig = plt.figure(figsize=(6, 3.5))
+    fig = plt.figure(figsize=(7, 2.8))
     ax0 = fig.add_axes((fig_x0, fig_y0, fig_width, fig_height))
     ax1 = fig.add_axes(
         (fig_x0 + fig_width + wspace, fig_y0, fig_width, fig_height))
+    ax2 = fig.add_axes(
+        (fig_x0 + 2*fig_width + 2*wspace, fig_y0, fig_width, fig_height)
+    )
     j = 0
-    y_e = np.zeros(len(x))
-    y_t = np.zeros(len(x))
+    y_e = np.zeros(len(x))  # emissivity
+    y_t = np.ones(len(x))  # transmissivity
+    y_d = np.zeros(len(x))  # optical depth
     for gas in species:
         y = eps[gas].to_numpy()
         ax0.fill_between(x, y_e, y_e + y, label=LBL_LABELS[gas], fc=cmaplist[j])
         y_e = y_e + y
-        y = -1 * np.log(tau[gas].to_numpy())
-        ax1.fill_between(x, y_t, y_t + y, label=LBL_LABELS[gas], fc=cmaplist[j])
-        # y_t = y_t * y
-        y_t = y_t + y
+        y = tau[gas].to_numpy()  # tau
+        ax1.fill_between(x, y_t, y_t * y, label=LBL_LABELS[gas], fc=cmaplist[j])
+        y_t = y_t * y
+        y = -1 * np.log(y)  # d_opt
+        ax2.fill_between(x, y_d, y_d + y, label=LBL_LABELS[gas], fc=cmaplist[j])
+        y_d = y_d + y
         j += 1
     # set axis limits, labels, grid
+    i = 0
+    titles = [r"(a) $\varepsilon_{i}$", r"(b) $\tau_{i}$",
+              r"(c) $d_{\rm{opt}}$"]
+    for ax in [ax0, ax1, ax2]:
+        ax.set_xlim(x[0], x[-1])
+        ax.set_xlabel("$p_w$ x 100", fontsize=tick_fs)
+        ax.grid(alpha=0.3)
+        ax.set_axisbelow(True)
+        ax.set_title(titles[i], loc="left", fontsize=fs)
+        ax.tick_params(axis="both", labelsize=tick_fs)
+
+        # set up x-axis ticks and labels
+        ax.set_xlim(x[0], x[-1])
+        xticks = [0.005, 0.010, 0.015, 0.020]
+        x_labels = [f"{i * 100:.1f}" for i in xticks]
+        ax.set_xticks(xticks, labels=x_labels, fontsize=tick_fs)
+
+        i += 1
     ax0.set_ylim(0, 1)
-    ax1.set_ylim(bottom=0)
-    ax0.set_xlim(x[0], x[-1])
-    ax1.set_xlim(x[0], x[-1])
-    ax0.legend(ncol=2, loc="lower center")
-    ax0.grid(alpha=0.3)
-    ax0.set_axisbelow(True)
-    ax1.grid(alpha=0.3)
-    ax1.set_axisbelow(True)
-    ax0.set_xlabel("p$_w$ [-]")
-    ax1.set_xlabel("p$_w$ [-]")
-    ax0.set_title(r"(a) $\varepsilon_{i}$", loc="left")
-    ax1.set_title(r"(b) $d_{\rm{opt}}$", loc="left")
+    ax1.set_ylim(0, 1)
+    ax2.set_ylim(0, 2.2)
+    ax1.legend(ncol=1, loc="upper right", fontsize=tick_fs, labelspacing=0.2)
 
     # add secondary axes for relative humidity reference
-    ax2 = fig.add_axes((fig_x0, 0.2, fig_width, 0.0))
-    ax2.yaxis.set_visible(False)  # hide the yaxis
-    rh_lbls = [20, 40, 60, 80, 100]
-    t = 290
-    ax2.set_xlim(pw2rh(x[0], t), pw2rh(x[-1], t))
-    ax2.set_xticks(np.array(rh_lbls), labels=rh_lbls)
-    ax2.set_xlabel(f"RH [%] at {t} K")
-
-    ax3 = fig.add_axes((fig_x0, 0.05, fig_width, 0.0))
+    t = 288.0  # axis below first plot
+    ax3 = fig.add_axes((fig_x0, 0.03, fig_width, 0.0))
     ax3.yaxis.set_visible(False)  # hide the yaxis
-    t = 300
+    rh_lbls = [20, 40, 60, 80, 100]
     ax3.set_xlim(pw2rh(x[0], t), pw2rh(x[-1], t))
-    ax3.set_xticks(np.array(rh_lbls), labels=rh_lbls)
-    ax3.set_xlabel(f"RH [%] at {t} K")
+    ax3.set_xticks(np.array(rh_lbls), labels=rh_lbls, fontsize=tick_fs)
+    ax3.set_xlabel(f"RH [%] at {t} K", fontsize=tick_fs)
 
-    ax4 = fig.add_axes((fig_x0 + fig_width + wspace, 0.2, fig_width, 0.0))
+    t = 294.2  # axis below first plot
+    ax4 = fig.add_axes((fig_x0 + fig_width + wspace, 0.03, fig_width, 0.0))
     ax4.yaxis.set_visible(False)  # hide the yaxis
-    t = 290
     ax4.set_xlim(pw2rh(x[0], t), pw2rh(x[-1], t))
-    ax4.set_xticks(np.array(rh_lbls), labels=rh_lbls)
-    ax4.set_xlabel(f"RH [%] at {t} K")
+    ax4.set_xticks(np.array(rh_lbls), labels=rh_lbls, fontsize=tick_fs)
+    ax4.set_xlabel(f"RH [%] at {t} K", fontsize=tick_fs)
 
-    ax4 = fig.add_axes((fig_x0 + fig_width + wspace, 0.05, fig_width, 0.0))
-    ax4.yaxis.set_visible(False)  # hide the yaxis
-    t = 300
-    ax4.set_xlim(pw2rh(x[0], t), pw2rh(x[-1], t))
-    ax4.set_xticks(np.array(rh_lbls), labels=rh_lbls)
-    ax4.set_xlabel(f"RH [%] at {t} K")
+    t = 300.0  # axis below first plot
+    ax5 = fig.add_axes((fig_x0 + 2 * fig_width + 2 * wspace, 0.03, fig_width, 0.0))
+    ax5.yaxis.set_visible(False)  # hide the yaxis
+    ax5.set_xlim(pw2rh(x[0], t), pw2rh(x[-1], t))
+    ax5.set_xticks(np.array(rh_lbls), labels=rh_lbls, fontsize=tick_fs)
+    ax5.set_xlabel(f"RH [%] at {t} K", fontsize=tick_fs)
 
     filename = os.path.join("figures", "broadband_contribution.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
@@ -1265,8 +1276,8 @@ if __name__ == "__main__":
     # print_results_table()
     # data_processing_table(create_csv=True)
     # tau_lc_vs_sr()
-    # broadband_contribution()
-    spectral_band_contribution()
+    broadband_contribution()
+    # spectral_band_contribution()
     print()
 
     # ff = pd.DataFrame(dict(x=x, y=y))
