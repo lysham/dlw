@@ -1085,7 +1085,7 @@ def broadband_contribution():
 
         # set up x-axis ticks and labels
         ax.set_xlim(x[0], x[-1])
-        xticks = [0.005, 0.010, 0.015, 0.020]
+        xticks = [0.005, 0.010, 0.015, 0.020, 0.025]
         x_labels = [f"{i * 100:.1f}" for i in xticks]
         ax.set_xticks(xticks, labels=x_labels, fontsize=tick_fs)
 
@@ -1096,26 +1096,36 @@ def broadband_contribution():
     ax1.legend(ncol=1, loc="upper right", fontsize=tick_fs, labelspacing=0.2)
 
     # add secondary axes for relative humidity reference
+    rh_ticks = np.array([0, 20, 40, 60, 80, 100])
+
     t = 288.0  # axis below first plot
     ax3 = fig.add_axes((fig_x0, 0.03, fig_width, 0.0))
     ax3.yaxis.set_visible(False)  # hide the yaxis
-    rh_lbls = [20, 40, 60, 80, 100]
+    equiv_pw = np.array([rh2pw(i, t) for i in rh_ticks])
+    idx = (equiv_pw > x[0]) & (equiv_pw < x[-1])
+    ax3.set_xlim(x[0], x[-1])
     ax3.set_xlim(pw2rh(x[0], t), pw2rh(x[-1], t))
-    ax3.set_xticks(np.array(rh_lbls), labels=rh_lbls, fontsize=tick_fs)
+    ax3.set_xticks(rh_ticks[idx], labels=rh_ticks[idx], fontsize=tick_fs)
     ax3.set_xlabel(f"RH [%] at {t} K", fontsize=tick_fs)
 
     t = 294.2  # axis below first plot
     ax4 = fig.add_axes((fig_x0 + fig_width + wspace, 0.03, fig_width, 0.0))
     ax4.yaxis.set_visible(False)  # hide the yaxis
+    equiv_pw = np.array([rh2pw(i, t) for i in rh_ticks])
+    idx = (equiv_pw > x[0]) & (equiv_pw < x[-1])
+    ax4.set_xlim(x[0], x[-1])
     ax4.set_xlim(pw2rh(x[0], t), pw2rh(x[-1], t))
-    ax4.set_xticks(np.array(rh_lbls), labels=rh_lbls, fontsize=tick_fs)
+    ax4.set_xticks(rh_ticks[idx], labels=rh_ticks[idx], fontsize=tick_fs)
     ax4.set_xlabel(f"RH [%] at {t} K", fontsize=tick_fs)
 
     t = 300.0  # axis below first plot
     ax5 = fig.add_axes((fig_x0 + 2 * fig_width + 2 * wspace, 0.03, fig_width, 0.0))
     ax5.yaxis.set_visible(False)  # hide the yaxis
+    equiv_pw = np.array([rh2pw(i, t) for i in rh_ticks])
+    idx = (equiv_pw > x[0]) & (equiv_pw < x[-1])
+    ax5.set_xlim(x[0], x[-1])
     ax5.set_xlim(pw2rh(x[0], t), pw2rh(x[-1], t))
-    ax5.set_xticks(np.array(rh_lbls), labels=rh_lbls, fontsize=tick_fs)
+    ax5.set_xticks(rh_ticks[idx], labels=rh_ticks[idx], fontsize=tick_fs)
     ax5.set_xlabel(f"RH [%] at {t} K", fontsize=tick_fs)
 
     filename = os.path.join("figures", "broadband_contribution.png")
@@ -1276,7 +1286,7 @@ if __name__ == "__main__":
     # print_results_table()
     # data_processing_table(create_csv=True)
     # tau_lc_vs_sr()
-    broadband_contribution()
+    # broadband_contribution()
     # spectral_band_contribution()
     print()
 
