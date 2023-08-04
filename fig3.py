@@ -182,316 +182,6 @@ def import_ijhmt_df(filename):
     return df
 
 
-def plot_fig3():
-    # graph fig3 from data Mengying provided
-    df = import_ijhmt_df("fig3_esky_i.csv")
-    cmap = mpl.colormaps["Paired"]
-    cmaplist = [cmap(i) for i in range(N_SPECIES)]
-    fig, ax = plt.subplots()
-    x = df.pw.to_numpy()
-    species = list(LI_TABLE1.keys())[:-1]
-    species = species[::-1]
-    j = 0
-    for i in species:
-        if i == "H2O":
-            y = i
-        else:
-            y = f"p{i}"
-        ax.fill_between(x, 0, df[y].to_numpy(), label=i, fc=cmaplist[-(j + 1)])
-        j += 1
-    ax.set_ylim(bottom=0)
-    ax.set_xlim(x[0], x[-1])
-    ax.set_xlabel("pw")
-    ax.set_ylabel(r"$\varepsilon$")
-    plt.show()
-    return None
-
-
-def plot_fig3_ondata(s, sample):
-    """Plot esky_c fits over sampled clear sky site data with altitude
-    correction applied. Colormap by solar time.
-
-    Parameters
-    ----------
-    s : str
-        SURFRAD site code
-    sample : [0.05, 0.25]
-        If larger than 10%, temperature is filtered to +/- 2K.
-
-    Returns
-    -------
-    None
-    """
-    site = import_cs_compare_csv("cs_compare_2012.csv", site=s)
-    site = site.loc[site.zen < 80].copy()
-    site["pp"] = site.pw_hpa * 100 / P_ATM
-
-    site = site.sample(frac=sample, random_state=96)
-    if sample > 0.1:  # apply filter to temperature
-        site = site.loc[abs(site.t_a - 294.2) < 2]
-        title = f"{s} 2012 {sample:.0%} sample, zen<80, +/-2K"
-    else:
-        title = f"{s} 2012 {sample:.0%} sample, zen<80"
-    tmp = pd.DatetimeIndex(site.solar_time.copy())
-    site["solar_tod"] = tmp.hour + (tmp.minute / 60) + (tmp.second / 3600)
-    de_p = site.de_p.values[0]
-
-    df = import_ijhmt_df("fig3_esky_i.csv")
-    x = df.pw.to_numpy()
-    df["total"] = df.pOverlaps
-    df["pred_y"] = 0.6376 + (1.6026 * np.sqrt(x))
-    df["best"] = 0.6376 + (1.6191 * np.sqrt(x))
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.grid(alpha=0.3)
-    c = ax.scatter(
-        site.pp, site.e_act_s, c=site.solar_tod, cmap="seismic",
-        vmin=5, vmax=19, alpha=0.8,
-    )
-    ax.plot(x, df.total + de_p, label="LBL")
-    ax.plot(x, df.pred_y + de_p, ls="--", label="(0.6376, 1.6026)")
-    ax.plot(x, df.best + de_p, ls=":", label="(0.6376, 1.6191)")
-    ax.legend()
-    fig.colorbar(c, label="solar time")
-    ax.set_ylabel("effective sky emissivity [-]")
-    ax.set_xlabel("p$_w$ [-]")
-    ax.set_xlim(0, 0.03)
-    ax.set_ylim(0.60, 1.0)
-    ax.set_axisbelow(True)
-    ax.set_title(title, loc="left")
-    filename = os.path.join("figures", "fig3_ondata.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
-    plt.close()
-    return None
-
-
-def plot_fig3_quantiles(site=None, yr=None, all_sites=False, tau=False,
-                        temperature=False, shk=False, pct_clr_min=0.3,
-                        pressure_bins=20, violin=False):
-    # DISCLAIMER: tau may need to be adjusted since s["x"] is now defined
-    #   using three_c_fit to solve for c1,c2, and c3 at once
-
-    # Create dataset for training
-    s = create_training_set(
-        year=yr, temperature=temperature,
-        cs_only=True, filter_pct_clr=0.05, filter_npts_clr=0.2, drive="server4"
-    )
-    s = reduce_to_equal_pts_per_site(s)  # reduce to num pts in common
-
-    # import ijhmt data to plot
-    df = import_ijhmt_df("fig3_esky_i.csv")
-    x_lbl = df.pw.to_numpy()
-    df["total"] = df.pOverlaps
-
-    if tau:
-        s["transmissivity"] = 1 - s.y  # create set will create y col (e_act)
-        s["y"] = -1 * np.log(s.transmissivity)
-        y_lbl = -1 * np.log(1 - df.total)
-        ylabel = "optical depth [-]"
-        # ymin, ymax = 0.8, 3.0
-    else:
-        y_lbl = df.total
-        ylabel = "effective sky emissivity [-]"
-        # ymin, ymax = 0.60, 1.0
-    labels = ["Q05-95", "Q25-75", "Q40-60"]
-    quantiles = [0.05, 0.25, 0.4, 0.6, 0.75, 0.95]
-    pressure_bins = pressure_bins
-
-    # Prepare data for quantiles plot
-    c1, c2, c3, xq, yq = prep_plot_data_for_quantiles_plot(
-        s, pressure_bins, quantiles, violin=violin
-    )
-    y_fit = c1 + c2 * np.sqrt(x_lbl)
-
-    if shk:  # if using only one site, apply shakespeare model
-        pw = (x_lbl * P_ATM) / 100  # convert back to partial pressure [hPa]
-        pa_hpa = s.P_rep.values[0] / 100
-        w = 0.62198 * pw / (pa_hpa - pw)
-        q_values = w / (1 + w)
-        he = s.he.values[0]
-
-        lat1 = SURFRAD[site]["lat"]
-        lon1 = SURFRAD[site]["lon"]
-        h1, spline = shakespeare(lat1, lon1)
-
-        tau_shakespeare = []
-        for q1 in q_values:
-            tau_shakespeare.append(spline.ev(q1, he).item())
-        # don't need to make any altitude adjustments in shakespeare
-        if tau:  # optical depth
-            y_sp = np.array(tau_shakespeare)
-        else:  # emissivity
-            y_sp = (1 - np.exp(-1 * np.array(tau_shakespeare)))
-
-    # set title and filename
-    suffix = "_tau" if tau else ""
-    suffix += "_ta" if temperature else ""
-    suffix += f"_clr{pct_clr_min*100:.0f}"
-    suffix += f"_{pressure_bins}"
-    suffix += f"_violin" if violin else ""
-    title_suffix = r", T~T$_0$" if temperature else ""
-    title_suffix += f" day_clr>{pct_clr_min:.0%}"
-    if len(yr) == 1:
-        str_name = f"{yr[0]}"
-        name = yr[0]
-    else:
-        str_name = f"{yr[0]} - {yr[-1]}"
-        name = f"{yr[0]}_{yr[-1]}"
-
-    if all_sites:
-        filename = os.path.join("figures", f"fig3{name}_q{suffix}.png")
-        title = f"SURFRAD {str_name} (n={s.shape[0]:,}) ST>8" + title_suffix
-    else:
-        filename = os.path.join("figures", f"fig3{name}_{site}_q{suffix}.png")
-        title = f"{site} {str_name} (n={s.shape[0]:,}) ST>8" + title_suffix
-
-    # Create figure
-    if violin:
-        violin_figure(
-            x_lbl, y_lbl, y_fit, xq, yq, c1, c2, c3,
-            title, filename, showmeans=True, showextrema=False
-        )
-    else:
-        quantiles_figure(
-            x_lbl, y_lbl, y_fit, c1, c2, c3, xq, yq, ylabel,
-            title, filename, quantiles, labels
-        )
-
-    return None
-
-
-def prep_plot_data_for_quantiles_plot(df, pressure_bins, quantiles, violin=False):
-    # PREPARE PLOTTING DATA
-    df["pp"] = df.pw_hpa * 100 / P_ATM
-    df["quant"] = pd.qcut(df.pp, pressure_bins, labels=False)
-    # find linear fit
-    c1, c2, c3 = three_c_fit(df)
-    print(c1, c2, c3)
-    df["de_p"] = c3 * (P_ATM / 100000) * (np.exp(-1 * df.elev / 8500) - 1)
-    df["y"] = df.y - df.de_p  # revise y and bring to sea level
-
-    # Find quantile data per bin
-    xq = np.zeros(pressure_bins)
-    if violin:
-        yq = []
-    else:
-        yq = np.zeros((pressure_bins, len(quantiles)))
-    for i, group in df.groupby(df.quant):
-        xq[i] = group.pp.median()
-        if violin:
-            yq.append(group.y.to_numpy())
-        else:
-            for j in range(len(quantiles)):
-                yq[i, j] = group.y.quantile(quantiles[j])
-    return c1, c2, c3, xq, yq
-
-
-def quantiles_figure(x, y, y2, c1, c2, c3, xq, yq, ylabel, title,
-                     filename, quantiles, labels, y_sp=None):
-    clrs_g = ["#c8d5b9", "#8fc0a9", "#68b0ab", "#4a7c59", "#41624B"]
-    clrs_p = ["#C9A6B7", "#995C7A", "#804D67", "663D52", "#4D2E3E"]
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.grid(alpha=0.3)
-    ax.plot(x, y, label="LBL", c="k")
-    ax.plot(x, y2, label="fit", ls="--", lw=1, c="g")
-    if y_sp is not None:
-        ax.plot(x, y_sp, label="Shakespeare", c="0.2", ls=":")
-    for i in range(int(len(quantiles) / 2)):
-        t = int(-1 * (i + 1))
-        ax.fill_between(
-            xq, yq[:, i], yq[:, t], alpha=0.3, label=labels[i],
-            fc=clrs_g[i], ec="0.9",
-        )
-        # to make smoother, use default step setting
-    text = r"$\varepsilon$ = " + f"{c1} + {c2}" + r"$\sqrt{p_w}$" + \
-           f" + {c3}(" + r"$e^{-z/H}$" + " - 1)"
-    ax.text(
-        0.95, 0.05, s=text, transform=ax.transAxes, ha="right", va="bottom",
-        backgroundcolor="1.0", alpha=0.8
-    )
-    ax.set_xlabel("p$_w$ [-]")
-    ax.set_xlim(0, 0.03)
-    ax.set_ylim(0.6, 1.0)
-    ax.set_ylabel(ylabel)
-    ax.legend(ncols=3, loc="upper left")
-    ax.set_axisbelow(True)
-    ax.set_title(title, loc="left")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
-    return None
-
-
-def violin_figure(x, y, y2, xq, yq, c1, c2, c3, title, filename,
-                  showmeans=True, showextrema=False):
-    clrs_g = ["#c8d5b9", "#8fc0a9", "#68b0ab", "#4a7c59", "#41624B"]
-
-    showmedians = False if showmeans else True
-    parts_list = []
-    if showmeans:
-        parts_list.append("cmeans")
-    if showmedians:
-        parts_list.append("cmedians")
-    if showextrema:
-        parts_list.append("cmins")
-        parts_list.append("cmaxes")
-        parts_list.append("cbars")
-
-    fig, (ax, ax0) = plt.subplots(2, 1, figsize=(8, 5),
-                                  sharex=True, height_ratios=[41, 2])
-    fig.subplots_adjust(hspace=0.05)
-    parts = ax.violinplot(
-        yq, xq, showmeans=showmeans,
-        showextrema=showextrema,
-        showmedians=showmedians,
-        widths=np.diff(xq).min(),
-    )
-    ax.plot(x, y, label="LBL", c="k")
-    ax.plot(x, y2, label="fit", ls="--", lw=1, c=clrs_g[-1])
-    ax.legend()
-
-    for pc in parts['bodies']:
-        pc.set_facecolor(clrs_g[1])
-        pc.set_edgecolor(clrs_g[1])
-    for p in parts_list:
-        vp = parts[p]
-        vp.set_edgecolor(clrs_g[2])
-
-    ax0.set_ylim(0, 0.02)
-    ax.set_ylim(0.59, 1.0)
-    # hide the spines between ax and ax2
-    ax.spines.bottom.set_visible(False)
-    ax0.xaxis.tick_bottom()
-    ax0.spines.top.set_visible(False)
-    ax.xaxis.tick_top()
-    ax0.tick_params(labeltop=False)  # don't put tick labels at the top
-    ax0.set_yticks([0])
-
-    # Draw lines indicating broken axis
-    d = .5  # proportion of vertical to horizontal extent of the slanted line
-    kwargs = dict(marker=[(-1, -d), (1, d)], markersize=12,
-                  linestyle="none", color='k', mec='k', mew=1, clip_on=False)
-    ax.plot([0, 1], [0, 0], transform=ax.transAxes, **kwargs)
-    ax0.plot([0, 1], [1, 1], transform=ax0.transAxes, **kwargs)
-    ax0.set_xlim(0, 0.025)
-    ax0.set_xlabel("p$_w$ [-]")
-    ax.set_ylabel("effective sky emissivity [-]")
-
-    text = r"$\varepsilon$ = " + f"{c1} + {c2}" + r"$\sqrt{p_w}$" + \
-           f" + {c3}(" + r"$e^{-z/H}$" + " - 1)"
-    ax.text(
-        0.95, 0.0, s=text, transform=ax.transAxes, ha="right", va="bottom",
-        backgroundcolor="1.0", alpha=0.8
-    )
-
-    ax.grid(True, alpha=0.3)
-    ax0.grid(True, alpha=0.3)
-    ax.set_axisbelow(True)
-    ax0.set_axisbelow(True)
-    ax.set_title(title, loc="left")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
-    return None
-
-
 def ijhmt_to_tau(filename="lc2019_esky_i.csv"):
     df = import_ijhmt_df(filename=filename)
     df = df.set_index("pw")
@@ -523,90 +213,6 @@ def ijhmt_to_individual_e(filename="lc2019_esky_i.csv"):
         if c[0] == "p":
             df = df.rename(columns={c: c[1:]})
     return df
-
-
-def plot_fig3_tau():
-    # two subplots showing wideband individual and cumulative contributions
-    lbl = [
-        'H2O', 'CO2', 'O3', 'Aerosols', 'N2O', 'CH4', 'O2', 'N2', 'Overlaps'
-    ]
-    cmap = mpl.colormaps["Paired"]
-    cmaplist = [cmap(i) for i in range(len(lbl))]
-
-    df = ijhmt_to_tau("fig3_esky_i.csv")  # tau, first p removed
-    x = df.index.to_numpy()
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5), sharex=True)
-    i = 0
-    y_ref = np.ones(len(x))
-    for s in lbl:
-        col = s if i == 0 else f"p{s}"
-        ax1.plot(x, df[col], label=s, c=cmaplist[i])
-        ax2.plot(x, y_ref * df[col], label=s, c=cmaplist[i])
-        y_ref = y_ref * df[col]
-        i += 1
-    ax1.plot(x, y_ref, label="total", c="0.0", ls="--")
-    ax2.plot(x, y_ref, label="total", c="0.0", ls="--")
-    ax1.set_title("Individual contributions", loc="left")
-    ax2.set_title("Cumulative transmissivity", loc="left")
-    ax1.set_xlim(x[0], x[-1])
-    ax1.set_xlabel("$p_w$ [-]")
-    ax2.set_xlabel("$p_w$ [-]")
-    ax1.set_ylabel("transmissivity [-]")
-    ax2.set_ylabel("transmissivity [-]")
-    ax1.set_ylim(0, 1.1)
-    ax2.set_ylim(0, 0.5)
-    ax2.grid(alpha=0.3)
-    ax1.grid(alpha=0.3)
-    ax2.legend(ncol=2, loc="upper right")
-    # plt.show()
-    filename = os.path.join("figures", "fig3_tau.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
-    return None
-
-
-def plot_fit3_dopt():
-    # single plot showing d_opt vs pw
-    lbl = [
-        'H2O', 'CO2', 'O3', 'Aerosols', 'N2O', 'CH4', 'O2', 'N2', 'Overlaps'
-    ]
-    labels = [
-        'H$_2$O', 'CO$_2$', 'O$_3$', 'aerosols',
-        'N$_2$O', 'CH$_4$', 'O$_2$', 'N$_2$', 'overlaps'
-    ]
-    cmap = mpl.colormaps["Paired"]
-    cmaplist = [cmap(i) for i in range(len(lbl))]
-
-    # df = ijhmt_to_tau("fig3_esky_i.csv")
-    df = ijhmt_to_tau("fig5_esky_ij_b4.csv")  # tau, first p removed
-    # df = ijhmt_to_individual_e("fig3_esky_i.csv")
-    x = df.index.to_numpy()
-
-    fig, ax = plt.subplots(figsize=(5, 5), sharex=True)
-    i = 0
-    y_ref = np.zeros(len(x))
-    # y_ref = np.ones(len(x))
-    for s in lbl:
-        y = -1 * np.log(df[s])
-        # y = df[s]
-        ax.plot(x, y, label=labels[i], c=cmaplist[i])
-        # y_ref = y_ref * y  # transmissivity
-        y_ref += y  # dopt or emissivity
-        i += 1
-    ax.plot(x, y_ref, label="total", c="0.0", ls="--")
-    ax.set_title("Individual contributions (band 4)", loc="left")
-    ax.set_xlim(x[0], x[-1])
-    ax.set_xlabel("$p_w$ [-]")
-    ax.set_ylabel(r"$d_{\rm{opt}}$ [-]")
-    # ax.set_ylabel("emissivity [-]")
-    ax.set_ylim(0, 0.02)
-    ax.grid(alpha=0.3)
-    ax.legend(ncol=2, loc="upper right")
-    plt.tight_layout()
-    plt.show()
-    filename = os.path.join("figures", "temp.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
-    return None
 
 
 def plot_tau_spectral_vs_wideband(tau=True, part="total"):
@@ -657,6 +263,67 @@ def plot_tau_spectral_vs_wideband(tau=True, part="total"):
     filename = os.path.join("figures", f"{s}_{i}_{part}.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     plt.close()
+    return None
+
+
+def tmp_spectral_vs_wideband_after_tau_adj():
+
+    part = "O3"
+    species = list(LI_TABLE1.keys())
+    df = ijhmt_to_tau("fig3_esky_i.csv")
+    plot_title = "transmissivity"
+    legend_label = r"$\tau_{ij}$ over $j$"
+    s = "tau"  # for figure name
+    x = df.index.to_numpy()
+    y = df[part].to_numpy()
+
+    df = ijhmt_to_individual_e("fig3_esky_i.csv")
+    ye = df[part].to_numpy()
+    m = 7  # number of bands
+    idx = species.index(part)
+    rhs = m - sum_ei(df, idx + 1)  # i-1 (+1 for index=0)
+    # term2 = -1 * sum_ei(df, idx)
+    term2 = -1 * y * sum_ei(df, idx)
+
+    y_b = np.zeros(len(x))  # tau_ij
+    d_opt = np.zeros(len(x))
+    lhs = np.zeros(len(x))
+    term1 = np.zeros(len(x))
+    for i in np.arange(1, 8):
+        df = ijhmt_to_tau(f"fig5_esky_ij_b{i}.csv")
+        t_ij = df[part].to_numpy()
+        d_opt += -1 * np.log(t_ij)
+        y_b = y_b + t_ij
+        df = ijhmt_to_individual_e(f"fig5_esky_ij_b{i}.csv")
+        lhs = lhs + (t_ij * (1 - sum_ei(df, idx)))
+        term1 += (t_ij * sum_ei(df, idx))
+
+    # if tau:
+    y_b = y_b - 6  # +1 -7 bands
+
+    fig, ax = plt.subplots()
+    ax.plot(x, y_b, lw=2, label=legend_label)
+    ax.plot(x, y, ls="--", label="wideband")
+    ax.plot(x, 1 - ye, ls=":", label="1 - e_i")
+    # ax.fill_between(x, 1-ye, 1-ye+adj, alpha=0.5)
+    # f = (term1 + term2).mean()
+    # ax.fill_between(x, y, y +f, alpha=0.5)
+    ax.fill_between(x, y, y + term1 + term2, alpha=0.25, label="adjustment")
+    # ax.plot(x, rhs - 6, "rs", label="RHS")
+    # ax.plot(x, lhs - 6, "g*", label="LHS")
+    # ax.plot(x, np.exp(-1 * d_opt), "s", c="r", label="sum of d$_{opt}$ over $j$")
+    ax.set_title(plot_title + f" ({part})", loc="left")
+    if part == "total":
+        i = 10
+    else:
+        species = list(LI_TABLE1.keys())[:-1]
+        i = species.index(part)
+    ax.set_xlabel("p$_w$ [-]")
+    ax.legend()
+    # ax.set_ylim(0, 1.1)
+    ax.grid(alpha=0.3)
+    filename = os.path.join("figures", f"show_tij_to_ti_{part}.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 
 
@@ -806,119 +473,11 @@ def sum_ei(e, i):
     return e.iloc[:, :i].sum(axis=1).to_numpy()
 
 
-if __name__ == "__main__":
-    print()
-    # t_a = 294.2  # [K]
-    # rh = 50  # %
-    # pw = get_pw_norm(t_a, rh)
 
-    # plot_fig3_ondata("FPK", sample=0.05)
-    # plot_fig3_quantiles(
-    #     yr=[2010, 2011, 2012, 2013], all_sites=True, tau=False,
-    #     temperature=True, pct_clr_min=0.5, pressure_bins=5, violin=True
-    # )
-    # plot_fig3_quantiles(
-    #     yr=[2015], tau=False,
-    #     temperature=False, pct_clr_min=0.05, pressure_bins=10, violin=True
-    # )
+if __name__ == "__main__":
     print()
     # df = import_ijhmt_df("fig3_esky_i.csv")  # original
     # df = ijhmt_to_tau("fig5_esky_ij_b4.csv")  # tau, first p removed
     # df = ijhmt_to_individual_e("fig3_esky_i.csv")  # e, disaggregated
 
     # create_data_tables_from_lc2019()
-    # plot_wide_vs_banded(tau=True, part="CO2")
-
-    # # calculate band weights for transmissivity
-    # t = 294.2
-    # lw_const = integrate.quad(func=planck_lambda, a=4, b=100000, args=(t,))[0]
-    # bw = []
-    # for i in np.arange(1, 8):
-    #     l1, l2 = BANDS_L[f"b{i}"]
-    #     out = integrate.quad(func=planck_lambda, a=l1, b=l2, args=(t,))[0]
-    #     bw.append(out / lw_const)
-    # bw = np.array(bw)
-
-    df = ijhmt_to_individual_e("lc2019_esky_i.csv")
-    x = df.index.to_numpy()
-    e_total = df["total"].to_numpy()  # e_total
-    df = ijhmt_to_tau("lc2019_esky_i.csv")
-    t_total = df["total"].to_numpy()  # t_total
-
-    species = list(df.columns[:-1])
-    part = "O3"
-
-    # e_j = np.zeros(len(x))
-
-    # e_i = ijhmt_to_individual_e("lc2019_esky_i.csv")
-    # t_i = ijhmt_to_tau("lc2019_esky_i.csv")
-    # for part in species[2:]:
-    #     # part = "total"
-    #     ii = species.index(part)
-    #     term1 = (1-t_i[part].to_numpy())
-    #     term2 = sum_ei(e_i, ii-1)
-    #     # term2 = e_i[part].to_numpy()
-    #     lhs = t_i[part].to_numpy() + (term1*term2)
-    #     t_j = np.ones(len(x))
-    #     for j in np.arange(1, 8):
-    #         tau = ijhmt_to_tau(f"lc2019_esky_ij_b{j}.csv")
-    #         t_j = t_j * tau[part].to_numpy()
-    #     compare = lhs - t_j
-    #     print(part, compare.max(), compare.mean())
-
-    part = "O3"
-
-    df = ijhmt_to_tau("fig3_esky_i.csv")
-    plot_title = "transmissivity"
-    legend_label = r"$\tau_{ij}$ over $j$"
-    s = "tau"  # for figure name
-    x = df.index.to_numpy()
-    y = df[part].to_numpy()
-
-    df = ijhmt_to_individual_e("fig3_esky_i.csv")
-    ye = df[part].to_numpy()
-    m = 7  # number of bands
-    idx = species.index(part)
-    rhs = m - sum_ei(df, idx + 1)  # i-1 (+1 for index=0)
-    # term2 = -1 * sum_ei(df, idx)
-    term2 = -1 * y * sum_ei(df, idx)
-
-    y_b = np.zeros(len(x))  # tau_ij
-    d_opt = np.zeros(len(x))
-    lhs = np.zeros(len(x))
-    term1 = np.zeros(len(x))
-    for i in np.arange(1, 8):
-        df = ijhmt_to_tau(f"fig5_esky_ij_b{i}.csv")
-        t_ij = df[part].to_numpy()
-        d_opt += -1 * np.log(t_ij)
-        y_b = y_b + t_ij
-        df = ijhmt_to_individual_e(f"fig5_esky_ij_b{i}.csv")
-        lhs = lhs + (t_ij * (1 - sum_ei(df, idx)))
-        term1 += (t_ij * sum_ei(df, idx))
-
-    # if tau:
-    y_b = y_b - 6  # +1 -7 bands
-
-    fig, ax = plt.subplots()
-    ax.plot(x, y_b, lw=2, label=legend_label)
-    ax.plot(x, y, ls="--", label="wideband")
-    ax.plot(x, 1 - ye, ls=":", label="1 - e_i")
-    # ax.fill_between(x, 1-ye, 1-ye+adj, alpha=0.5)
-    # f = (term1 + term2).mean()
-    # ax.fill_between(x, y, y +f, alpha=0.5)
-    ax.fill_between(x, y, y + term1 + term2, alpha=0.25, label="adjustment")
-    # ax.plot(x, rhs - 6, "rs", label="RHS")
-    # ax.plot(x, lhs - 6, "g*", label="LHS")
-    # ax.plot(x, np.exp(-1 * d_opt), "s", c="r", label="sum of d$_{opt}$ over $j$")
-    ax.set_title(plot_title + f" ({part})", loc="left")
-    if part == "total":
-        i = 10
-    else:
-        species = list(LI_TABLE1.keys())[:-1]
-        i = species.index(part)
-    ax.set_xlabel("p$_w$ [-]")
-    ax.legend()
-    # ax.set_ylim(0, 1.1)
-    ax.grid(alpha=0.3)
-    filename = os.path.join("figures", f"show_tij_to_ti_{part}.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
