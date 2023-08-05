@@ -1245,31 +1245,60 @@ def spectral_band_contribution():
     return None
 
 
-def print_band_coefs():
-    # print coefficients per band using spectral model for H2O and CO2 only
-    df = ijhmt_to_tau("lc2019_esky_i.csv")  # adjust fit_df definition
+def print_spectral_dopt_coefs():
+    # print coefficients per band using spectral model
+    df = ijhmt_to_tau("lc2019_esky_i.csv")
     x = df.index.to_numpy()
+
+    species = list(LI_TABLE1.keys())[:-1]
     for j in np.arange(1, 8):
         y_ref = np.zeros(len(x))
         filename = f"lc2019_esky_ij_b{j}.csv"
         df = ijhmt_to_tau(filename)
-        for s in ["H2O", "CO2"]:
+        # define whether to fit to sqrt(pw), tanh(pw), or pw
+        if j == 2:
+            x_input = np.tanh(270 * x)
+        elif j == 3:
+            x_input = np.sqrt(x)
+        else:
+            x_input = x
+        print("")
+        for s in species:
             y = df[s].to_numpy()
             dopt = -1 * np.log(y)
             y_ref = y_ref + dopt  # cumulative product in the band
-            print("\n", f"b{j}", s)
             if np.std(dopt) < 0.001:  # make constant
-                print(f"c1={np.mean(dopt).round(3)}")
+                print(f"b{j}", s, f"c1={np.mean(dopt).round(3)}")
             else:
                 # note whether x=x or x=sqrt(x), y=y or y=-1*np.log(y)
-                fit_df = pd.DataFrame(dict(x=x, y=dopt))
+                print(f"b{j}", s)
+                fit_df = pd.DataFrame(dict(x=x_input, y=dopt))
                 fit_linear(fit_df, print_out=True)
-        print("\nTOTAL")
-        if np.std(y_ref) < 0.001:
+        print(f"b{j}", "TOTAL")
+        if np.std(y_ref) < 0.0001:
             print(f"c1={np.mean(y_ref).round(3)}")
         else:
-            fit_df = pd.DataFrame(dict(x=x, y=y_ref))
+            fit_df = pd.DataFrame(dict(x=x_input, y=y_ref))
             fit_linear(fit_df, print_out=True)
+    return None
+
+
+def print_broadband_dopt_coefs():
+    df = ijhmt_to_tau("lc2019_esky_i.csv")
+    x = df.index.to_numpy()
+
+    species = list(LI_TABLE1.keys())
+    for s in species:
+        y = df[s].to_numpy()
+        dopt = -1 * np.log(y)
+        if np.std(dopt) < 0.001:  # make constant
+            print(s, f"c1={np.mean(dopt).round(3)}")
+        else:
+            # note whether x=x or x=sqrt(x), y=y or y=-1*np.log(y)
+            print(s)
+            fit_df = pd.DataFrame(dict(x=x, y=dopt))
+            fit_linear(fit_df, print_out=True)
+        print()
     return None
 
 
@@ -1288,6 +1317,8 @@ if __name__ == "__main__":
     # tau_lc_vs_sr()
     # broadband_contribution()
     # spectral_band_contribution()
+    # print_spectral_dopt_coefs()
+    print_broadband_dopt_coefs()
     print()
 
     # ff = pd.DataFrame(dict(x=x, y=y))
