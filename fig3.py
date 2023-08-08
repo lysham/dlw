@@ -486,3 +486,19 @@ if __name__ == "__main__":
     # df = ijhmt_to_individual_e("fig3_esky_i.csv")  # e, disaggregated
 
     # create_data_tables_from_lc2019()
+
+    # filename = "lc2019_esky_ij_b4.csv"
+    # tau = ijhmt_to_tau(filename)
+    # eps = ijhmt_to_individual_e(filename)
+    #
+    # pw = 0.01
+    # gas = "CO2"
+    # e_ij = np.interp(pw, eps.index, eps[gas])
+    # e_total = np.interp(pw, eps.index, eps.total)
+    # t_ij = np.interp(pw, tau.index, tau[gas])
+    # t_total = np.interp(pw, tau.index, tau.total)
+    # d_ij = -1 * np.log(t_ij)
+    # d_total = -1 * np.log(t_total)
+    #
+    # print("relative e:", e_ij / e_total)
+    # print("relative d:", d_ij / d_total)
