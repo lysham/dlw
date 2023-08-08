@@ -324,31 +324,40 @@ def altitude_correction():
     return None
 
 
-def evaluate_sr2021(x, site_array=None):
+def evaluate_sr2021(x, site_param=None, p_param=P_ATM):
     # return transmissivity (tau) values evaluated at lowest elevation site
     tau = np.zeros(len(x))
     pw = (x * P_ATM)  # Pa, partial pressure of water vapor
     w = 0.62198 * pw / (P_ATM - pw)
     q = w / (1 + w)  # kg/kg
 
-    if site_array is None:
+    # not optimized
+    if isinstance(site_param, str):
+        lat1 = SURFRAD[site_param]["lat"]
+        lon1 = SURFRAD[site_param]["lon"]
+        h1, spline = shakespeare(lat1, lon1)
+        he_p0 = (h1 / np.cos(40.3 * np.pi / 180)) * np.power((p_param / P_ATM), 1.8)
+        for i in range((len(x))):
+            d_opt = spline.ev(q[i], he_p0).item()
+            tau[i] = np.exp(-1 * d_opt)
+    elif hasattr(site_param, "__iter__"):
+        for i in range(len(x)):
+            lat1 = SURFRAD[site_param[i]]["lat"]
+            lon1 = SURFRAD[site_param[i]]["lon"]
+            h1, spline = shakespeare(lat1, lon1)
+            he_p0 = (h1 / np.cos(40.3 * np.pi / 180)) * np.power((p_param / P_ATM), 1.8)
+            d_opt = spline.ev(q[i], he_p0).item()
+            tau[i] = np.exp(-1 * d_opt)
+    else:
         site = "GWC"
         lat1 = SURFRAD[site]["lat"]
         lon1 = SURFRAD[site]["lon"]
         h1, spline = shakespeare(lat1, lon1)
-        he_p0 = (h1 / np.cos(40.3 * np.pi / 180))
+        he_p0 = (h1 / np.cos(40.3 * np.pi / 180))  * np.power((p_param / P_ATM), 1.8)
         for i in range((len(x))):
             d_opt = spline.ev(q[i], he_p0).item()
             tau[i] = np.exp(-1 * d_opt)
-    else:  # not optimized
-        for i in range(len(x)):
-            site = site_array[i]
-            lat1 = SURFRAD[site]["lat"]
-            lon1 = SURFRAD[site]["lon"]
-            h1, spline = shakespeare(lat1, lon1)
-            he_p0 = (h1 / np.cos(40.3 * np.pi / 180))
-            d_opt = spline.ev(q[i], he_p0).item()
-            tau[i] = np.exp(-1 * d_opt)
+
     return tau
 
 
@@ -475,68 +484,6 @@ def _add_common_features(ax, axins, x, y, e_tau_p0, with_data=True):
     return ax, axins
 
 
-def tau_lc_vs_sr():
-    df = ijhmt_to_tau("lc2019_esky_i.csv")  # tau, first p removed
-    x = df.index.to_numpy()
-
-    # transmissivity - plot total tau against Shakespeare
-    tau_shp = evaluate_sr2021(x)
-
-    y_fit = C1_CONST + C2_CONST * np.sqrt(x)
-    y_fit = 1 - y_fit
-
-    fig, ax = plt.subplots(figsize=(5.25, 3))
-    ax.plot(x, df.total.to_numpy(), c=COLORS["persianred"], ls="-",
-            label="LC2019", zorder=2)
-    ax.plot(
-        x, df.H2O.to_numpy() * df.CO2.to_numpy(), c=COLORS["persianred"],
-        ls="--", label="LC2019 H$_2$O and CO$_2$", zorder=4
-    )
-    ax.plot(x, tau_shp, c=COLORS["cornflowerblue"],
-            label="SR2021", zorder=5)
-    fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
-    ax.plot(x, y_fit, lw=2, ls="-", c="0.0", zorder=0,
-            label=fit_label)
-    ax.set_xlim(x[0], x[-1])
-    ax.set_ylim(0, 0.5)
-    ax.grid(alpha=0.3)
-    ax.set_xlabel("$p_w$ [-]")
-    ax.set_ylabel("transmissivity [-]")
-    ax2 = ax.secondary_xaxis("top", functions=(pw2rh, rh2pw))
-    ax2.set_xlabel("RH [%] at 294.2 K")
-
-    ax.legend(ncol=2, bbox_to_anchor=(0.5, -0.2), loc="upper center")
-    filename = os.path.join("figures", "tau_lc_vs_sr.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
-
-    # essentially same figure, now in d_opt
-    fig, ax = plt.subplots(figsize=(5.25, 3))
-    ax.plot(x, -1 * np.log(df.total.to_numpy()), c=COLORS["persianred"], ls="-",
-            label="LC2019", zorder=2)
-    y = df.H2O.to_numpy() * df.CO2.to_numpy()
-    ax.plot(
-        x, -1 * np.log(y), c=COLORS["persianred"],
-        ls="--", label="LC2019 H$_2$O and CO$_2$", zorder=4
-    )
-    ax.plot(x, -1 * np.log(tau_shp), c=COLORS["cornflowerblue"],
-            label="SR2021", zorder=5)
-    fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
-    ax.plot(x, -1 * np.log(y_fit), lw=2, ls="-", c="0.0", zorder=0,
-            label="MC2023")
-    ax.set_xlim(x[0], x[-1])
-    ax.set_ylim(0.8, 2.2)
-    ax.grid(alpha=0.3)
-    ax.set_xlabel("$p_w$ [-]")
-    ax.set_ylabel("optical depth [-]")
-    ax2 = ax.secondary_xaxis("top", functions=(pw2rh, rh2pw))
-    ax2.set_xlabel("RH [%] at 294.2 K")
-
-    ax.legend(ncol=2, bbox_to_anchor=(0.5, -0.2), loc="upper center")
-    filename = os.path.join("figures", "dopt_lc_vs_sr.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
-    return None
-
-
 def pw2rh(pw, t=294.2):
     # non-dimensional pw to relative humidity
     p_sat = 610.94 * np.exp(17.625*(t - 273.15)/(t - 30.11))
@@ -571,7 +518,7 @@ def print_results_table():
     print("\nMVGS2017, SR2021")
     x2 = np.power(x, 2)
     _print_results_metrics(y, 1.108 * np.power(x2, 0.083))  # MVGS2017
-    # tau = evaluate_sr2021(x2, site_array=df.site.to_numpy())
+    # tau = evaluate_sr2021(x2, site_param=df.site.to_numpy())
     tau = evaluate_sr2021(x2)  # assume GWC H
     e_sr2021 = 1 - tau
     _print_results_metrics(y, e_sr2021.reshape(-1, 1))
@@ -1302,6 +1249,68 @@ def print_broadband_dopt_coefs():
     return None
 
 
+def tau_lc_vs_sr():
+    df = ijhmt_to_tau("lc2019_esky_i.csv")  # tau, first p removed
+    x = df.index.to_numpy()
+
+    # transmissivity - plot total tau against Shakespeare
+    tau_shp = evaluate_sr2021(x)
+
+    y_fit = C1_CONST + C2_CONST * np.sqrt(x)
+    y_fit = 1 - y_fit
+
+    fig, ax = plt.subplots(figsize=(5.25, 3))
+    ax.plot(x, df.total.to_numpy(), c=COLORS["persianred"], ls="-",
+            label="LC2019", zorder=2)
+    ax.plot(
+        x, df.H2O.to_numpy() * df.CO2.to_numpy(), c=COLORS["persianred"],
+        ls="--", label="LC2019 H$_2$O and CO$_2$", zorder=4
+    )
+    ax.plot(x, tau_shp, c=COLORS["cornflowerblue"],
+            label="SR2021", zorder=5)
+    fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
+    ax.plot(x, y_fit, lw=2, ls="-", c="0.0", zorder=0,
+            label=fit_label)
+    ax.set_xlim(x[0], x[-1])
+    ax.set_ylim(0, 0.5)
+    ax.grid(alpha=0.3)
+    ax.set_xlabel("$p_w$ [-]")
+    ax.set_ylabel("transmissivity [-]")
+    ax2 = ax.secondary_xaxis("top", functions=(pw2rh, rh2pw))
+    ax2.set_xlabel("RH [%] at 294.2 K")
+
+    ax.legend(ncol=2, bbox_to_anchor=(0.5, -0.2), loc="upper center")
+    filename = os.path.join("figures", "tau_lc_vs_sr.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+
+    # essentially same figure, now in d_opt
+    fig, ax = plt.subplots(figsize=(5.25, 3))
+    ax.plot(x, -1 * np.log(df.total.to_numpy()), c=COLORS["persianred"], ls="-",
+            label="LC2019", zorder=2)
+    y = df.H2O.to_numpy() * df.CO2.to_numpy()
+    ax.plot(
+        x, -1 * np.log(y), c=COLORS["persianred"],
+        ls="--", label="LC2019 H$_2$O and CO$_2$", zorder=4
+    )
+    ax.plot(x, -1 * np.log(tau_shp), c=COLORS["cornflowerblue"],
+            label="SR2021", zorder=5)
+    fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
+    ax.plot(x, -1 * np.log(y_fit), lw=2, ls="-", c="0.0", zorder=0,
+            label="MC2023")
+    ax.set_xlim(x[0], x[-1])
+    ax.set_ylim(0.8, 2.2)
+    ax.grid(alpha=0.3)
+    ax.set_xlabel("$p_w$ [-]")
+    ax.set_ylabel("optical depth [-]")
+    ax2 = ax.secondary_xaxis("top", functions=(pw2rh, rh2pw))
+    ax2.set_xlabel("RH [%] at 294.2 K")
+
+    ax.legend(ncol=2, bbox_to_anchor=(0.5, -0.2), loc="upper center")
+    filename = os.path.join("figures", "dopt_lc_vs_sr.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
 if __name__ == "__main__":
     # df = training_data(create=True)
     print()
@@ -1318,8 +1327,62 @@ if __name__ == "__main__":
     # broadband_contribution()
     # spectral_band_contribution()
     # print_spectral_dopt_coefs()
-    print_broadband_dopt_coefs()
+    # print_broadband_dopt_coefs()
     print()
 
     # ff = pd.DataFrame(dict(x=x, y=y))
     # ff.loc[(ff.x >0.5) & (ff.y < 200)]
+
+    filename = os.path.join("data", "afgl_midlatitude_summer.csv")
+    af_sum = pd.read_csv(filename)
+
+    df = ijhmt_to_tau("lc2019_esky_i.csv")  # tau, first p removed
+    x = df.index.to_numpy()
+    # # transmissivity - plot total tau against Shakespeare
+    site = "GWC"
+    site_elev = SURFRAD[site]["alt"] / 1000  # km
+    p = np.interp(site_elev, af_sum.alt_km.values, af_sum.pres_mb.values)  # mb
+    tau_shp = evaluate_sr2021(x, site_param=site, p_param=p * 100)
+
+    site = "BOU"
+    site_elev = SURFRAD[site]["alt"] / 1000  # km
+    p = np.interp(site_elev, af_sum.alt_km.values, af_sum.pres_mb.values)  # mb
+    tau_shp_bou = evaluate_sr2021(x, site_param=site, p_param=p * 100)
+
+    y_fit = C1_CONST + C2_CONST * np.sqrt(x)
+    y_fit = 1 - y_fit
+    y_corr = C3_CONST * (np.exp(site_elev / 8.5) - 1)
+
+    # essentially same figure, now in d_opt
+    fig, ax = plt.subplots(figsize=(5.25, 4))
+    ax.plot(x, -1 * np.log(df.total.to_numpy()), c=COLORS["persianred"], ls="-",
+            label="LC2019", zorder=2)
+    ax.plot(x, -1 * np.log(tau_shp), c=COLORS["cornflowerblue"],
+            label="SR2021 (GWC)", zorder=5)
+    ax.plot(x, -1 * np.log(tau_shp_bou), ls="--", c=COLORS["cornflowerblue"],
+            label="SR2021 (BOU)", zorder=5)
+    fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
+    ax.plot(x, -1 * np.log(y_fit), lw=2, ls="-", c="0.0", zorder=0,
+            label="sea-level")
+    ax.plot(x, -1 * np.log(y_fit + y_corr), lw=2, ls="--", c="0.0", zorder=0,
+            label="BOU")
+    ax.set_xlim(x[0], x[-1])
+    ax.set_ylim(0.8, 2.2)
+    ax.grid(alpha=0.3)
+    ax.set_xlabel("$p_w$ [-]")
+    ax.set_ylabel("optical depth [-]")
+    ax2 = ax.secondary_xaxis("top", functions=(pw2rh, rh2pw))
+    ax2.set_xlabel("RH [%] at 294.2 K")
+
+    ax.legend(ncol=3, bbox_to_anchor=(0.5, -0.2), loc="upper center")
+    plt.tight_layout()
+    plt.show()
+    filename = os.path.join("figures", "dopt_lc_vs_sr_tmp.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+
+    eps = ijhmt_to_individual_e()
+    x = eps.index.to_numpy()
+    y = eps.total.to_numpy()
+    y_fit = C1_CONST + C2_CONST * np.sqrt(x)
+    error = y - y_fit
+    print("average bias", error.mean().round(4))
