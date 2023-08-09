@@ -248,14 +248,15 @@ def emissivity_vs_pw_data():
     x = np.geomspace(0.00001, xmax, 40)
     y = C1_CONST + C2_CONST * np.sqrt(x * 100 / P_ATM)
     # label = r"$c_1 + c_2 \sqrt{p_w}$"
-    fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
+    # fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
+    fit_label = r"$\varepsilon_{\rm{sky,c}}(p_w)$"
     ax.plot(x, y, c="0.3", lw=1.5, ls="--", label=fit_label, zorder=10)
 
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(0.5, 1.0)
-    ax.set_xlabel("p$_w$ [hPa]")
+    ax.set_xlabel("$P_w$ [hPa]")
     ax.set_ylabel("emissivity [-]")
-    ax.legend(ncol=3, bbox_to_anchor=(0.99, 0.05), loc="lower right")
+    ax.legend(ncol=2, bbox_to_anchor=(0.99, 0.02), loc="lower right")
     filename = os.path.join("figures", f"emissivity_vs_pw_data.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
@@ -279,8 +280,8 @@ def altitude_correction():
 
     fig, axes = plt.subplots(4, 2, figsize=(6, 4), sharey=True, sharex=True)
     plt.subplots_adjust(hspace=0.2, wspace=0.05)
-    lbl = r"$\tilde{\varepsilon}_{\rm{sky,c}}(p_w)$"
-    lbl_ = r"$\tilde{\varepsilon}_{\rm{sky,c}}(p_w) + c_3 (\exp{^{-z/H}} - 1)$"
+    lbl = r"$\varepsilon_{\rm{sky,c}}(p_w)$"
+    lbl_ = r"$\varepsilon_{\rm{sky,c}}(p_w) + c_3 (\exp{^{-z/H}} - 1)$"
     i = 0  # plot counter
     j = 0  # site counter
     for i in range(len(ELEVATIONS) + 1):  # hacky
@@ -430,10 +431,10 @@ def _add_common_features(ax, axins, x, y, e_tau_p0, with_data=True):
     t = 260 + (40 / len(x)) * np.arange(len(x))
     y_err = 10 / (SIGMA * np.power(t, 4))  # +/-5 W/m^2 error
     if with_data:
-        label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$ (MC2023)"
+        label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$ (proposed)"
         ax.plot(x, y, lw=2, ls="-", c="0.0", zorder=2, label=label)
     else:
-        label = r"$\pm$10 W/m$^2$ (MC2023)"
+        label = r"$\pm$10 W/m$^2$"
         ax.fill_between(x, y - y_err, y + y_err, fc="0.6", alpha=0.5,
                          zorder=2, label=label)
 
@@ -914,7 +915,7 @@ def clear_sky_filter(create_csv=False):
     ax.scatter(keep_x, keep_y, marker="o", alpha=0.9, c=COLORS["persianred"])
     ax.axvline(0.05, ls="--", c=COLORS["persianred"], label="Fraction of samples threshold")
     ax.axhline(thresh, c=COLORS["persianred"], label="Number of samples threshold")
-    ax.set_title(f"{s}")
+    # ax.set_title(f"{s}")
     ax.set_xlim(0, 1)
     ax.set_xlabel("Daily clear sky fraction ")
     ax.set_ylabel("Daily clear sky samples samples")
@@ -1021,7 +1022,7 @@ def broadband_contribution():
     # set axis limits, labels, grid
     i = 0
     titles = [r"(a) $\varepsilon_{i}$", r"(b) $\tau_{i}$",
-              r"(c) $d_{\rm{opt}}$"]
+              r"(c) $\delta_{i}$"]
     for ax in [ax0, ax1, ax2]:
         ax.set_xlim(x[0], x[-1])
         ax.set_xlabel("$p_w$ x 100", fontsize=tick_fs)
@@ -1169,16 +1170,16 @@ def spectral_band_contribution():
         )
 
     # set y-axis ticks and labels
-    axes[1, 0].set_ylabel(r"$\varepsilon$", fontsize=fs)
+    axes[1, 0].set_ylabel(r"$\varepsilon_{ij}$", fontsize=fs)
     axes[1, 0].set_ylim(bottom=0)
     axes[1, 0].set_yticks(np.linspace(0, 0.4, 5))
     axes[1, 0].tick_params(axis="y", labelsize=tick_fs)
 
-    axes[2, 0].set_ylabel(r"$\tau$", fontsize=fs)
+    axes[2, 0].set_ylabel(r"$\tau_{ij}$", fontsize=fs)
     axes[2, 0].set_yticks(np.linspace(0.7, 1.1, 5))
     axes[2, 0].tick_params(axis="y", labelsize=tick_fs)
 
-    axes[3, 0].set_ylabel(r"$d_{\rm{opt}}$", fontsize=fs)
+    axes[3, 0].set_ylabel(r"$\delta_{ij}$", fontsize=fs)
     axes[3, 0].set_ylim(bottom=0)
     axes[3, 0].set_yticks(np.linspace(0, 0.4, 5))
     axes[3, 0].tick_params(axis="y", labelsize=tick_fs)
@@ -1319,8 +1320,8 @@ if __name__ == "__main__":
     # pressure_temperature_per_site(server4=True)
     # emissivity_vs_pw_data()
     # altitude_correction()
-    # compare(with_data=True)
-    # compare(with_data=False)
+    compare(with_data=True)
+    compare(with_data=False)
     # print_results_table()
     # data_processing_table(create_csv=True)
     # tau_lc_vs_sr()
@@ -1333,56 +1334,56 @@ if __name__ == "__main__":
     # ff = pd.DataFrame(dict(x=x, y=y))
     # ff.loc[(ff.x >0.5) & (ff.y < 200)]
 
-    filename = os.path.join("data", "afgl_midlatitude_summer.csv")
-    af_sum = pd.read_csv(filename)
-
-    df = ijhmt_to_tau("lc2019_esky_i.csv")  # tau, first p removed
-    x = df.index.to_numpy()
-    # # transmissivity - plot total tau against Shakespeare
-    site = "GWC"
-    site_elev = SURFRAD[site]["alt"] / 1000  # km
-    p = np.interp(site_elev, af_sum.alt_km.values, af_sum.pres_mb.values)  # mb
-    tau_shp = evaluate_sr2021(x, site_param=site, p_param=p * 100)
-
-    site = "BOU"
-    site_elev = SURFRAD[site]["alt"] / 1000  # km
-    p = np.interp(site_elev, af_sum.alt_km.values, af_sum.pres_mb.values)  # mb
-    tau_shp_bou = evaluate_sr2021(x, site_param=site, p_param=p * 100)
-
-    y_fit = C1_CONST + C2_CONST * np.sqrt(x)
-    y_fit = 1 - y_fit
-    y_corr = C3_CONST * (np.exp(site_elev / 8.5) - 1)
-
-    # essentially same figure, now in d_opt
-    fig, ax = plt.subplots(figsize=(5.25, 4))
-    ax.plot(x, -1 * np.log(df.total.to_numpy()), c=COLORS["persianred"], ls="-",
-            label="LC2019", zorder=2)
-    ax.plot(x, -1 * np.log(tau_shp), c=COLORS["cornflowerblue"],
-            label="SR2021 (GWC)", zorder=5)
-    ax.plot(x, -1 * np.log(tau_shp_bou), ls="--", c=COLORS["cornflowerblue"],
-            label="SR2021 (BOU)", zorder=5)
-    fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
-    ax.plot(x, -1 * np.log(y_fit), lw=2, ls="-", c="0.0", zorder=0,
-            label="sea-level")
-    ax.plot(x, -1 * np.log(y_fit + y_corr), lw=2, ls="--", c="0.0", zorder=0,
-            label="BOU")
-    ax.set_xlim(x[0], x[-1])
-    ax.set_ylim(0.8, 2.2)
-    ax.grid(alpha=0.3)
-    ax.set_xlabel("$p_w$ [-]")
-    ax.set_ylabel("optical depth [-]")
-    ax2 = ax.secondary_xaxis("top", functions=(pw2rh, rh2pw))
-    ax2.set_xlabel("RH [%] at 294.2 K")
-
-    ax.legend(ncol=3, bbox_to_anchor=(0.5, -0.2), loc="upper center")
-    plt.tight_layout()
-    plt.show()
-    filename = os.path.join("figures", "dopt_lc_vs_sr_tmp.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
-
-    eps = ijhmt_to_individual_e()
-    x = eps.index.to_numpy()
-    y = eps.total.to_numpy()
-    y_fit = C1_CONST + C2_CONST * np.sqrt(x)
-    error = y - y_fit
-    print("average bias", error.mean().round(4))
+    # filename = os.path.join("data", "afgl_midlatitude_summer.csv")
+    # af_sum = pd.read_csv(filename)
+    #
+    # df = ijhmt_to_tau("lc2019_esky_i.csv")  # tau, first p removed
+    # x = df.index.to_numpy()
+    # # # transmissivity - plot total tau against Shakespeare
+    # site = "GWC"
+    # site_elev = SURFRAD[site]["alt"] / 1000  # km
+    # p = np.interp(site_elev, af_sum.alt_km.values, af_sum.pres_mb.values)  # mb
+    # tau_shp = evaluate_sr2021(x, site_param=site, p_param=p * 100)
+    #
+    # site = "BOU"
+    # site_elev = SURFRAD[site]["alt"] / 1000  # km
+    # p = np.interp(site_elev, af_sum.alt_km.values, af_sum.pres_mb.values)  # mb
+    # tau_shp_bou = evaluate_sr2021(x, site_param=site, p_param=p * 100)
+    #
+    # y_fit = C1_CONST + C2_CONST * np.sqrt(x)
+    # y_fit = 1 - y_fit
+    # y_corr = C3_CONST * (np.exp(site_elev / 8.5) - 1)
+    #
+    # # essentially same figure, now in d_opt
+    # fig, ax = plt.subplots(figsize=(5.25, 4))
+    # ax.plot(x, -1 * np.log(df.total.to_numpy()), c=COLORS["persianred"], ls="-",
+    #         label="LC2019", zorder=2)
+    # ax.plot(x, -1 * np.log(tau_shp), c=COLORS["cornflowerblue"],
+    #         label="SR2021 (GWC)", zorder=5)
+    # ax.plot(x, -1 * np.log(tau_shp_bou), ls="--", c=COLORS["cornflowerblue"],
+    #         label="SR2021 (BOU)", zorder=5)
+    # fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
+    # ax.plot(x, -1 * np.log(y_fit), lw=2, ls="-", c="0.0", zorder=0,
+    #         label="sea-level")
+    # ax.plot(x, -1 * np.log(y_fit + y_corr), lw=2, ls="--", c="0.0", zorder=0,
+    #         label="BOU")
+    # ax.set_xlim(x[0], x[-1])
+    # ax.set_ylim(0.8, 2.2)
+    # ax.grid(alpha=0.3)
+    # ax.set_xlabel("$p_w$ [-]")
+    # ax.set_ylabel("optical depth [-]")
+    # ax2 = ax.secondary_xaxis("top", functions=(pw2rh, rh2pw))
+    # ax2.set_xlabel("RH [%] at 294.2 K")
+    #
+    # ax.legend(ncol=3, bbox_to_anchor=(0.5, -0.2), loc="upper center")
+    # plt.tight_layout()
+    # plt.show()
+    # # filename = os.path.join("figures", "dopt_lc_vs_sr_tmp.png")
+    # # fig.savefig(filename, bbox_inches="tight", dpi=300)
+    #
+    # eps = ijhmt_to_individual_e()
+    # x = eps.index.to_numpy()
+    # y = eps.total.to_numpy()
+    # y_fit = C1_CONST + C2_CONST * np.sqrt(x)
+    # error = y - y_fit
+    # print("average bias", error.mean().round(4))
