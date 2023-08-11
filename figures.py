@@ -641,35 +641,30 @@ def solar_time(create_csv=False):
 
 
 def convergence():
-    df = training_data(create=False, import_val=False, import_full_train=False)
-    test = df.loc[df.index.year == 2013].copy()  # make test set
-    test = test.sample(n=10000, random_state=35)
-    df = df.loc[df.index.year != 2013].copy()
+    df = training_data()
+    df["y"] = df.y - df.correction
+    # test = df.loc[df.index.year == 2013].copy()  # make test set
+    # test = test.sample(n=1000, random_state=23)
+    # df = df.loc[df.index.year != 2013].copy()
+    test = training_data(import_val=True)
+    de_p = test.correction.to_numpy()  # altitude correction for test set
 
     sizes = np.geomspace(100, 100000, 20)
     n_iter = 1000  # per sample size
     c1_vals = np.zeros((len(sizes), n_iter))
     c2_vals = np.zeros((len(sizes), n_iter))
-    rmses = np.zeros((len(sizes), n_iter))
     r2s = np.zeros((len(sizes), n_iter))
     for i in range(len(sizes)):
         for j in range(n_iter):
-            train = df.sample(n=int(sizes[i]))
-            fit_df = pd.DataFrame(dict(x=train.x, y=train.y-train.correction))
+            train = df.sample(n=int(sizes[i]), replace=False)
+            fit_df = pd.DataFrame(dict(x=train.x, y=train.y))
             c1, c2 = fit_linear(fit_df, print_out=False)
             c1_vals[i, j] = c1
             c2_vals[i, j] = c2
 
             # evaluate on test
-            de_p = C3_CONST * (np.exp(-1 * test.elev / 8500) - 1)
-            pred_e = c1 + (c2 * test.x) + de_p
-            # pred_y = SIGMA * np.power(test.t_a, 4) * pred_e
-            # rmse = np.sqrt(mean_squared_error(
-            #     test.dw_ir.to_numpy(), pred_y.to_numpy()))
-            rmse = np.sqrt(mean_squared_error(
-                test.y.to_numpy(), pred_e.to_numpy()))
-            rmses[i, j] = rmse
-            r2s[i, j] = r2_score(test.y.to_numpy(), pred_e.to_numpy())
+            pred_e = c1 + (c2 * test.x)
+            r2s[i, j] = r2_score(test.y.to_numpy(), pred_e.to_numpy() + de_p)
 
     fig, axes = plt.subplots(3, 1, figsize=(5, 5), sharex=True)
     ax = axes[0]
@@ -722,7 +717,6 @@ def convergence():
     ax.grid(alpha=0.3)
     ax.set_axisbelow(True)
     ax.set_xlim(sizes[0], sizes[-1])
-    plt.show()
 
     filename = os.path.join("figures", "convergence.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
@@ -794,23 +788,25 @@ def error_map_fixed_c3():
 def data_processing_table(create_csv=False):
     # create specific files
     if create_csv:
-        # 2010 & 2015 data
+        # Dataset reflecting true training set, without full filters
         df = create_training_set(
-            year=[2010, 2011, 2012, 2015], temperature=False, cs_only=False,
+            year=[2010, 2012, 2015],
+            temperature=False, cs_only=False,
             filter_pct_clr=0.0, filter_npts_clr=0.0, drive="server4"
         )
-        df = reduce_to_equal_pts_per_site(df)  # min_pts = 200
+        # df = reduce_to_equal_pts_per_site(df)  # min_pts = 200
         df['correction'] = C3_CONST * (np.exp(-1 * df.elev / 8500) - 1)
         filename = os.path.join(
             "data", "specific_figure", "data_processing_table_base.csv")
         df.to_csv(filename)
 
-        # 2010 & 2015 data
+        # training dataset with DRA 2017
         df = create_training_set(
-            year=[2010, 2011, 2012, 2017], temperature=False, cs_only=False,
+            year=[2010, 2012, 2017],
+            temperature=False, cs_only=False,
             filter_pct_clr=0.0, filter_npts_clr=0.0, drive="server4"
         )
-        df = reduce_to_equal_pts_per_site(df)  # min_pts = 200
+        # df = reduce_to_equal_pts_per_site(df)  # min_pts = 200
         df['correction'] = C3_CONST * (np.exp(-1 * df.elev / 8500) - 1)
         filename = os.path.join(
             "data", "specific_figure", "data_processing_table_2017.csv")
@@ -818,26 +814,27 @@ def data_processing_table(create_csv=False):
 
     # import test/validation set and import baseline total set
     test = training_data(import_val=True)  # evaluate on validation set
+    test = test.loc[test.index.year == 2013].sample(1000, random_state=23)
 
     filename = os.path.join(
         "data", "specific_figure", "data_processing_table_base.csv")
     # # import _2017 file to include DRA 2017 data in training set
     # filename = os.path.join(
     #     "data", "specific_figure", "data_processing_table_2017.csv")
+
     # training data set has not had filters applied
-    total = pd.read_csv(filename, index_col=0, parse_dates=True)
+    base = pd.read_csv(filename, index_col=0, parse_dates=True)
 
     # change one of these at a time and evaluate
-    clear_sky = "li"  # ["both", "li", "reno"]
+    clear_sky = "both"  # ["both", "li", "reno"]
     elev_correction = True
     # switch table to table_2017
     solar_time_filter = True
-    apply_pct_clr = True
-    apply_npts_clr = True
-    remove_site_bias = True
+    apply_pct_clr = True  # percent clear
+    apply_npts_clr = True  # number of samples
+    remove_site_bias = False
     # if "both" and all true for above, then baseline is evaluated
 
-    base = total.copy(deep=True)
     if apply_pct_clr:
         base = base.loc[base.clr_pct >= FILTER_PCT_CLR]
     if apply_npts_clr:
@@ -849,26 +846,28 @@ def data_processing_table(create_csv=False):
     elif clear_sky == "reno":
         base = base.loc[base.reno_cs]
     if solar_time_filter:
-        base = base.loc[base.index.hour > 8]
+        base = base.loc[base.index.hour >= 8]
     # use an equal number of points, apply correction
-    if remove_site_bias:  # get to 100,000 points equally
-        df = reduce_to_equal_pts_per_site(base, min_pts=14285, random_state=23)
+    if remove_site_bias:
+        df = reduce_to_equal_pts_per_site(base, min_pts=10000, random_state=23)
     else:  # use straightforward sample
-        df = base.sample(100000, random_state=23)  # roughly 10x test size
+        df = base.sample(70000, random_state=23)  # 7x test size
     if elev_correction:
         df["y"] = df.y - df.correction
 
     fit_df = pd.DataFrame(dict(x=df.x.to_numpy(), y=df.y.to_numpy()))
     c1, c2 = fit_linear(fit_df, print_out=True)
+
+    # print(df.loc[(df.site == "DRA") & (df.index.year == 2017)].shape[0])
+    # print(df.shape)
     # evaluate on test set
     print("\nperformance on validation set:")
     model = c1 + c2 * test.x.to_numpy()
-    if not elev_correction:  # evaluate on uncorrected actuals
-        actual = test.y.to_numpy()
-    else:  # have test set be at sea level
-        actual = test.y - test.correction
-        actual = actual.to_numpy()
+    if elev_correction:
+        model = model + test.correction.to_numpy()
+    actual = test.y.to_numpy()
     _print_results_metrics(actual, model)
+    print("npts=", len(actual))
     return None
 
 
@@ -1323,7 +1322,8 @@ if __name__ == "__main__":
     # compare(with_data=True)
     # compare(with_data=False)
     # print_results_table()
-    # data_processing_table(create_csv=True)
+    convergence()
+    # data_processing_table(create_csv=False)
     # tau_lc_vs_sr()
     # broadband_contribution()
     # spectral_band_contribution()
@@ -1334,52 +1334,52 @@ if __name__ == "__main__":
     # ff = pd.DataFrame(dict(x=x, y=y))
     # ff.loc[(ff.x >0.5) & (ff.y < 200)]
 
-    filename = os.path.join("data", "afgl_midlatitude_summer.csv")
-    af_sum = pd.read_csv(filename)
-
-    df = ijhmt_to_tau("lc2019_esky_i.csv")  # tau, first p removed
-    x = df.index.to_numpy()
-    # # transmissivity - plot total tau against Shakespeare
-    site = "GWC"
-    site_elev = SURFRAD[site]["alt"] / 1000  # km
-    p = np.interp(site_elev, af_sum.alt_km.values, af_sum.pres_mb.values)  # mb
-    tau_shp = evaluate_sr2021(x, site_param=site, p_param=p * 100)
-
-    site = "BOU"
-    site_elev = SURFRAD[site]["alt"] / 1000  # km
-    p = np.interp(site_elev, af_sum.alt_km.values, af_sum.pres_mb.values)  # mb
-    tau_shp_bou = evaluate_sr2021(x, site_param=site, p_param=p * 100)
-
-    y_fit = C1_CONST + C2_CONST * np.sqrt(x)
-    y_fit = 1 - y_fit
-    y_corr = C3_CONST * (np.exp(site_elev / 8.5) - 1)
-
-    # essentially same figure, now in d_opt
-    fig, ax = plt.subplots(figsize=(5.25, 4))
-    ax.plot(x, -1 * np.log(df.total.to_numpy()), c=COLORS["persianred"], ls="-",
-            label="LC2019", zorder=2)
-    ax.plot(x, -1 * np.log(tau_shp), c=COLORS["cornflowerblue"],
-            label="SR2021 (GWC)", zorder=5)
-    ax.plot(x, -1 * np.log(tau_shp_bou), ls="--", c=COLORS["cornflowerblue"],
-            label="SR2021 (BOU)", zorder=5)
-    fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
-    ax.plot(x, -1 * np.log(y_fit), lw=2, ls="-", c="0.0", zorder=0,
-            label="sea-level")
-    ax.plot(x, -1 * np.log(y_fit + y_corr), lw=2, ls="--", c="0.0", zorder=0,
-            label="BOU")
-    ax.set_xlim(x[0], x[-1])
-    ax.set_ylim(0.8, 2.2)
-    ax.grid(alpha=0.3)
-    ax.set_xlabel("$p_w$ [-]")
-    ax.set_ylabel("optical depth [-]")
-    ax2 = ax.secondary_xaxis("top", functions=(pw2rh, rh2pw))
-    ax2.set_xlabel("RH [%] at 294.2 K")
-
-    ax.legend(ncol=3, bbox_to_anchor=(0.5, -0.2), loc="upper center")
-    plt.tight_layout()
-    plt.show()
-    filename = os.path.join("figures", "dopt_lc_vs_sr_tmp.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    # filename = os.path.join("data", "afgl_midlatitude_summer.csv")
+    # af_sum = pd.read_csv(filename)
+    #
+    # df = ijhmt_to_tau("lc2019_esky_i.csv")  # tau, first p removed
+    # x = df.index.to_numpy()
+    # # # transmissivity - plot total tau against Shakespeare
+    # site = "GWC"
+    # site_elev = SURFRAD[site]["alt"] / 1000  # km
+    # p = np.interp(site_elev, af_sum.alt_km.values, af_sum.pres_mb.values)  # mb
+    # tau_shp = evaluate_sr2021(x, site_param=site, p_param=p * 100)
+    #
+    # site = "BOU"
+    # site_elev = SURFRAD[site]["alt"] / 1000  # km
+    # p = np.interp(site_elev, af_sum.alt_km.values, af_sum.pres_mb.values)  # mb
+    # tau_shp_bou = evaluate_sr2021(x, site_param=site, p_param=p * 100)
+    #
+    # y_fit = C1_CONST + C2_CONST * np.sqrt(x)
+    # y_fit = 1 - y_fit
+    # y_corr = C3_CONST * (np.exp(site_elev / 8.5) - 1)
+    #
+    # # essentially same figure, now in d_opt
+    # fig, ax = plt.subplots(figsize=(5.25, 4))
+    # ax.plot(x, -1 * np.log(df.total.to_numpy()), c=COLORS["persianred"], ls="-",
+    #         label="LC2019", zorder=2)
+    # ax.plot(x, -1 * np.log(tau_shp), c=COLORS["cornflowerblue"],
+    #         label="SR2021 (GWC)", zorder=5)
+    # ax.plot(x, -1 * np.log(tau_shp_bou), ls="--", c=COLORS["cornflowerblue"],
+    #         label="SR2021 (BOU)", zorder=5)
+    # fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
+    # ax.plot(x, -1 * np.log(y_fit), lw=2, ls="-", c="0.0", zorder=0,
+    #         label="sea-level")
+    # ax.plot(x, -1 * np.log(y_fit + y_corr), lw=2, ls="--", c="0.0", zorder=0,
+    #         label="BOU")
+    # ax.set_xlim(x[0], x[-1])
+    # ax.set_ylim(0.8, 2.2)
+    # ax.grid(alpha=0.3)
+    # ax.set_xlabel("$p_w$ [-]")
+    # ax.set_ylabel("optical depth [-]")
+    # ax2 = ax.secondary_xaxis("top", functions=(pw2rh, rh2pw))
+    # ax2.set_xlabel("RH [%] at 294.2 K")
+    #
+    # ax.legend(ncol=3, bbox_to_anchor=(0.5, -0.2), loc="upper center")
+    # plt.tight_layout()
+    # plt.show()
+    # filename = os.path.join("figures", "dopt_lc_vs_sr_tmp.png")
+    # fig.savefig(filename, bbox_inches="tight", dpi=300)
     #
     # eps = ijhmt_to_individual_e()
     # x = eps.index.to_numpy()
