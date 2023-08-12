@@ -110,8 +110,9 @@ def pressure_temperature_per_site(server4=True):
     filter_ta = False
     alpha_background = 0.2 if overlay_profile else 1.0
     pm_p_mb = 20  # plus minus pressure (mb)
-    ms = 15  # marker size
+    ms = 8  # marker size
     ec = "0.3"  # marker edge color
+    fs = 11  # fontsize
 
     if overlay_profile:
         filename = os.path.join("data", "afgl_midlatitude_summer.csv")
@@ -147,7 +148,7 @@ def pressure_temperature_per_site(server4=True):
     tmp = df.loc[(df.season == "fall")].sample(125, random_state=22)
     pdf = pd.concat([pdf, tmp])
 
-    fig, ax = plt.subplots(figsize=(6, 6))
+    fig, ax = plt.subplots(figsize=(5, 5.2))
     ax.grid(True, alpha=0.3)
     i = 0
     for site in ELEVATIONS:  # plot in sorted order
@@ -211,12 +212,16 @@ def pressure_temperature_per_site(server4=True):
     ax.plot([], [], color="1.0", ls="none", label=" ")
     ax.plot([], [], marker="^", color="0.2", ls="none", label="summer")
     ax.plot([], [], marker="s", color="0.2", ls="none", label="winter")
-    lgd = ax.legend(ncol=5, bbox_to_anchor=(0.5, 1.01), loc="lower center")
-    handles = lgd.legend_handles if server4 else lgd.legendHandles
-    for lh in handles:
+    lgd = ax.legend(
+        ncol=5, bbox_to_anchor=(0.5, 1.01),
+        labelspacing=0.25, borderpad=0.3, handlelength=1.5,
+        loc="lower center", fontsize=fs
+    )
+    # handles = lgd.legend_handles if server4 else lgd.legendHandles
+    for lh in lgd.legend_handles:
         lh.set_alpha(1)
-    ax.set_xlabel("T$_a$ [K]")
-    ax.set_ylabel("P [mb]")
+    ax.set_xlabel("T$_a$ [K]", fontsize=fs)
+    ax.set_ylabel("P$_a$ [mb]", fontsize=fs)
     ax.invert_yaxis()
     plt.tight_layout()
     # plt.show()
@@ -263,6 +268,8 @@ def emissivity_vs_pw_data():
 
 
 def altitude_correction():
+    fs = 10  # fontsize
+
     # histogram per site of lw_err with and without altitude correction
     # dataframe should match exactly that of emissivity vs pw data plot
     df = training_data()  # import data
@@ -292,8 +299,8 @@ def altitude_correction():
             ax.hist([], color="0.3", alpha=0.3, label=lbl)
             ax.hist([], ec="0.3", alpha=0.3, color=COLORS["persianindigo"],
                     label=lbl_)
-            ax.legend(frameon=False, bbox_to_anchor=(0.5, 1.0),
-                      loc="upper center")
+            ax.legend(frameon=False, bbox_to_anchor=(0.5, 0.5),
+                      loc="center", fontsize=fs)
             ax.tick_params(labelbottom=False, labelleft=False, bottom=False,
                            left=False)
             ax.spines.right.set_visible(False)
@@ -309,17 +316,21 @@ def altitude_correction():
                     color=COLORS["persianindigo"], ec="0.3", label=lbl_)
             if s == "BOU":
                 s = "TBL"
-            note = f"{s} (z={alt:,}m)"
+            note = f"{s} ({alt:,} m)"
             # ax.set_title(title, loc="left")
-            ax.text(0.01, 0.93, s=note, va="top", ha="left",
-                    fontsize="small", transform=ax.transAxes, color="0.0")
+            ax.text(
+                0.01, 0.93, s=note, va="top", ha="left",
+                fontsize=fs, transform=ax.transAxes, color="0.0"
+            )
             ax.set_axisbelow(True)
             ax.set_ylim(0, 35)
             ax.set_xlim(xmin, xmax)
             j += 1
         i += 1
-    axes[3, 0].set_xlabel("$L_d$ error [W/m$^2$]")
-    axes[3, 1].set_xlabel("$L_d$ error [W/m$^2$]")
+
+    xlabel = r"$L_{d,\rm{pred}} - L_{d,\rm{meas}}$ [W/m$^2$]"
+    axes[3, 0].set_xlabel(xlabel, fontsize=fs)
+    axes[3, 1].set_xlabel(xlabel, fontsize=fs)
     filename = os.path.join("figures", f"altitude_correction.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
@@ -455,7 +466,7 @@ def _add_common_features(ax, axins, x, y, e_tau_p0, with_data=True):
 
     # tau model
     ax.plot(x, e_tau_p0, lw=2, ls="-", c=COLORS["cornflowerblue"], zorder=5,
-            label=r"$1-e^{-d_{\rm opt}(p_w,H_e)}$ (SR2021)")
+            label=r"$1-e^{-\delta(p_w,H_e)}$ (SR2021)")
 
     # inset
     if with_data:
@@ -536,6 +547,8 @@ def _print_results_metrics(actual, model):
 
 
 def solar_time(create_csv=False):
+    fs = 10
+
     if create_csv:
         df = create_training_set(
             year=[2010, 2011, 2012],
@@ -569,21 +582,22 @@ def solar_time(create_csv=False):
     df["time"] = df.index.hour + (df.index.minute / 60)
 
     # boxplot by hour
-    fig, axes = plt.subplots(2, 1, figsize=(6, 6), sharex=True)
+    fig, axes = plt.subplots(2, 1, figsize=(5, 5), sharex=True)
     plt.subplots_adjust(hspace=0.1)
     ax = axes[0]
     data = []
     for s in np.arange(6, 19):
         data.append(df.loc[df.index.hour == s, "lw_err"].to_numpy())
     ax.grid(alpha=0.3)
-    ax.axhline(0, c="0.7", ls="--")
+    ax.axhline(0, c="0.7", ls="-")
     ax.boxplot(
         data, labels=np.arange(6, 19), patch_artist=True,
         boxprops={'fill': True, 'facecolor': 'white', 'alpha': 0.9},
         medianprops={'color': "black"},
         showfliers=False, zorder=10
     )
-    ax.set_ylabel(r"$L_{d,\rm{pred}} - L_{d,\rm{meas}}$ [W/m$^2$]")
+    ylabel = r"$L_{d,\rm{pred}} - L_{d,\rm{meas}}$ [W/m$^2$]"
+    ax.set_ylabel(ylabel, fontsize=fs)
     ax.set_axisbelow(True)
     ax.set_ylim(-30, 30)
 
@@ -598,8 +612,8 @@ def solar_time(create_csv=False):
         medianprops={'color': "black"},
         showfliers=False, zorder=10
     )
-    ax.set_ylabel(r"$T_{a} - T_{dp}$ [K]")
-    ax.set_xlabel("Solar hour of day")
+    ax.set_ylabel(r"$T_{a} - T_{dp}$ [K]", fontsize=fs)
+    ax.set_xlabel("Solar hour of day", fontsize=fs)
     ax.set_axisbelow(True)
     ax.set_ylim(0, 30)
 
@@ -912,15 +926,21 @@ def clear_sky_filter(create_csv=False):
     ax.scatter(x, y, marker=".", alpha=0.5, c="0.5")
     ax.scatter(toss_x, toss_y, marker="o", alpha=0.9, c=COLORS["persianred"])
     ax.scatter(keep_x, keep_y, marker="o", alpha=0.9, c=COLORS["persianred"])
-    ax.axvline(0.05, ls="--", c=COLORS["persianred"], label="Fraction of samples threshold")
-    ax.axhline(thresh, c=COLORS["persianred"], label="Number of samples threshold")
+    ax.axvline(
+        0.05, ls="--", c=COLORS["persianred"],
+        label="Daily percent threshold (5%)"
+    )
+    ax.axhline(
+        thresh, c=COLORS["persianred"], label="Daily sample threshold (20th)"
+    )
     # ax.set_title(f"{s}")
     ax.set_xlim(0, 1)
-    ax.set_xlabel("Daily clear sky fraction ")
-    ax.set_ylabel("Daily clear sky samples samples")
+    ax.set_xlabel("Daily clear sky fraction")
+    ax.set_ylabel("Daily clear sky samples")
     ax.set_ylim(0, 900)
     ax.set_axisbelow(True)
-    ax.legend(ncol=1, frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.25))
+    ax.legend(
+        ncol=1, frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.25))
 
     ax1, ax2 = subfigs[1].subplots(1, 2, sharey=True)
     # tossed example
@@ -933,7 +953,7 @@ def clear_sky_filter(create_csv=False):
         frameon=False, ncol=3, loc="upper center", bbox_to_anchor=(0.5, 1.0),
         borderpad=0.3, labelspacing=0.3, columnspacing=0.8
     )
-    title = toss_date.strftime("%Y-%m-%d") + " (toss)"
+    title = toss_date.strftime("%Y-%m-%d") + " (exclude)"
     ax1.set_title(title)
 
     # kept example
@@ -942,7 +962,7 @@ def clear_sky_filter(create_csv=False):
     pdf = pdf.resample("60S", label="right", closed="right").median()
     ax2 = _clear_sky_filter(ax2, pdf, keep_date)
     ax2.set_xlabel("Solar hour of day")
-    title = keep_date.strftime("%Y-%m-%d") + " (keep)"
+    title = keep_date.strftime("%Y-%m-%d") + " (include)"
     ax2.set_title(title)
     filename = os.path.join("figures", "clear_sky_filter.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
@@ -1314,15 +1334,15 @@ def tau_lc_vs_sr():
 if __name__ == "__main__":
     # df = training_data(create=True)
     print()
-    # solar_time(create_csv=True)  # boxplot
+    # solar_time(create_csv=False)  # boxplot
     # clear_sky_filter(create_csv=False)
-    # pressure_temperature_per_site(server4=True)
+    # pressure_temperature_per_site(server4=False)
     # emissivity_vs_pw_data()
     # altitude_correction()
-    # compare(with_data=True)
-    # compare(with_data=False)
+    compare(with_data=True)
+    compare(with_data=False)
     # print_results_table()
-    convergence()
+    # convergence()
     # data_processing_table(create_csv=False)
     # tau_lc_vs_sr()
     # broadband_contribution()
