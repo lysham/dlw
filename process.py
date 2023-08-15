@@ -387,6 +387,7 @@ def add_solar_time(df):
     eq_of_time = pvlib.solarposition.equation_of_time_spencer71(doy)
     df["lon"] = df["site"].map(LON_DICT)
     df["dloc"] = 4 * df.lon
+    # -4 * L_loc and 4 * lon are equivalent where L_loc = -1 * lon
     minutes = df.dloc + eq_of_time  # difference in min
     df["dtime"] = pd.to_timedelta(minutes, unit="m")
     df["solar_time"] = df.index + df.dtime
