@@ -22,6 +22,7 @@ data/shp_files/
 data/specific_figure/*
 data/profiles/
 data/hitran
+data/export/data.h5
 
 randall_files
 
