@@ -15,13 +15,14 @@ from corr26b import get_tsky, join_surfrad_asos, shakespeare, \
     reduce_to_equal_pts_per_site
 from fraction import fe_lt, fi_lt
 from statsmodels.tsa.seasonal import seasonal_decompose
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 from constants import *
 from fig3 import get_atm_p, import_ijhmt_df, ijhmt_to_tau, ijhmt_to_individual_e
 from process import *
 from enso import get_train, import_oni_mei_data, create_monthly_df
 from figures import FILTER_NPTS_CLR, FILTER_PCT_CLR, training_data, COLORS, \
-    C1_CONST, C2_CONST, pw2rh, rh2pw
+    C1_CONST, C2_CONST, pw2rh, rh2pw, evaluate_sr2021, _add_common_features
 
 
 def look_at_jyj():
@@ -3173,6 +3174,90 @@ def plot_fit3_dopt():
     plt.tight_layout()
     plt.show()
     filename = os.path.join("figures", "temp.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+# compare(with_data=False/True) and emissivity_vs_pw from figures.py
+
+def compare(with_data=True):
+    # plot comparisons of selected correlations with and without sample data
+    if with_data:
+        df = training_data()
+        df = reduce_to_equal_pts_per_site(df, min_pts=100, random_state=14)
+        df['y'] = df.y - df.correction  # bring all sample to sea level
+        ms = 10  # marker size for data samples
+        filename = os.path.join("figures", f"compare_with_data.png")
+    else:
+        filename = os.path.join("figures", f"compare.png")
+    figsize = (7, 4)
+    # set axis bounds of both figures
+    xmin, xmax = (0.01, 35.5)  # hpa
+    ymin, ymax = (0.5, 1.0)
+
+    # define fitted correlation
+    x = np.geomspace(xmin+0.00001, xmax, 100)  # hPa
+    x = x * 100 / P_ATM  # normalized
+    y = C1_CONST + C2_CONST * np.sqrt(x)  # emissivity
+
+    tau = evaluate_sr2021(x)
+    e_tau_p0 = 1 - tau
+
+    fig, ax = plt.subplots(figsize=figsize)
+    axins = inset_axes(ax, width="50%", height="42%", loc=4, borderpad=1.8)
+    ax.set_xlim(0, 0.035)
+    ax.set_ylim(ymin, ymax)
+    axins.set_xlim(xmin * 100 / P_ATM, 0.01)
+    axins.set_ylim(0.6, 0.8)
+    ax, axins = _add_common_features(ax, axins, x, y, e_tau_p0, with_data)
+    if with_data:  # with data
+        ax.scatter(
+            (df.pw_hpa * 100) / P_ATM, df.y, marker="o", s=ms,
+            alpha=0.3, c="0.3", ec="0.5", lw=0.5, zorder=0
+        )
+        axins.scatter(
+            (df.pw_hpa * 100) / P_ATM, df.y, marker="o", s=ms,
+            alpha=0.3, c="0.3", ec="0.5", lw=0.5, zorder=0
+        )
+
+    ax.legend(ncol=3, bbox_to_anchor=(0.5, -0.15), loc="upper center")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def emissivity_vs_pw_data():
+    df = training_data()  # import data
+    df = reduce_to_equal_pts_per_site(df, min_pts=150, random_state=14)
+    ms = 15
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.grid(True, alpha=0.3)
+    i = 0
+    for site in ELEVATIONS:  # plot in sorted order
+        s = site[0]
+        group = df.loc[df.site == s]
+        ax.scatter(
+            group.pw_hpa, group.y, marker="o", s=ms,
+            alpha=0.8, c=SEVEN_COLORS[i], ec="0.5", lw=0.5, zorder=10
+        )
+        lbl_s = "TBL" if s == "BOU" else s
+        ax.scatter([], [], marker="o", s=3*ms, alpha=1, c=SEVEN_COLORS[i],
+                   ec="0.5", lw=0.5,  label=lbl_s)  # dummy for legend
+        i += 1
+    xmin, xmax = (0, 35)
+    x = np.geomspace(0.00001, xmax, 40)
+    y = C1_CONST + C2_CONST * np.sqrt(x * 100 / P_ATM)
+    # label = r"$c_1 + c_2 \sqrt{p_w}$"
+    # fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
+    fit_label = r"$\varepsilon_{\rm{sky,c}}(p_w)$"
+    ax.plot(x, y, c="0.3", lw=1.5, ls="--", label=fit_label, zorder=10)
+
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(0.5, 1.0)
+    ax.set_xlabel("$P_w$ [hPa]")
+    ax.set_ylabel("emissivity [-]")
+    ax.legend(ncol=2, bbox_to_anchor=(0.99, 0.02), loc="lower right")
+    filename = os.path.join("figures", f"emissivity_vs_pw_data.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 

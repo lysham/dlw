@@ -230,43 +230,6 @@ def pressure_temperature_per_site(server4=True):
     return None
 
 
-def emissivity_vs_pw_data():
-    df = training_data()  # import data
-    df = reduce_to_equal_pts_per_site(df, min_pts=150, random_state=14)
-    ms = 15
-
-    fig, ax = plt.subplots(figsize=(6, 4))
-    ax.grid(True, alpha=0.3)
-    i = 0
-    for site in ELEVATIONS:  # plot in sorted order
-        s = site[0]
-        group = df.loc[df.site == s]
-        ax.scatter(
-            group.pw_hpa, group.y, marker="o", s=ms,
-            alpha=0.8, c=SEVEN_COLORS[i], ec="0.5", lw=0.5, zorder=10
-        )
-        lbl_s = "TBL" if s == "BOU" else s
-        ax.scatter([], [], marker="o", s=3*ms, alpha=1, c=SEVEN_COLORS[i],
-                   ec="0.5", lw=0.5,  label=lbl_s)  # dummy for legend
-        i += 1
-    xmin, xmax = (0, 35)
-    x = np.geomspace(0.00001, xmax, 40)
-    y = C1_CONST + C2_CONST * np.sqrt(x * 100 / P_ATM)
-    # label = r"$c_1 + c_2 \sqrt{p_w}$"
-    # fit_label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$"
-    fit_label = r"$\varepsilon_{\rm{sky,c}}(p_w)$"
-    ax.plot(x, y, c="0.3", lw=1.5, ls="--", label=fit_label, zorder=10)
-
-    ax.set_xlim(xmin, xmax)
-    ax.set_ylim(0.5, 1.0)
-    ax.set_xlabel("$P_w$ [hPa]")
-    ax.set_ylabel("emissivity [-]")
-    ax.legend(ncol=2, bbox_to_anchor=(0.99, 0.02), loc="lower right")
-    filename = os.path.join("figures", f"emissivity_vs_pw_data.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
-    return None
-
-
 def altitude_correction():
     fs = 10  # fontsize
 
@@ -373,17 +336,18 @@ def evaluate_sr2021(x, site_param=None, p_param=P_ATM):
     return tau
 
 
-def compare(with_data=True):
-    # plot comparisons of selected correlations with and without sample data
-    if with_data:
-        df = training_data()
-        df = reduce_to_equal_pts_per_site(df, min_pts=100, random_state=14)
-        df['y'] = df.y - df.correction  # bring all sample to sea level
-        ms = 10  # marker size for data samples
-        filename = os.path.join("figures", f"compare_with_data.png")
-    else:
-        filename = os.path.join("figures", f"compare.png")
-    figsize = (7, 4)
+def compare_combined():
+    fs = 12  # fontsize
+
+    df = training_data()
+    pdf = df.copy()
+    pdf = reduce_to_equal_pts_per_site(pdf, min_pts=150, random_state=14)
+    df = reduce_to_equal_pts_per_site(df, min_pts=100, random_state=14)
+    df['y'] = df.y - df.correction  # bring all sample to sea level
+    ms = 10  # marker size for data samples
+    filename = os.path.join("figures", f"compare_combined.png")
+
+    figsize = (7.5, 10)
     # set axis bounds of both figures
     xmin, xmax = (0.01, 35.5)  # hpa
     ymin, ymax = (0.5, 1.0)
@@ -396,31 +360,73 @@ def compare(with_data=True):
     tau = evaluate_sr2021(x)
     e_tau_p0 = 1 - tau
 
-    fig, ax = plt.subplots(figsize=figsize)
-    axins = inset_axes(ax, width="50%", height="42%", loc=4, borderpad=1.8)
+    fig, axes = plt.subplots(3, 1, figsize=figsize, sharey=True, sharex=True)
+    ax = axes[0]
+    ax.grid(True, alpha=0.3)
+    i = 0
+    for site in ELEVATIONS:  # plot in sorted order
+        s = site[0]
+        group = pdf.loc[pdf.site == s]
+        ax.scatter(
+            group.pw_hpa * 100 / P_ATM, group.y, marker="o", s=ms,
+            alpha=0.8, c=SEVEN_COLORS[i], ec="0.5", lw=0.5, zorder=10
+        )
+        lbl_s = "TBL" if s == "BOU" else s
+        ax.scatter([], [], marker="o", s=3*ms, alpha=1, c=SEVEN_COLORS[i],
+                   ec="0.5", lw=0.5,  label=lbl_s)  # dummy for legend
+        i += 1
+    ax.plot(x, y, c="0.0", lw=2, ls="-", label="(proposed)", zorder=0)
+    ax.set_ylabel("emissivity [-]", fontsize=fs/1.2)
+    ax.legend(ncol=2, bbox_to_anchor=(0.99, 0.02), loc="lower right")
+    ax.set_title("(a)", loc="left", fontsize=fs)
+    ax.tick_params(axis="both", labelsize=fs/1.2)
+
+    ax = axes[1]
+    axins = inset_axes(ax, width="50%", height="42%", loc=4, borderpad=1.6)
     ax.set_xlim(0, 0.035)
     ax.set_ylim(ymin, ymax)
     axins.set_xlim(xmin * 100 / P_ATM, 0.01)
     axins.set_ylim(0.6, 0.8)
-    ax, axins = _add_common_features(ax, axins, x, y, e_tau_p0, with_data)
-    if with_data:  # with data
-        ax.scatter(
-            (df.pw_hpa * 100) / P_ATM, df.y, marker="o", s=ms,
-            alpha=0.3, c="0.3", ec="0.5", lw=0.5, zorder=0
-        )
-        axins.scatter(
-            (df.pw_hpa * 100) / P_ATM, df.y, marker="o", s=ms,
-            alpha=0.3, c="0.3", ec="0.5", lw=0.5, zorder=0
-        )
+    ax, axins = _add_common_features(
+        ax, axins, x, y, e_tau_p0, with_data=True, combined=True, fs=fs)
+    ax.scatter(
+        (df.pw_hpa * 100) / P_ATM, df.y, marker="o", s=ms,
+        alpha=0.3, c="0.3", ec="0.5", lw=0.5, zorder=0
+    )
+    axins.scatter(
+        (df.pw_hpa * 100) / P_ATM, df.y, marker="o", s=ms,
+        alpha=0.3, c="0.3", ec="0.5", lw=0.5, zorder=0
+    )
+    ax.set_title("(b)", loc="left", fontsize=fs)
 
-    ax.legend(ncol=3, bbox_to_anchor=(0.5, -0.15), loc="upper center")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    ax = axes[2]
+    axins = inset_axes(ax, width="50%", height="42%", loc=4, borderpad=1.6)
+    ax.set_xlim(0, 0.035)
+    ax.set_ylim(ymin, ymax)
+    axins.set_xlim(xmin * 100 / P_ATM, 0.01)
+    axins.set_ylim(0.6, 0.8)
+    ax, axins = _add_common_features(
+        ax, axins, x, y, e_tau_p0, with_data=False, combined=True, fs=fs)
+    ax.set_title("(c)", loc="left", fontsize=fs)
+
+    # make space for combined legend below
+    plt.subplots_adjust(wspace=0.15)  # bottom=0.2
+    ax.legend(
+        ncol=3, bbox_to_anchor=(0.5, -0.005), loc="lower center",
+        borderaxespad=0, bbox_transform=fig.transFigure, fontsize=fs/1.2)
+    # y=-0.035 for two subplot
+    fig.savefig(filename, bbox_inches="tight", dpi=600)
     return None
 
 
-def _add_common_features(ax, axins, x, y, e_tau_p0, with_data=True):
+def _add_common_features(ax, axins, x, y, e_tau_p0, with_data=True, combined=False, fs=12):
     # Helper function for compare.
     # #Adds select correlations, axis labels, and grid
+
+    if combined:
+        tick_fs = fs / 1.2  # tick fontsize
+    else:
+        tick_fs = fs
 
     # dlw = y * SIGMA * np.power(t, 4)  # approximate measured dlw
     # # yerr5 = (0.05 * dlw) / (SIGMA * np.power(t, 4))  # 5% error
@@ -444,10 +450,17 @@ def _add_common_features(ax, axins, x, y, e_tau_p0, with_data=True):
     if with_data:
         label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$ (proposed)"
         ax.plot(x, y, lw=2, ls="-", c="0.0", zorder=2, label=label)
-    else:
+    else:  # on no data plot, add legend entry for proposed fit
+        if combined:
+            label = f"${C1_CONST:.03f}+{C2_CONST:.03f}$" + "$\sqrt{p_w}$ (proposed)"
+            ax.plot([], [], lw=2, ls="-", c="0.0", zorder=2, label=label)
         label = r"$\pm$10 W/m$^2$"
-        ax.fill_between(x, y - y_err, y + y_err, fc="0.6", alpha=0.5,
-                         zorder=2, label=label)
+        if combined:
+            ax.fill_between(x, y - y_err, y + y_err, fc="0.6", alpha=0.5,
+                            zorder=2)
+        else:
+            ax.fill_between(x, y - y_err, y + y_err, fc="0.6", alpha=0.5,
+                             zorder=2, label=label)
 
     # Brunt-type models
     ax.plot(x, y_li, lw=2, ls="-", c=COLORS["persianred"], zorder=8,
@@ -490,9 +503,14 @@ def _add_common_features(ax, axins, x, y, e_tau_p0, with_data=True):
 
     # misc
     ax.grid(alpha=0.3)
-    ax.set_xlabel("$p_w$ [-]")
-    ax.set_ylabel("emissivity [-]")
+    if not combined or not with_data:
+        ax.set_xlabel("$p_w$ [-]", fontsize=tick_fs)
+    # if not combined or with_data:
+    ax.set_ylabel("emissivity [-]", fontsize=tick_fs)
     ax.set_axisbelow(True)
+
+    ax.tick_params(axis="both", labelsize=tick_fs)
+    axins.tick_params(axis="both", labelsize=tick_fs)
     return ax, axins
 
 
@@ -547,7 +565,7 @@ def _print_results_metrics(actual, model):
 
 
 def solar_time(create_csv=False):
-    fs = 10
+    fs = 11
 
     if create_csv:
         df = create_training_set(
@@ -583,7 +601,7 @@ def solar_time(create_csv=False):
 
     # boxplot by hour
     fig, axes = plt.subplots(2, 1, figsize=(5, 5), sharex=True)
-    plt.subplots_adjust(hspace=0.1)
+    plt.subplots_adjust(hspace=0.15)
     ax = axes[0]
     data = []
     for s in np.arange(6, 19):
@@ -600,6 +618,7 @@ def solar_time(create_csv=False):
     ax.set_ylabel(ylabel, fontsize=fs)
     ax.set_axisbelow(True)
     ax.set_ylim(-30, 30)
+    ax.set_title("(a)", loc="left")
 
     ax = axes[1]
     data = []
@@ -612,10 +631,11 @@ def solar_time(create_csv=False):
         medianprops={'color': "black"},
         showfliers=False, zorder=10
     )
-    ax.set_ylabel(r"$T_{a} - T_{dp}$ [K]", fontsize=fs)
+    ax.set_ylabel(r"$T_{a} - T_{\rm{dp}}$ [K]", fontsize=fs)
     ax.set_xlabel("Solar hour of day", fontsize=fs)
     ax.set_axisbelow(True)
     ax.set_ylim(0, 30)
+    ax.set_title("(b)", loc="left")
 
     # add data behind
     pdf = df.copy()
@@ -793,7 +813,7 @@ def error_map_fixed_c3():
 
     fig.subplots_adjust(right=0.9)
     cbar_ax = fig.add_axes([0.94, 0.1, 0.05, 0.8])
-    fig.colorbar(cb, cax=cbar_ax, label="RMSE")
+    fig.colorbar(cb, cax=cbar_ax, label="RMSE [-]")
     filename = os.path.join("figures", "error_map_fixed_c3.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
@@ -933,6 +953,7 @@ def clear_sky_filter(create_csv=False):
     ax.axhline(
         thresh, c=COLORS["persianred"], label="Daily sample threshold (20th)"
     )
+    ax.set_title("(a)", loc="left")
     # ax.set_title(f"{s}")
     ax.set_xlim(0, 1)
     ax.set_xlabel("Daily clear sky fraction")
@@ -953,8 +974,8 @@ def clear_sky_filter(create_csv=False):
         frameon=False, ncol=3, loc="upper center", bbox_to_anchor=(0.5, 1.0),
         borderpad=0.3, labelspacing=0.3, columnspacing=0.8
     )
-    title = toss_date.strftime("%Y-%m-%d") + " (exclude)"
-    ax1.set_title(title)
+    title = "(b) " + toss_date.strftime("%Y-%m-%d") + " (exclude)"
+    ax1.set_title(title, loc="left")
 
     # kept example
     keep_cols = ["GHI_m", "DNI_m", "GHI_c", "DNI_c", "cs_period", "reno_cs"]
@@ -962,8 +983,8 @@ def clear_sky_filter(create_csv=False):
     pdf = pdf.resample("60S", label="right", closed="right").median()
     ax2 = _clear_sky_filter(ax2, pdf, keep_date)
     ax2.set_xlabel("Solar hour of day")
-    title = keep_date.strftime("%Y-%m-%d") + " (include)"
-    ax2.set_title(title)
+    title = "(c) " + keep_date.strftime("%Y-%m-%d") + " (include)"
+    ax2.set_title(title, loc="left")
     filename = os.path.join("figures", "clear_sky_filter.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
@@ -1337,12 +1358,11 @@ if __name__ == "__main__":
     # solar_time(create_csv=False)  # boxplot
     # clear_sky_filter(create_csv=False)
     # pressure_temperature_per_site(server4=False)
-    # emissivity_vs_pw_data()
     # altitude_correction()
-    compare(with_data=True)
-    compare(with_data=False)
+    compare_combined()
     # print_results_table()
     # convergence()
+    # error_map_fixed_c3()
     # data_processing_table(create_csv=False)
     # tau_lc_vs_sr()
     # broadband_contribution()
