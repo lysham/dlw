@@ -1,6 +1,7 @@
 ## Overview
-Training and validation data that was used to generate the results for the
-manuscript by Matsunobu and Coimbra, submitted to JGR: Atmospheres, 2023
+The HDF5 file contains training and validation data that was used to 
+generate the results for the manuscript by Matsunobu and Coimbra, 
+submitted to JGR: Atmospheres, 2023
 
 Open access SURFRAD data was processed using the techniques outlined in the
 associated manuscript. Data is indexed by solar time and provided per site for
@@ -9,13 +10,13 @@ associated manuscript. Data is indexed by solar time and provided per site for
 'tra' and 'val' columns indicate whether the given sample was included in the
 training or validation set, respectively.
 Training and validation sets can be reconstructed by concatenating
-all 'tra' or 'val' samples across sites.
+all 'tra' or 'val' samples across sites. Sample code is given below to 
+reconstruct original training and validation sets.
 
 ***
 ## Data labels
 
 Column names and descriptions are as follows:
-- site: station code
 - dlw_m: measured downwelling longwave [W/m^2]
 - ghi_m: measured global horizontal irradiance [W/m^2]
 - dni_m: measured direct normal irradiance [W/m^2]
@@ -41,7 +42,8 @@ Column names and descriptions are as follows:
 
 The last two columns, 'sqrt_pw' and 'e_sky' represent the input and target
 for linear regression, i.e. e_sky = c_1 + (c_2 * sqrt_pw).
-Altitude corrected sky emissivity is found by e_sky - alt_correction.
+Altitude corrected sky emissivity, or expected emissivity for a station at
+sea-level, is found by e_sky - alt_correction.
 
 ***
 ## Sample code (Python v3.8)
@@ -51,6 +53,7 @@ import pandas as pd
 
 site = "GWC"  # or other station code
 df = pd.read_hdf("data.h5", key=site)  # import single site
+# --> modify "data.h5" to "data_sample.h5"
 ```
 
 Training and validation sets can be reconstructed as below.
@@ -60,13 +63,15 @@ resultant training set will reproduce results in the associated manuscript.
 training = []
 validation = []
 surfrad_sites = ['BON', 'DRA', 'FPK', 'GWC', 'PSU', 'SXF', 'TBL']
+# --> only ['GWC'] included in `data_sample.h5`
 for site in surfrad_sites:  # loop through sites
     df = pd.read_hdf("data.h5", key=site)
+    df["site"] = site  # add site name
     training.append(df.loc[df.tra])  # append samples marked as training
     validation.append(df.loc[df.val])  # append samples marked as validation
 # join respective set samples across sites
-training = pd.concat(training, ignore_index=True)
-validation = pd.concat(validation, ignore_index=True)
+training = pd.concat(training, ignore_index=False)
+validation = pd.concat(validation, ignore_index=False)
 ```
 
 Reproduce regression results

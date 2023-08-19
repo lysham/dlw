@@ -13,7 +13,6 @@ from sklearn.linear_model import LinearRegression
 
 def create_data_h5():
     col_rename = {
-        'site': 'site',
         'dw_ir': 'dlw_m',
         'GHI_m': 'ghi_m',
         'DNI_m': 'dni_m',
@@ -49,9 +48,11 @@ def create_data_h5():
     val["stime"] = val.index.to_numpy()
 
     # create instead of importing so that filters can be removed
-    for site in SURF_SITE_CODES:
+    # years = [2010, 2011, 2012, 2013, 2014, 2015]
+    # for site in SURF_SITE_CODES:
+    for site in ["GWC"]:
         df = create_training_set(
-            year=[2010, 2011, 2012, 2013, 2014, 2015],
+            year=[2010],
             temperature=False, cs_only=False, sites=[site],
             filter_solar_time=False, filter_pct_clr=0, filter_npts_clr=0,
             drive="server4"
@@ -82,13 +83,12 @@ def create_data_h5():
         df = df.rename(columns=col_rename)  # rename columns as above
 
         if site == "BOU":  # rename BOU -> TBL
-            df["site"] = "TBL"
             site = "TBL"
 
         df = df.sort_index()  # sort by index
 
-        filename = os.path.join("data", "export", "data.h5")
-        df.to_hdf(filename, key=site, mode="a")
+        filename = os.path.join("data", "export", "data_sample.h5")
+        df.to_hdf(filename, key=site, mode="a", complevel=9)
         print(site, time.time() - start_time)
     return None
 
@@ -101,11 +101,12 @@ def reconstruct_tra_val():
     surfrad_sites = ['BON', 'DRA', 'FPK', 'GWC', 'PSU', 'SXF', 'TBL']
     for site in surfrad_sites:  # loop through sites
         df = pd.read_hdf(filename, key=site)
+        df["site"] = site  # add site name
         training.append(df.loc[df.tra])  # append samples marked as training
         validation.append(df.loc[df.val])  # append samples marked as validation
     # join respective set samples across sites
-    training = pd.concat(training, ignore_index=True)
-    validation = pd.concat(validation, ignore_index=True)
+    training = pd.concat(training, ignore_index=False)
+    validation = pd.concat(validation, ignore_index=False)
     return training, validation
 
 
@@ -127,6 +128,10 @@ def reproduce_results(training):
 if __name__ == "__main__":
     print()
     # create_data_h5()
-
-    # training, validation = reconstruct_tra_val()
-    # reproduce_results(training)
+    #
+    training, validation = reconstruct_tra_val()
+    # # reproduce_results(training)
+    # training.loc[training.site == "BON"].to_hdf("test_tra_alone.h5", "df")
+    #
+    # filename = os.path.join("data", "export", "data_sample.h5")
+    # training.loc[training.site == "BON"].to_hdf(filename, key='df', complevel=9)
