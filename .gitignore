@@ -23,6 +23,7 @@ data/specific_figure/*
 data/profiles/
 data/hitran
 data/export/data.h5
+data/archive/
 
 randall_files
 
