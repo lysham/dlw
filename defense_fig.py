@@ -8,10 +8,12 @@ import matplotlib.pyplot as plt
 import geopandas
 import random
 
-from constants import SIGMA, SURFRAD, P_ATM
+from constants import SIGMA, SURFRAD, P_ATM, N_SPECIES, LI_TABLE1, LBL_LABELS, \
+    BANDS_V, BANDS_L
 from fraction import planck_lambda
 from figures import training_data
 from corr26b import fit_linear
+from fig3 import ijhmt_to_tau
 
 
 COLORS = {
@@ -61,6 +63,7 @@ def bb_spectra():
     # plt.show()
     filename = os.path.join(folder, "bb_spectra.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
+    plt.close()
     return None
 
 
@@ -111,6 +114,7 @@ def uc_demographic():
     ax.set_axisbelow(True)
     filename = os.path.join(folder, "uc_campus_demographic.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
+    plt.close()
     return None
 
 
@@ -139,6 +143,7 @@ def surfrad_map():
     # plt.show()
     filename = os.path.join("figures", "defense", "map.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
+    plt.close()
     return None
 
 
@@ -176,6 +181,7 @@ def fit1and2():
     ax.set_ylabel("emissivity [-]")
     filename = os.path.join("figures", "defense", image_name)
     fig.savefig(filename, bbox_inches="tight", dpi=300)
+    plt.close()
     return None
 
 
@@ -239,6 +245,103 @@ def band_visuals():
         plt.show()
         filename = os.path.join(folder, f"band_{band}.png")
         fig.savefig(filename, bbox_inches="tight", dpi=300, transparent=True)
+    return None
+
+
+def wideband_contribution():
+    cmap = mpl.colormaps["Paired"]
+    cmaplist = [cmap(i) for i in range(N_SPECIES)]
+    species = list(LI_TABLE1.keys())[:-1]
+
+    tau = ijhmt_to_tau()
+    x = tau.index.to_numpy()
+
+    fs = 10
+    tick_fs = fs / 1.3
+
+    fig, axes = plt.subplots(
+        3, 7, sharex=True, figsize=(8, 4), sharey="row",
+        height_ratios=[1, 4, 4]
+    )
+    plt.subplots_adjust(wspace=0.0)
+    # plot e, t, d_opt per band
+    for j in np.arange(1, 8):
+        ax_t = axes[1, j - 1]  # transmissivity (middle)
+        ax_d = axes[2, j - 1]  # optical depth  (bottom)
+
+        # ax_e.set_title(f"b{j}", loc="center")
+        t_ij = ijhmt_to_tau(f"lc2019_esky_ij_b{j}.csv")
+        y_t = np.ones(len(x))
+        y_d = np.zeros(len(x))
+        for i in range(N_SPECIES):
+            y = t_ij[species[i]].to_numpy()
+            ax_t.fill_between(
+                x, y_t, y_t * y, fc=cmaplist[i], label=LBL_LABELS[species[i]]
+            )
+            y_t = y_t * y
+
+            dopt = -1 * np.log(y)
+            ax_d.fill_between(
+                x, y_d, y_d + dopt, fc=cmaplist[i], label=LBL_LABELS[species[i]]
+            )
+            y_d = y_d + dopt
+
+        ax_t.grid(alpha=0.3)
+        ax_t.set_axisbelow(True)
+
+        ax_d.grid(alpha=0.3)
+        ax_d.set_axisbelow(True)
+        ax_d.set_xlabel("$p_w$ x 100")
+
+        # set up x-axis ticks and labels
+        ax_d.set_xlim(x[0], x[-1])
+        xticks = [0.005, 0.010, 0.015, 0.020]
+        x_labels = [f"{i * 100:.1f}" for i in xticks]
+        ax_d.set_xticks(xticks, labels=x_labels, fontsize=tick_fs/1.1)
+
+    # handle titles
+    band_features = [
+        "H$_2$O absorbing", "window", "CO$_2$ absorbing", "window",
+        "H$_2$O absorbing", "CO$_2$ absorbing", "window"
+    ]
+    unit = r"cm$^{-1}$"
+    unit_l = r"$\mu$m"
+    for j in np.arange(1, 8):
+        ax = axes[0, j-1]
+        ax.tick_params(
+            labelbottom=False, labelleft=False, bottom=False, left=False)
+        ax.spines.right.set_visible(False)
+        ax.spines.left.set_visible(False)
+        ax.spines.top.set_visible(False)
+        ax.spines.bottom.set_visible(False)
+        b = f"b{j}"
+        s1, s2 = BANDS_V[b]
+        l1, l2 = BANDS_L[b]
+        if b == "b1":
+            s1 = 0
+            l2 = 1000
+        title = f"({b})\n{s1}-{s2} {unit}\n{l1}-{l2} {unit_l}\n" \
+                f"({band_features[j-1]})"
+        ax.text(
+            0.5, 0.5, title, ha="center", va="center", transform=ax.transAxes,
+            fontsize=fs / 1.3
+        )
+
+    # set y-axis ticks and labels
+    axes[1, 0].set_ylabel(r"$\tau_{ij}$", fontsize=fs)
+    axes[1, 0].set_yticks(np.linspace(0.7, 1.1, 5))
+    axes[1, 0].tick_params(axis="y", labelsize=tick_fs)
+
+    axes[2, 0].set_ylabel(r"$\delta_{ij}$", fontsize=fs)
+    axes[2, 0].set_ylim(bottom=0)
+    axes[2, 0].set_yticks(np.linspace(0, 0.4, 5))
+    axes[2, 0].tick_params(axis="y", labelsize=tick_fs)
+
+    # legend
+    axes[2, -1].legend(ncol=2, fontsize=tick_fs, labelspacing=0.2)
+    fig.savefig(os.path.join(folder, "wideband_contribution.png"),
+                bbox_inches="tight", dpi=300)
+    plt.close()
     return None
 
 
