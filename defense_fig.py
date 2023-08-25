@@ -6,6 +6,7 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import geopandas
+import random
 
 from constants import SIGMA, SURFRAD, P_ATM
 from fraction import planck_lambda
@@ -141,12 +142,7 @@ def surfrad_map():
     return None
 
 
-if __name__ == "__main__":
-    print()
-    folder = os.path.join("figures", "defense")
-    if not os.path.exists(folder):
-        os.makedirs(folder)
-
+def fit1and2():
     # small subset to demonstrate impact of data processing
     df = training_data()
 
@@ -180,3 +176,74 @@ if __name__ == "__main__":
     ax.set_ylabel("emissivity [-]")
     filename = os.path.join("figures", "defense", image_name)
     fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def band_visuals():
+    # make broadband vs wideband vs spectral figure:
+    wvl_earth = np.linspace(3, 50, 70)  # micron
+    bb_earth = planck_lambda(wvl_earth, t=288)
+    emissivity = 0.7
+
+    # generate this one to keep consistent
+    noise = [random.uniform(0.85, 1.15) for _ in range(len(wvl_earth))]
+
+    band = "wide"
+    for band in ["broad", "wide", "spectral"]:
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.plot(wvl_earth, bb_earth, c="0.1")
+        # ax.text(0.25, 0.8, "Blackbody\nradiation", transform=ax.transAxes)
+        if band == "broad":
+            ax.plot(wvl_earth, bb_earth * emissivity * noise,
+                    c=COLORS["cornflowerblue"])
+            ax.fill_between(
+                wvl_earth, 0, bb_earth * emissivity,
+                fc=COLORS["cornflowerblue"], alpha=0.5, ec=None
+            )
+        elif band == "spectral":
+            ax.stem(wvl_earth, bb_earth * emissivity * noise,
+                    markerfmt=" ", linefmt=COLORS["cornflowerblue"])
+        elif band == "wide":
+            ax.plot(wvl_earth, bb_earth * emissivity * noise,
+                    c=COLORS["cornflowerblue"])
+            idx1, idx2 = (15, 35)  # index to mark bands
+            ax.axvline(wvl_earth[idx1], ls="--", c="0.5")
+            ax.axvline(wvl_earth[idx2], ls="--", c="0.5")
+            ax.fill_between(
+                wvl_earth[0:idx1 + 1], 0,
+                bb_earth[0:idx1+1] * emissivity,
+                fc=COLORS["cornflowerblue"], alpha=0.7,
+                ec=COLORS["cornflowerblue"], hatch="//",
+            )
+            ax.fill_between(
+                wvl_earth[idx1:idx2+1], 0,
+                bb_earth[idx1:idx2+1] * emissivity,
+                fc=COLORS["cornflowerblue"], alpha=0.7,
+                ec=COLORS["cornflowerblue"], hatch="--"
+            )
+            ax.fill_between(
+                wvl_earth[idx2:-1], 0,
+                bb_earth[idx2:-1] * emissivity,
+                fc=COLORS["cornflowerblue"], alpha=0.7,
+                ec=COLORS["cornflowerblue"], hatch="\\"
+            )
+
+        ax.set_xlabel("wavelength ($\lambda$)", fontsize=12)
+        ax.set_ylabel("intensity", fontsize=12)
+        ax.set_ylim(bottom=0)
+        ax.set_xlim(wvl_earth[0], wvl_earth[-1])
+        ax.spines.right.set_visible(False)
+        ax.spines.top.set_visible(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        plt.show()
+        filename = os.path.join(folder, f"band_{band}.png")
+        fig.savefig(filename, bbox_inches="tight", dpi=300, transparent=True)
+    return None
+
+
+if __name__ == "__main__":
+    print()
+    folder = os.path.join("figures", "defense")
+    if not os.path.exists(folder):
+        os.makedirs(folder)
