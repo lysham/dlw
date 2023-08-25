@@ -5,19 +5,22 @@ import numpy as np
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import geopandas
 
-import cartopy.crs as ccrs
-import cartopy.feature as cf
-
-from constants import SIGMA
+from constants import SIGMA, SURFRAD, P_ATM
 from fraction import planck_lambda
+from figures import training_data
+from corr26b import fit_linear
 
 
 COLORS = {
     "cornflowerblue": "#6495ED",
     "orange": "#F37748",
     "yellow": "#FFCA3A",
-    "darkyellow": "#E0A500"
+    "darkyellow": "#E0A500",
+    "green": "#1A603A",
+    "dustypurple": "#464D77",
+    "dustygreen": "#77af9c",
 }
 
 
@@ -60,62 +63,80 @@ def bb_spectra():
     return None
 
 
-def station_locations():
-    # copied from GOES_class/archive/figures_for_senate.py
-    # show all network location on map projection
-    fig = plt.figure(figsize=(10, 5))
-    ax = fig.add_subplot(1, 1, 1, projection=ccrs.Robinson())
-    ax.add_feature(cf.COASTLINE)
-    ax.add_feature(cf.STATES)
-    ax.set_extent([-125, -65, 25, 52], crs=ccrs.PlateCarree())
-    loc12 = [
-        "BON", "DRA", "FPK",
-        "GWN", "PSU", "SXF",
-        "TBL", "ABQ", "BIS",
-        "HNX", "SLC", "STE"
-    ]
+def uc_demographic():
+    # bar plot of demographic data from UC
+    filename = os.path.join("data", "archive", "campus_values_230125.csv")
+    df = pd.read_csv(filename)
 
-    LOC2COORD = {
-        "BON": {"lat": 40.05192, "lon": -88.37309, "alt": 230},
-        "DRA": {"lat": 36.62373, "lon": -116.01947, "alt": 1007},
-        "FPK": {"lat": 48.30783, "lon": -105.10170, "alt": 634},
-        "GWN": {"lat": 34.2547, "lon": -89.8729, "alt": 98},
-        "PSU": {"lat": 40.72012, "lon": -77.93085, "alt": 376},
-        "SXF": {"lat": 43.73403, "lon": -96.62328, "alt": 473},
-        "TBL": {"lat": 40.12498, "lon": -105.23680, "alt": 1689},
-        "ABQ": {"lat": 35.03796, "lon": -106.62211, "alt": 1617},
-        "BIS": {"lat": 46.77179, "lon": -100.75955, "alt": 503},
-        "HNX": {"lat": 36.31357, "lon": -119.63164, "alt": 73},
-        "SEA": {"lat": 47.68685, "lon": -122.25667, "alt": 1288},
-        "SLC": {"lat": 40.77220, "lon": -111.95495, "alt": 20},
-        "STE": {"lat": 38.97203, "lon": -77.48690, "alt": 85},
+    campus_labels = {
+        "Berkeley": "Berkeley",
+        "Davis": "Davis",
+        "Irvine": "Irvine",
+        "LosAngeles": "Los Angeles",
+        "Merced": "Merced",
+        "Riverside": "Riverside",
+        "SanDiego": "San\nDiego",
+        "SantaBarbara": "Santa\nBarbara",
+        "SantaCruz": "Santa\nCruz"
     }
 
-    for loc in loc12:
-        lat = LOC2COORD[loc]["lat"]
-        lon = LOC2COORD[loc]["lon"]
-        ax.plot(lon, lat, "bo", ms=5, transform=ccrs.Geodetic())
-        if loc == "HNX":
-            ax.text(
-                np.floor(lon) - 0.5, np.floor(lat), loc,
-                transform=ccrs.Geodetic(),
-                bbox=dict(boxstyle="square", ec="0.0", fc="1.0"),
-                ha="right", va="top"
-            )
-        elif loc == "STE":
-            ax.text(
-                np.ceil(lon), np.floor(lat), loc,
-                transform=ccrs.Geodetic(),
-                bbox=dict(boxstyle="square", ec="0.0", fc="1.0"),
-                ha="right", va="top"
-            )
-        else:
-            ax.text(
-                np.ceil(lon) + 1, np.floor(lat), loc, transform=ccrs.Geodetic(),
-                bbox=dict(boxstyle="square", ec="0.0", fc="1.0")
-            )
-    ax.set_title("Selected SURFRAD and SOLRAD station locations")
-    filename = os.path.join(folder, "station_locations.png")
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.grid(axis="y", alpha=0.3)
+    x = np.arange(df.shape[0])
+    width = 0.2
+    ax.bar(
+        x - (width * 1.5), df.undergrads, width=width,
+        color=COLORS["cornflowerblue"], label="Undergrad"
+    )
+    ax.bar(
+        x - (width * 0.5), df.grads + df.health, width=width,
+        color=COLORS["dustygreen"], label="Grad"
+    )
+    ax.bar(
+        x + (width * 0.5), df.faculty, width=width,
+        color=COLORS["orange"], label="Faculty"
+    )
+    ax.bar(
+        x + (width * 1.5), df.staff, width=width,
+        color=COLORS["dustypurple"], label="Staff"
+    )
+    ax.set_xticks(x)
+    labels = [campus_labels[s] for s in df.campus.to_list()]
+    ax.set_xticklabels(labels, fontsize=10)
+    ax.legend(
+        ncol=4, frameon=False, bbox_to_anchor=(1.0, 1.01), loc="lower right",
+        fontsize=10
+    )
+    ax.set_axisbelow(True)
+    filename = os.path.join(folder, "uc_campus_demographic.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    return None
+
+
+def surfrad_map():
+    states = geopandas.read_file('data/shp_files/usa-states-census-2014.shp')
+    states = states.set_crs("epsg:4326")  # WSG84
+
+    # states.to_crs("EPSG:2163", inplace=True)
+    fig, ax = plt.subplots(figsize=(8, 5))
+    states.boundary.plot(ax=ax, color="0.4")
+    for s in SURFRAD:
+        lat = SURFRAD[s]["lat"]
+        lon = SURFRAD[s]["lon"]
+        print(lat, lon)
+        if s == "BOU":
+            s = "TBL"
+        ax.scatter(lon, lat, c="blue", zorder=10)
+        ax.text(lon + 1.5, lat, s=s, fontsize=15, va="bottom", ha="left",
+                bbox=dict(facecolor="1.0", edgecolor="blue", pad=3))
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    # plt.show()
+    filename = os.path.join("figures", "defense", "map.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
     return None
 
@@ -125,3 +146,37 @@ if __name__ == "__main__":
     folder = os.path.join("figures", "defense")
     if not os.path.exists(folder):
         os.makedirs(folder)
+
+    # small subset to demonstrate impact of data processing
+    df = training_data()
+
+    df1 = df.loc[df.clr_num > 4000].sample(100)
+    df2 = df.loc[df.clr_num < 3500].sample(100)
+
+    ms = 15
+    xmax = 35
+    x = np.geomspace(0.001, xmax, 40)  # hPa
+
+    # compare df1 and df2
+    pdf = df2.copy()
+    image_name = "fit2.png"
+
+    # same plot format
+    fig, ax = plt.subplots(figsize=(3, 3))
+    ax.scatter(
+        pdf.pw_hpa, pdf.y, marker="o", s=ms,
+        alpha=0.3, c="0.3", ec="0.5", lw=0.5, zorder=0
+    )
+    c1, c2 = fit_linear(pdf)
+    y = c1 + c2 * np.sqrt(x * 100 / P_ATM)  # emissivity
+    ax.plot(x, y, lw=1.5, ls="--", c="0.0", zorder=2)
+    title = f"{c1}+{c2}"+r"$\sqrt{p_w}$"
+    ax.set_title(title, fontsize=12)
+    ax.grid(alpha=0.3)
+    ax.set_xlim(0, xmax)
+    ax.set_ylim(0.5, 1.0)
+    ax.set_axisbelow(True)
+    ax.set_xlabel("p$_w$ [hPa]")
+    ax.set_ylabel("emissivity [-]")
+    filename = os.path.join("figures", "defense", image_name)
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
