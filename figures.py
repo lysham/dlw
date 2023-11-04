@@ -13,7 +13,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.linear_model import LinearRegression
 
 from constants import ELEVATIONS, SEVEN_COLORS, P_ATM, SIGMA, SURFRAD, \
-    N_SPECIES, LI_TABLE1, LBL_LABELS, BANDS_V
+    N_SPECIES, LI_TABLE1, LBL_LABELS, BANDS_V, BANDS_L
 from corr26b import create_training_set, reduce_to_equal_pts_per_site, \
     add_solar_time, fit_linear
 from fig3 import shakespeare, ijhmt_to_tau, ijhmt_to_individual_e
@@ -63,6 +63,8 @@ def training_data(create=False, import_full_train=False, import_val=False):
     -------
     df : DataFrame
     """
+    # folder = os.path.join("data")
+    folder = os.path.join("/Volumes/LMM_DRIVE/train_df")
     if create:
         df = create_training_set(
             year=[2010, 2011, 2012, 2013, 2014, 2015],
@@ -72,17 +74,17 @@ def training_data(create=False, import_full_train=False, import_val=False):
         )
         df = reduce_to_equal_pts_per_site(df)  # min_pts = 200
         df['correction'] = C3_CONST * (np.exp(-1 * df.elev / 8500) - 1)
-        filename = os.path.join("data", "training_data.csv")
+        filename = os.path.join(folder, "training_data.csv")
         df.to_csv(filename)
         create_tra_val_sets(df)
     elif import_full_train:
-        filename = os.path.join("data", "training_data.csv")
+        filename = os.path.join(folder, "training_data.csv")
         df = pd.read_csv(filename, index_col=0, parse_dates=True)
     elif import_val:
-        filename = os.path.join("data", "val.csv")
+        filename = os.path.join(folder, "val.csv")
         df = pd.read_csv(filename, index_col=0, parse_dates=True)
     else:
-        filename = os.path.join("data", "tra.csv")
+        filename = os.path.join(folder, "tra.csv")
         df = pd.read_csv(filename, index_col=0, parse_dates=True)
     return df
 
@@ -218,7 +220,7 @@ def pressure_temperature_per_site(server4=True):
         loc="lower center", fontsize=fs
     )
     # handles = lgd.legend_handles if server4 else lgd.legendHandles
-    for lh in lgd.legend_handles:
+    for lh in lgd.legendHandles:
         lh.set_alpha(1)
     ax.set_xlabel("T$_a$ [K]", fontsize=fs)
     ax.set_ylabel("P$_a$ [mb]", fontsize=fs)
@@ -1191,6 +1193,7 @@ def spectral_band_contribution():
         "H$_2$O absorbing", "CO$_2$ absorbing", "window"
     ]
     unit = r"cm$^{-1}$"
+    unit_l = r"$\mu$m"
     for j in np.arange(1, 8):
         ax = axes[0, j-1]
         ax.tick_params(
@@ -1201,9 +1204,13 @@ def spectral_band_contribution():
         ax.spines.bottom.set_visible(False)
         b = f"b{j}"
         s1, s2 = BANDS_V[b]
+        l1, l2 = BANDS_L[b]
         if b == "b1":
             s1 = 0
-        title = f"({b})\n{s1}-{s2}{unit}\n({band_features[j-1]})"
+            l2 = 1000
+        # title = f"({b})\n{s1}-{s2}{unit}\n({band_features[j-1]})"
+        title = f"({b})\n{s1}-{s2} {unit}\n{l1}-{l2} {unit_l}\n" \
+                f"({band_features[j-1]})"
         ax.text(
             0.5, 0.5, title, ha="center", va="center", transform=ax.transAxes,
             fontsize=fs / 1.3
@@ -1357,7 +1364,7 @@ if __name__ == "__main__":
     print()
     # solar_time(create_csv=False)  # boxplot
     # clear_sky_filter(create_csv=False)
-    # pressure_temperature_per_site(server4=False)
+    pressure_temperature_per_site()
     # altitude_correction()
     # compare_combined()
     # print_results_table()
