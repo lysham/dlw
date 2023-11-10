@@ -252,17 +252,19 @@ def altitude_correction():
 
     fig, axes = plt.subplots(4, 2, figsize=(6, 4), sharey=True, sharex=True)
     plt.subplots_adjust(hspace=0.2, wspace=0.05)
+    plt.rcParams['hatch.linewidth'] = 0.1
+    # plt.rcParams['lines.linewidth'] = 0.1
     lbl = r"$\varepsilon_{\rm{sky,c}}(p_w)$"
     lbl_ = r"$\varepsilon_{\rm{sky,c}}(p_w) + c_3 (\exp{^{-z/H}} - 1)$"
-    i = 0  # plot counter
+    # i = 0  # plot counter
     j = 0  # site counter
     for i in range(len(ELEVATIONS) + 1):  # hacky
         ax = axes[i // 2, i % 2]  # zig zag downward
         s, alt = ELEVATIONS[j]
         if i == 1:
             # format empty subplot at upper right, legend only
-            ax.hist([], color="0.3", alpha=0.3, label=lbl)
-            ax.hist([], ec="0.3", alpha=0.3, color=COLORS["persianindigo"],
+            ax.hist([0], color="0.3", alpha=0.4, label=lbl, hatch="......")
+            ax.hist([0], ec="0.1", alpha=0.5, color=COLORS["persianindigo"],
                     label=lbl_)
             ax.legend(frameon=False, bbox_to_anchor=(0.5, 0.5),
                       loc="center", fontsize=fs)
@@ -275,10 +277,10 @@ def altitude_correction():
         else:
             ax.grid(axis="x", alpha=0.3)
             pdf = df.loc[df.site == s]
-            ax.hist(pdf.lw_err, bins=bins, alpha=0.3, color="0.3",
-                    label=lbl)
-            ax.hist(pdf.lw_err_corr, bins=bins, alpha=0.4,
-                    color=COLORS["persianindigo"], ec="0.3", label=lbl_)
+            ax.hist(pdf.lw_err, bins=bins, alpha=0.4, color="0.3",
+                    label=lbl, hatch="......")
+            ax.hist(pdf.lw_err_corr, bins=bins, alpha=0.5, ec="0.1",
+                    color=COLORS["persianindigo"], label=lbl_)
             if s == "BOU":
                 s = "TBL"
             note = f"{s} ({alt:,} m)"
@@ -1364,8 +1366,8 @@ if __name__ == "__main__":
     print()
     # solar_time(create_csv=False)  # boxplot
     # clear_sky_filter(create_csv=False)
-    pressure_temperature_per_site()
-    # altitude_correction()
+    # pressure_temperature_per_site()
+    altitude_correction()
     # compare_combined()
     # print_results_table()
     # convergence()
