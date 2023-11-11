@@ -596,6 +596,7 @@ def solar_time(create_csv=False):
     # df["y"] = df.y - 0.6
     # fit_df = pd.DataFrame(dict(x=df.x.to_numpy(), y=df.y.to_numpy()))
     c1, c2 = fit_linear(df)
+    print(c1, c2)
 
     # pdf = df.loc[df.site == "SXF"].copy()
     df['e'] = c1 + c2 * df.x
@@ -646,9 +647,9 @@ def solar_time(create_csv=False):
     pdf = pdf.loc[(pdf.time >= 6) & (pdf.time <= 18)]
     # x-axis 1st tick is 6 am
     axes[0].scatter(pdf.time - 5, pdf.lw_err, c="0.8",
-                    s=10, alpha=0.3, zorder=0)
+                    s=10, alpha=0.2, zorder=0)
     axes[1].scatter(pdf.time - 5, pdf.dtdp, c="0.8",
-                    s=10, alpha=0.3, zorder=0)
+                    s=10, alpha=0.2, zorder=0)
 
     filename = os.path.join("figures", "solar_time_boxplot.png")
     fig.savefig(filename, bbox_inches="tight", dpi=300)
@@ -1364,10 +1365,10 @@ def tau_lc_vs_sr():
 if __name__ == "__main__":
     # df = training_data(create=True)
     print()
-    # solar_time(create_csv=False)  # boxplot
+    solar_time(create_csv=False)  # boxplot
     # clear_sky_filter(create_csv=False)
     # pressure_temperature_per_site()
-    altitude_correction()
+    # altitude_correction()
     # compare_combined()
     # print_results_table()
     # convergence()
