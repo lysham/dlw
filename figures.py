@@ -1365,7 +1365,7 @@ def tau_lc_vs_sr():
 if __name__ == "__main__":
     # df = training_data(create=True)
     print()
-    solar_time(create_csv=False)  # boxplot
+    # solar_time(create_csv=False)  # boxplot
     # clear_sky_filter(create_csv=False)
     # pressure_temperature_per_site()
     # altitude_correction()
@@ -1384,3 +1384,21 @@ if __name__ == "__main__":
     # ff = pd.DataFrame(dict(x=x, y=y))
     # ff.loc[(ff.x >0.5) & (ff.y < 200)]
 
+    # made for rebuttal
+    x = np.linspace(0, 2000, 20)
+    y15 = 0.15 * (np.exp(-1 * x / 8500) - 1)
+    y12 = 0.12 * (1.01325 * np.exp(-1 * x / 8500) - 1)
+    y12_v2 = 0.12 * (np.exp(-1 * x / 8500) - 1)
+
+    fig, ax = plt.subplots(figsize=(5, 3))
+    ax.grid(alpha=0.3)
+    ax.plot(x, y15, label=r"$0.15 (e^{-z/H}-1)$")
+    ax.plot(x, y12, label=r"$0.12 (1.01325e^{-z/H}-1)$")
+    ax.plot(x, y12_v2, ls=":", label=r"$0.12 (e^{-z/H}-1)$")
+    ax.set_xlim(x[0], x[-1])
+    ax.set_xlabel("altitude [m]")
+    ax.set_ylabel("effective altitude correction [-]")
+    ax.legend()
+    plt.tight_layout()
+    filename = os.path.join("figures", "rebuttal_alt_correction.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=300)
