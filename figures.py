@@ -18,6 +18,7 @@ from corr26b import create_training_set, reduce_to_equal_pts_per_site, \
     add_solar_time, fit_linear
 from fig3 import shakespeare, ijhmt_to_tau, ijhmt_to_individual_e
 
+from fluxnet import import_fluxnet_data
 
 # set defaults
 mpl.rcParams['font.family'] = "serif"
@@ -1362,6 +1363,103 @@ def tau_lc_vs_sr():
     return None
 
 
+def fluxnet_comparison():
+    # code to generate fluxnet comparison figures
+
+    df_neu = import_fluxnet_data(station="AT-Neu")
+    df_bra = import_fluxnet_data(station="BE-Bra")
+
+    figsize = (8, 3)
+    # set axis bounds of both figures
+    xmin, xmax = (0.01, 35.5)  # hpa
+    ymin, ymax = (0.5, 1.1)
+    marker_alpha = 0.5
+    marker_size = 16
+
+    # define fitted correlation
+    x = np.geomspace(xmin+0.00001, xmax, 100)  # hPa
+    x = x * 100 / P_ATM  # normalized
+    y = C1_CONST + C2_CONST * np.sqrt(x)  # emissivity
+
+    # run for tau model:
+    tau = evaluate_sr2021(x)
+    e_tau_p0 = 1 - tau
+
+    # create one figure with two subplots from the existing figures included in the second rebuttal
+    fig, axes = plt.subplots(1, 2, figsize=figsize, sharex=True, sharey=True)
+    # I. subplot one AT-Neu
+    ax = axes[0]  # AT-Neu
+    ax.grid(alpha=0.5)
+    elev = 970  # m
+    elev_correction = C3_CONST * (np.exp(-1 * elev / 8500) - 1)
+    # (i) plot data
+    df = df_neu[df_neu.reno_cs]  # filter for clear sky
+    i = 0
+    for yr in [2010, 2011, 2012]:  # [2012, 2013, 2014]
+        tmp = df.loc[df.index.year == yr]
+        tmp = tmp.sample(200, random_state=10)  # reduce to 100 pts per year
+        ax.scatter(
+            tmp.pw, tmp.esky_c - elev_correction,
+            alpha=marker_alpha, label=yr, s=marker_size,
+            zorder=1 + np.random.uniform(-0.5, 0.5),
+            c=SEVEN_COLORS[i]
+        )
+        i += 1
+    # (ii) plot model(s) -- proposed + tau model
+    ax.plot(x, y, ls="-", lw=1, color="k", zorder=5, label="proposed")
+    ax.plot(x, e_tau_p0, lw=1, ls="-", c=COLORS["cornflowerblue"], zorder=5,
+            label="SR2021")
+
+    lg = ax.legend()
+    for lh in lg.legendHandles:
+        lh.set_alpha(1)
+
+    ax.set_axisbelow(True)
+    ax.set_title("(a) AT-Neu", loc="left", fontsize=12)
+    ax.set_ylabel("emissivity [-]")
+    ax.set_xlabel("$p_w$ [-]")
+
+    # II. subplot two BE-BRA
+    ax = axes[1]  # BE-Bra
+    ax.grid(alpha=0.5)
+    elev = 16  # m
+    elev_correction = C3_CONST * (np.exp(-1 * elev / 8500) - 1)
+    # (i) plot data
+    df = df_bra[df_bra.reno_cs]  # filter for clear sky
+    i = 0
+    for yr in [2012, 2013, 2014]:  # [2012, 2013, 2014]
+        tmp = df.loc[df.index.year == yr]
+        tmp = tmp.sample(200, random_state=10)  # reduce to 100 pts per year
+        ax.scatter(
+            tmp.pw, tmp.esky_c - elev_correction,
+            alpha=marker_alpha, label=yr, s=marker_size,
+            zorder=1 + np.random.uniform(-0.5, 0.5),
+            c=SEVEN_COLORS[i]
+        )
+        i += 1
+
+    # (ii) plot model(s) -- proposed + tau model
+    ax.plot(x, y, ls="-", lw=1, color="k", zorder=5, label="proposed")
+    ax.plot(x, e_tau_p0, lw=1, ls="-", c=COLORS["cornflowerblue"], zorder=5,
+            label="SR2021")
+
+    lg = ax.legend()
+    for lh in lg.legendHandles:
+        lh.set_alpha(1)
+
+    ax.set_axisbelow(True)
+    ax.set_title("(b) BE-Bra", loc="left", fontsize=12)
+    ax.set_xlabel("$p_w$ [-]")
+    ax.set_xlim(x[0], x[-1])
+    ax.set_ylim(ymin, ymax)
+
+    filename = os.path.join("figures", "fluxnet_comparison.png")
+    fig.savefig(filename, bbox_inches="tight", dpi=600)
+
+    plt.close(fig)
+    return None
+
+
 if __name__ == "__main__":
     # df = training_data(create=True)
     print()
@@ -1380,25 +1478,27 @@ if __name__ == "__main__":
     # print_spectral_dopt_coefs()
     # print_broadband_dopt_coefs()
     print()
+    # made for reviewer 2
+    fluxnet_comparison()
 
-    # ff = pd.DataFrame(dict(x=x, y=y))
-    # ff.loc[(ff.x >0.5) & (ff.y < 200)]
+    # make CS figure(?)
 
-    # made for rebuttal
-    x = np.linspace(0, 2000, 20)
-    y15 = 0.15 * (np.exp(-1 * x / 8500) - 1)
-    y12 = 0.12 * (1.01325 * np.exp(-1 * x / 8500) - 1)
-    y12_v2 = 0.12 * (np.exp(-1 * x / 8500) - 1)
 
-    fig, ax = plt.subplots(figsize=(5, 3))
-    ax.grid(alpha=0.3)
-    ax.plot(x, y15, label=r"$0.15 (e^{-z/H}-1)$")
-    ax.plot(x, y12, label=r"$0.12 (1.01325e^{-z/H}-1)$")
-    ax.plot(x, y12_v2, ls=":", label=r"$0.12 (e^{-z/H}-1)$")
-    ax.set_xlim(x[0], x[-1])
-    ax.set_xlabel("altitude [m]")
-    ax.set_ylabel("effective altitude correction [-]")
-    ax.legend()
-    plt.tight_layout()
-    filename = os.path.join("figures", "rebuttal_alt_correction.png")
-    fig.savefig(filename, bbox_inches="tight", dpi=300)
+    # # made for rebuttal
+    # x = np.linspace(0, 2000, 20)
+    # y15 = 0.15 * (np.exp(-1 * x / 8500) - 1)
+    # y12 = 0.12 * (1.01325 * np.exp(-1 * x / 8500) - 1)
+    # y12_v2 = 0.12 * (np.exp(-1 * x / 8500) - 1)
+    #
+    # fig, ax = plt.subplots(figsize=(5, 3))
+    # ax.grid(alpha=0.3)
+    # ax.plot(x, y15, label=r"$0.15 (e^{-z/H}-1)$")
+    # ax.plot(x, y12, label=r"$0.12 (1.01325e^{-z/H}-1)$")
+    # ax.plot(x, y12_v2, ls=":", label=r"$0.12 (e^{-z/H}-1)$")
+    # ax.set_xlim(x[0], x[-1])
+    # ax.set_xlabel("altitude [m]")
+    # ax.set_ylabel("effective altitude correction [-]")
+    # ax.legend()
+    # plt.tight_layout()
+    # filename = os.path.join("figures", "rebuttal_alt_correction.png")
+    # fig.savefig(filename, bbox_inches="tight", dpi=300)
