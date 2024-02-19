@@ -11,36 +11,35 @@ from constants import P_ATM, SIGMA
 from main import get_pw
 
 
-if __name__ == "__main__":
-    folder = os.path.join("data", "fluxnet")
+def import_fluxnet_data(station):
+    # import and process FLUXNET data for AT-Neu or BE-Bra station
+    if station == "AT-Neu":
+        filename = "FLX_AT-Neu_FLUXNET2015_SUBSET_HH_2002-2012_1-4.csv"
+        lat, lon, elev = (47.1167, 11.3175, 970)
+        local2gmt = -1  # GMT+1  (convert local timestamp to GMT)
+        keep_min_year = 2010  # keep last three years of dataset
+    elif station == "BE-Bra":
+        filename = "FLX_BE-Bra_FLUXNET2015_SUBSET_HH_1996-2014_2-4.csv"
+        lat, lon, elev = (51.3076, 4.5198, 16)
+        keep_min_year = 2012  # arbitrary (last three years)
+        # braaschaat is GMT+1 (same with Neustift)
+        local2gmt = -1
 
-    # filename = os.path.join(folder, "FLX_BE-Bra_FLUXNET2015_SUBSET_HH_1996-2014_2-4.csv")
-    # year = 2012
-    # station = "BE-Bra"
-    # lat, lon, elev = (51.3076, 4.5198, 16)
-    # plot_title = f"{station} ({year})"
-
-    filename = os.path.join(folder, "FLX_AT-Neu_FLUXNET2015_SUBSET_HH_2002-2012_1-4.csv")
-    year = 2012
-    station = "AT-Neu"
-    lat, lon, elev = (47.1167, 11.3175, 970)
-    plot_title = f"{station} ({year})"
-
-    # Kind of line by line runs. Sometimes filter for a year. Sometimes keep multiple years.
-
+    # read in raw data
+    filename = os.path.join("data", "fluxnet", filename)
     df_raw = pd.read_csv(filename, parse_dates=[0, 1])
 
+    # specify columns to keep
     keep_cols = [
         'TIMESTAMP_START', 'TIMESTAMP_END', 'TA_F', 'TA_F_QC', 'SW_IN_POT',
         'SW_IN_F', 'SW_IN_F_QC', 'LW_IN_F', 'LW_IN_F_QC', 'VPD_F', 'VPD_F_QC',
         'PA_F', 'PA_F_QC', 'P_F', 'P_F_QC', 'RH'
     ]
     df = df_raw.copy()[keep_cols]
-
     df = df.set_index("TIMESTAMP_END")
-    df = df.loc[df.index.year >= 2010]  # 2014 for BRA
-    # braaschaat is GMT+1 (same with Neustift)
-    df.index = df.index + pd.Timedelta(hours=-1)  # hacky
+    df = df.loc[df.index.year >= keep_min_year]
+    # convert to UTC
+    df.index = df.index + pd.Timedelta(hours=local2gmt)  # hacky
 
     # add clear sky values
     location = pvlib.location.Location(lat, lon, altitude=elev)
@@ -61,8 +60,10 @@ if __name__ == "__main__":
     freq = freq / np.timedelta64(1, 's')  # convert to seconds
     # convert to even sample frequency
     tmp = df.asfreq(str(freq) + "S")
+
+    # evaluate (detect clear sky uses centered windows) - used modified args
+    # Ellis et al. 2019 "Automatic detection..."
     # tmp["reno_cs"] = pvlib.clearsky.detect_clearsky(tmp.GHI_m, tmp.GHI_c)
-    # evaluate (detect clear sky uses centered windows)
     tmp["reno_cs"] = pvlib.clearsky.detect_clearsky(
         tmp.GHI_m, tmp.GHI_c, window_length=90, mean_diff=79.144,
         max_diff=59.152, lower_line_length=-41.4, upper_line_length=77.78,
@@ -70,7 +71,31 @@ if __name__ == "__main__":
     )
     # return to original index
     df = df.merge(tmp["reno_cs"], how="left", left_index=True, right_index=True)
-    #
+
+    # add secondary variables
+    # PA_F [kPA], TA_F [degC], LW_IN_F [W/m^2], RH [%]
+    df["t_a"] = df.TA_F + 273.15
+    df["pw_hpa"] = get_pw(df.t_a, df.RH) / 100  # [hPa]
+    df["dw_ir"] = df.LW_IN_F
+    df["pw"] = (df.pw_hpa * 100) / P_ATM
+    df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
+    df["esky_c"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))  # target esky_c
+    return df
+
+
+if __name__ == "__main__":
+    # year = 2012
+    # station = "BE-Bra"
+    # lat, lon, elev = (51.3076, 4.5198, 16)
+    # plot_title = f"{station} ({year})"
+
+    year = 2012
+    station = "AT-Neu"
+    lat, lon, elev = (47.1167, 11.3175, 970)
+    plot_title = f"{station} ({year})"
+
+    df = import_fluxnet_data(station)
+
     # # OPTIONAL more for BE-BRA clear sky filter plot
     # pdf = df.loc[(df.index >= dt.datetime(2012, 7, 25)) & (df.index <= dt.datetime(2012, 7, 30))]
     # tmp = pdf.copy()  # need to preserve boolean array without NA
@@ -92,14 +117,6 @@ if __name__ == "__main__":
 
     # test correlation [28% clear dataset]
     df = df.loc[df.reno_cs]  # take only clear sky samples
-    # PA_F [kPA], TA_F [degC], LW_IN_F [W/m^2], RH [%]
-    df["t_a"] = df.TA_F + 273.15
-    df["pw_hpa"] = get_pw(df.t_a, df.RH) / 100  # [hPa]
-    df["dw_ir"] = df.LW_IN_F
-    df["pw"] = (df.pw_hpa * 100) / P_ATM
-
-    df["x"] = np.sqrt(df.pw_hpa * 100 / P_ATM)
-    df["esky_c"] = df.dw_ir / (SIGMA * np.power(df.t_a, 4))  # target esky_c
 
     C1_CONST = 0.6
     C2_CONST = 1.652
@@ -117,6 +134,7 @@ if __name__ == "__main__":
     # ax.set_ylabel("predicted esky_c")
     # plt.show()
 
+    # set up proposed correlation for comparison
     x = np.linspace(0.0001, 0.03, 40)
     y = C1_CONST + C2_CONST * np.sqrt(x)
     elev_correction = C3_CONST * (np.exp(-1 * elev / 8500) - 1)
