@@ -1460,6 +1460,34 @@ def fluxnet_comparison():
     return None
 
 
+def fluxnet_cs_visual():
+    # adaptation of clear sky filter figure put into rebuttal
+    df = import_fluxnet_data("BE-Bra")  # import BE-BRA data
+
+    # reduce df
+    pdf = df.loc[(df.index >= dt.datetime(2012, 7, 25)) & (df.index <= dt.datetime(2012, 7, 30))]
+    tmp = pdf.copy()  # need to preserve boolean array without NA
+    pdf = pdf.asfreq("30T", fill_value=np.nan)
+
+    # plot
+    fig, ax = plt.subplots(figsize=(8, 3))
+    ax.grid(alpha=0.5)
+    ax.plot(pdf.index, pdf.GHI_m, ".-", c=COLORS["cornflowerblue"], alpha=0.8, label="GHI$_{m}$")
+    ax.plot(pdf.index, pdf.GHI_c, lw=0.8, c="0.5", alpha=0.8, label="GHI$_{cs}$")
+    ax.plot(tmp.loc[tmp.reno_cs].index, tmp.loc[tmp.reno_cs].GHI_m, ".", c=COLORS["persianred"], alpha=0.9, label="CS")
+    ax.set_ylabel("W/m$^2$")
+    ax.legend(ncol=3, loc="upper right")
+    ax.set_ylim(0, 1000)
+    ax.xaxis.set_major_formatter(
+        mpl.dates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
+    ax.set_axisbelow(True)
+
+    filename = os.path.join("figures", "fluxnet_CS.png")
+    fig.savefig(filename, dpi=500, bbox_inches="tight")
+    plt.close()
+    return None
+
+
 if __name__ == "__main__":
     # df = training_data(create=True)
     print()
@@ -1479,12 +1507,10 @@ if __name__ == "__main__":
     # print_broadband_dopt_coefs()
     print()
     # made for reviewer 2
-    fluxnet_comparison()
+    # fluxnet_comparison()
+    fluxnet_cs_visual()
 
-    # make CS figure(?)
-
-
-    # # made for rebuttal
+    # # made for rebuttal - demomstration of elevation correction
     # x = np.linspace(0, 2000, 20)
     # y15 = 0.15 * (np.exp(-1 * x / 8500) - 1)
     # y12 = 0.12 * (1.01325 * np.exp(-1 * x / 8500) - 1)

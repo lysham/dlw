@@ -96,25 +96,6 @@ if __name__ == "__main__":
 
     df = import_fluxnet_data(station)
 
-    # # OPTIONAL more for BE-BRA clear sky filter plot
-    # pdf = df.loc[(df.index >= dt.datetime(2012, 7, 25)) & (df.index <= dt.datetime(2012, 7, 30))]
-    # tmp = pdf.copy()  # need to preserve boolean array without NA
-    # pdf = pdf.asfreq("30T", fill_value=np.nan)
-    #
-    # fig, ax = plt.subplots()
-    # ax.plot(pdf.index, pdf.GHI_m, ".-", alpha=0.8, label="GHI$_m$")
-    # ax.plot(pdf.index, pdf.GHI_c, lw=0.8, color="0.5", alpha=0.8, label="GHI$_c$")
-    # ax.plot(tmp.loc[tmp.reno_cs].index, tmp.loc[tmp.reno_cs].GHI_m, ".", alpha=0.9, label="CS")
-    # ax.set_ylabel("W/m$^2$")
-    # ax.legend(ncol=3, bbox_to_anchor=(0, 1.02), loc="lower left")
-    # ax.set_ylim(bottom=0)
-    # fig.autofmt_xdate()
-    # # plt.show()
-    # fig.savefig(
-    #     os.path.join("figures", f"{str.lower(station)}_CS.png"),
-    #     dpi=300, bbox_inches="tight"
-    # )
-
     # test correlation [28% clear dataset]
     df = df.loc[df.reno_cs]  # take only clear sky samples
 
